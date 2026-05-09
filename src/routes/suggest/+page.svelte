@@ -1,10 +1,40 @@
 <script lang="ts">
-	import type { PageData } from './$types';
+	import { onMount } from 'svelte';
+	import { getAll } from '$lib/db';
 	import { TMDB_IMG } from '$lib/tmdb';
+	import type { Suggestion } from '$lib/types';
 
-	let { data }: { data: PageData } = $props();
+	let suggestions = $state<Suggestion[]>([]);
+	let totalUnwatched = $state(0);
+	let loaded = $state(false);
 
-	const topCount = $derived(data.suggestions[0]?.count ?? 1);
+	onMount(async () => {
+		const items = await getAll();
+		const unwatched = items.filter((i) => !i.watched_at);
+		totalUnwatched = unwatched.length;
+
+		const counts = new Map<string, Suggestion>();
+		for (const item of unwatched) {
+			for (const p of item.providers) {
+				const existing = counts.get(p.provider_name);
+				if (existing) {
+					existing.count++;
+				} else {
+					counts.set(p.provider_name, {
+						provider_id: p.provider_id,
+						name: p.provider_name,
+						logo_path: p.logo_path,
+						count: 1
+					});
+				}
+			}
+		}
+
+		suggestions = Array.from(counts.values()).sort((a, b) => b.count - a.count);
+		loaded = true;
+	});
+
+	const topCount = $derived(suggestions[0]?.count ?? 1);
 </script>
 
 <svelte:head>
@@ -15,11 +45,17 @@
 	<div>
 		<h1 class="text-2xl font-bold">What to Subscribe to Next</h1>
 		<p class="mt-1 text-sm text-gray-400">
-			Based on your {data.totalUnwatched} unwatched title{data.totalUnwatched === 1 ? '' : 's'}
+			Based on your {totalUnwatched} unwatched title{totalUnwatched === 1 ? '' : 's'}
 		</p>
 	</div>
 
-	{#if data.suggestions.length === 0}
+	{#if !loaded}
+		<div class="space-y-3">
+			{#each { length: 4 } as _, i (i)}
+				<div class="h-[72px] animate-pulse rounded-xl bg-gray-800"></div>
+			{/each}
+		</div>
+	{:else if suggestions.length === 0}
 		<div class="flex flex-col items-center justify-center py-24 text-center">
 			<p class="mb-4 text-5xl">📺</p>
 			<p class="text-lg font-medium text-gray-300">No suggestions yet</p>
@@ -30,7 +66,7 @@
 		</div>
 	{:else}
 		<div class="space-y-3">
-			{#each data.suggestions as suggestion, i (suggestion.provider_id)}
+			{#each suggestions as suggestion, i (suggestion.provider_id)}
 				<div class="flex items-center gap-4 rounded-xl bg-gray-900 p-4">
 					<!-- Rank -->
 					<div

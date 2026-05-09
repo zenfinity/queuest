@@ -2,8 +2,3 @@ name = "streamq"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "streamq-db"
-database_id = "665f6088-54c9-4aee-84c0-99d547b0c5ee"
