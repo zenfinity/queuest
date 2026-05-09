@@ -4,74 +4,97 @@
 	import { getAll, removeItem, setWatched, replaceAll } from '$lib/db';
 	import { encrypt, decrypt } from '$lib/crypto';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
+	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
+
+	// ── Constants ─────────────────────────────────────────────────────────────
+	const BAR_H = 32; // px — compact chip height
+	const DEFAULT_RUNTIME: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
+
+	function effectiveRuntime(item: WatchlistItem): number {
+		return item.runtime_minutes ?? DEFAULT_RUNTIME[item.media_type];
+	}
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	type SortKey = 'added' | 'title' | 'runtime';
-	type ViewKey = 'grid' | 'lanes';
+	type ViewKey = 'grid' | 'list' | 'lanes';
 
 	function loadPref<T extends string>(key: string, fallback: T): T {
-		try {
-			return (localStorage.getItem(key) as T) ?? fallback;
-		} catch {
-			return fallback;
-		}
+		try { return (localStorage.getItem(key) as T) ?? fallback; } catch { return fallback; }
+	}
+	function loadJSON<T>(key: string, fallback: T): T {
+		try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
 	}
 
 	// ── Core state ────────────────────────────────────────────────────────────
-	let items = $state<WatchlistItem[]>([]);
-	let loaded = $state(false);
-	let tab = $state<'queue' | 'watched'>('queue');
-	let busy = $state(new Set<number>());
+	let items       = $state<WatchlistItem[]>([]);
+	let loaded      = $state(false);
+	let tab         = $state<'queue' | 'watched'>('queue');
+	let busy        = $state(new Set<number>());
+	let activeItem  = $state<WatchlistItem | null>(null);
 
-	// active detail pop-up in lanes view
-	let activeItem = $state<WatchlistItem | null>(null);
+	let sortBy      = $state<SortKey>('added');
+	let viewMode    = $state<ViewKey>('grid');
+	let budgetHours = $state(40); // user-adjustable month budget
 
-	let sortBy = $state<SortKey>('added');
-	let viewMode = $state<ViewKey>('grid');
+	// lane drag state
+	let laneOrder   = $state<string[]>([]);
+	let dragKey     = $state<string | null>(null);
+	let dragOverKey = $state<string | null>(null);
 
-	// Export state
-	let exporting = $state(false);
+	// logo-derived hues: logo_path → extracted hue (populated async)
+	let logoHues = $state(new Map<string, number>());
+
+	// helper: best available hue for a provider
+	function resolvedHue(providerId: number | null, logoPath: string | null): number | null {
+		if (logoPath && logoHues.has(logoPath)) {
+			const h = logoHues.get(logoPath)!;
+			return h >= 0 ? h : (providerId !== null ? providerHue(providerId) : null);
+		}
+		return providerId !== null ? providerHue(providerId) : null;
+	}
+
+	// Export / Import
+	let exporting        = $state(false);
 	let exportPassphrase = $state('');
-	let showExportModal = $state(false);
-
-	// Import state
-	let importing = $state(false);
-	let importFile = $state<File | null>(null);
+	let showExportModal  = $state(false);
+	let importing        = $state(false);
+	let importFile       = $state<File | null>(null);
 	let importPassphrase = $state('');
-	let importError = $state('');
-	let showImportModal = $state(false);
+	let importError      = $state('');
+	let showImportModal  = $state(false);
 
 	// ── Derived lists ─────────────────────────────────────────────────────────
-	let queued = $derived(items.filter((i) => !i.watched_at));
-	let watched = $derived(items.filter((i) => i.watched_at));
+	let queued      = $derived(items.filter((i) => !i.watched_at));
+	let watched     = $derived(items.filter((i) => i.watched_at));
 	let activeItems = $derived(tab === 'queue' ? queued : watched);
 
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
 		return [...list].sort((a, b) => {
 			if (sortBy === 'title') return a.title.localeCompare(b.title);
 			if (sortBy === 'runtime') {
-				const ra = a.runtime_minutes ?? Infinity;
-				const rb = b.runtime_minutes ?? Infinity;
-				return ra - rb;
+				return (a.runtime_minutes ?? Infinity) - (b.runtime_minutes ?? Infinity);
 			}
 			return b.added_at.localeCompare(a.added_at);
 		});
 	}
 
-	// Grid: single flat section
-	let flatItems = $derived(sorted(activeItems));
+	let flatItems   = $derived(sorted(activeItems));
+	let maxRuntime  = $derived(Math.max(1, ...flatItems.map(effectiveRuntime)));
 
-	// Lanes: one lane per primary provider, sorted by lane size desc; "Not Streaming" last
 	type Lane = {
 		key: string;
 		label: string;
 		logo: string | null;
+		providerId: number | null;
 		items: WatchlistItem[];
+		totalMins: number;
+		overMins: number;
 	};
 
-	let lanes = $derived.by((): Lane[] => {
+	let rawLanes = $derived.by((): Lane[] => {
+		const budgetMins = budgetHours * 60;
 		const list = sorted(activeItems);
-		const map = new Map<string, Lane>();
+		const map  = new Map<string, Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }>();
 		const noProvider: WatchlistItem[] = [];
 
 		for (const item of list) {
@@ -80,32 +103,44 @@
 			} else {
 				const p = item.providers[0];
 				if (!map.has(p.provider_name)) {
-					map.set(p.provider_name, {
-						key: p.provider_name,
-						label: p.provider_name,
-						logo: p.logo_path,
-						items: []
-					});
+					map.set(p.provider_name, { key: p.provider_name, label: p.provider_name,
+						logo: p.logo_path, providerId: p.provider_id, items: [], totalMins: 0 });
 				}
-				map.get(p.provider_name)!.items.push(item);
+				const lane = map.get(p.provider_name)!;
+				lane.items.push(item);
+				lane.totalMins += effectiveRuntime(item);
 			}
 		}
 
-		const out = [...map.values()].sort((a, b) => b.items.length - a.items.length);
+		const out: Lane[] = [...map.values()]
+			.sort((a, b) => b.totalMins - a.totalMins)
+			.map((l) => ({ ...l, overMins: Math.max(0, l.totalMins - budgetMins) }));
+
 		if (noProvider.length) {
-			out.push({ key: '__none__', label: 'Not Streaming', logo: null, items: noProvider });
+			const totalMins = noProvider.reduce((s, i) => s + effectiveRuntime(i), 0);
+			out.push({ key: '__none__', label: 'Not Streaming', logo: null, providerId: null,
+				items: noProvider, totalMins, overMins: Math.max(0, totalMins - budgetMins) });
 		}
 		return out;
 	});
 
+	// Apply saved lane order; new providers append at end
+	let lanes = $derived.by((): Lane[] => {
+		const byKey = new Map(rawLanes.map((l) => [l.key, l]));
+		const ordered: Lane[] = [];
+		for (const key of laneOrder) { const l = byKey.get(key); if (l) ordered.push(l); }
+		for (const lane of rawLanes) { if (!laneOrder.includes(lane.key)) ordered.push(lane); }
+		return ordered;
+	});
+
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
-	async function reload() {
-		items = await getAll();
-	}
+	async function reload() { items = await getAll(); }
 
 	onMount(async () => {
-		sortBy = loadPref<SortKey>('sq:sort', 'added');
-		viewMode = loadPref<ViewKey>('sq:view', 'grid');
+		sortBy      = loadPref<SortKey>('sq:sort', 'added');
+		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
+		budgetHours = loadJSON<number>('sq:budget', 40);
+		laneOrder   = loadJSON<string[]>('sq:laneOrder', []);
 		await reload();
 		loaded = true;
 	});
@@ -114,7 +149,24 @@
 		try {
 			localStorage.setItem('sq:sort', sortBy);
 			localStorage.setItem('sq:view', viewMode);
+			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
+			localStorage.setItem('sq:laneOrder', JSON.stringify(laneOrder));
 		} catch {}
+	});
+
+	// Extract logo hues for all providers in view (runs whenever activeItems changes)
+	$effect(() => {
+		const logos = new Set<string>();
+		for (const item of activeItems) {
+			for (const p of item.providers) {
+				if (p.logo_path && !logoHues.has(p.logo_path)) logos.add(p.logo_path);
+			}
+		}
+		for (const logoPath of logos) {
+			extractLogoHue(logoPath, TMDB_IMG).then((hue) => {
+				logoHues = new Map(logoHues).set(logoPath, hue);
+			});
+		}
 	});
 
 	// ── Actions ───────────────────────────────────────────────────────────────
@@ -123,77 +175,74 @@
 		await setWatched(item.id, !item.watched_at);
 		if (activeItem?.id === item.id) activeItem = null;
 		await reload();
-		const next = new Set(busy);
-		next.delete(item.id);
-		busy = next;
+		const next = new Set(busy); next.delete(item.id); busy = next;
 	}
-
 	async function remove(item: WatchlistItem) {
 		busy = new Set(busy).add(item.id);
 		await removeItem(item.id);
 		if (activeItem?.id === item.id) activeItem = null;
 		await reload();
-		const next = new Set(busy);
-		next.delete(item.id);
-		busy = next;
+		const next = new Set(busy); next.delete(item.id); busy = next;
 	}
+
+	// ── Lane drag-to-reorder ──────────────────────────────────────────────────
+	function onDragStart(key: string) { dragKey = key; }
+	function onDragOver(e: DragEvent, key: string) { e.preventDefault(); dragOverKey = key; }
+	function onDrop(key: string) {
+		if (!dragKey || dragKey === key) { dragKey = dragOverKey = null; return; }
+		const cur  = lanes.map((l) => l.key);
+		const from = cur.indexOf(dragKey);
+		const to   = cur.indexOf(key);
+		const next = [...cur]; next.splice(from, 1); next.splice(to, 0, dragKey);
+		laneOrder = next; dragKey = dragOverKey = null;
+	}
+	function onDragEnd() { dragKey = dragOverKey = null; }
 
 	// ── Export ────────────────────────────────────────────────────────────────
 	async function doExport() {
 		if (!exportPassphrase) return;
 		exporting = true;
 		try {
-			const json = JSON.stringify(items);
-			const buf = await encrypt(json, exportPassphrase);
-			const blob = new Blob([buf], { type: 'application/octet-stream' });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = `streamq-${new Date().toISOString().slice(0, 10)}.streamq`;
-			a.click();
-			URL.revokeObjectURL(url);
-			showExportModal = false;
-			exportPassphrase = '';
-		} finally {
-			exporting = false;
-		}
+			const buf = await encrypt(JSON.stringify(items), exportPassphrase);
+			const url = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
+			const a = Object.assign(document.createElement('a'), {
+				href: url, download: `streamq-${new Date().toISOString().slice(0, 10)}.streamq`
+			});
+			a.click(); URL.revokeObjectURL(url);
+			showExportModal = false; exportPassphrase = '';
+		} finally { exporting = false; }
 	}
 
 	// ── Import ────────────────────────────────────────────────────────────────
 	function onFileChange(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		importFile = input.files?.[0] ?? null;
-		importError = '';
+		importFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null; importError = '';
 	}
-
 	async function doImport() {
 		if (!importFile || !importPassphrase) return;
-		importing = true;
-		importError = '';
+		importing = true; importError = '';
 		try {
-			const buf = await importFile.arrayBuffer();
-			const json = await decrypt(buf, importPassphrase);
-			const parsed: WatchlistItem[] = JSON.parse(json);
-			await replaceAll(parsed);
+			await replaceAll(JSON.parse(await decrypt(await importFile.arrayBuffer(), importPassphrase)));
 			await reload();
-			showImportModal = false;
-			importFile = null;
-			importPassphrase = '';
+			showImportModal = false; importFile = null; importPassphrase = '';
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Import failed.';
-		} finally {
-			importing = false;
-		}
+		} finally { importing = false; }
+	}
+
+	function hms(mins: number): string {
+		const h = Math.floor(mins / 60), m = mins % 60;
+		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
+	}
+	function overLabel(mins: number): string {
+		const h = (mins / 60);
+		return `+${h % 1 === 0 ? h : h.toFixed(1)}h over`;
 	}
 </script>
 
-<svelte:head>
-	<title>StreamQ — My Queue</title>
-</svelte:head>
+<svelte:head><title>StreamQ — My Queue</title></svelte:head>
 
-<!-- dismiss active thumb detail on backdrop click -->
 <svelte:document onclick={(e) => {
-	if (activeItem && !(e.target as Element).closest('[data-thumb]')) activeItem = null;
+	if (activeItem && !(e.target as Element).closest('[data-item]')) activeItem = null;
 }} />
 
 <div class="space-y-6">
@@ -201,24 +250,13 @@
 	<div class="flex items-center justify-between">
 		<h1 class="text-2xl font-bold">My Queue</h1>
 		<div class="flex items-center gap-2">
-			<button
-				class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
-				onclick={() => (showImportModal = true)}
-			>
-				Import
-			</button>
+			<button class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
+				onclick={() => (showImportModal = true)}>Import</button>
 			{#if items.length > 0}
-				<button
-					class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
-					onclick={() => (showExportModal = true)}
-				>
-					Export
-				</button>
+				<button class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
+					onclick={() => (showExportModal = true)}>Export</button>
 			{/if}
-			<a
-				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-				href="/search"
-			>
+			<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
 				+ Add Titles
 			</a>
 		</div>
@@ -229,87 +267,65 @@
 		<div class="flex flex-wrap items-center gap-3">
 			<!-- Queue / Watched tabs -->
 			<div class="flex gap-1 rounded-lg bg-gray-900 p-1">
-				<button
-					class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors {tab === 'queue'
-						? 'bg-gray-700 text-white'
-						: 'text-gray-400 hover:text-white'}"
-					onclick={() => (tab = 'queue')}
-				>
-					To Watch ({queued.length})
-				</button>
-				<button
-					class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors {tab === 'watched'
-						? 'bg-gray-700 text-white'
-						: 'text-gray-400 hover:text-white'}"
-					onclick={() => (tab = 'watched')}
-				>
-					Watched ({watched.length})
-				</button>
+				<button class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors {tab === 'queue' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+					onclick={() => (tab = 'queue')}>To Watch ({queued.length})</button>
+				<button class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors {tab === 'watched' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+					onclick={() => (tab = 'watched')}>Watched ({watched.length})</button>
 			</div>
 
 			<div class="flex-1"></div>
+
+			<!-- Budget -->
+			<div class="flex items-center gap-1.5">
+				<span class="text-xs text-gray-500">Budget</span>
+				<input
+					type="number" min="10" max="200" step="5"
+					bind:value={budgetHours}
+					class="w-16 rounded-lg bg-gray-900 px-2 py-1 text-center text-xs font-medium text-white outline-none ring-1 ring-gray-700 focus:ring-orange-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				/>
+				<span class="text-xs text-gray-500">h / mo</span>
+			</div>
 
 			<!-- Sort -->
 			<div class="flex items-center gap-1.5">
 				<span class="text-xs text-gray-500">Sort</span>
 				<div class="flex gap-0.5 rounded-lg bg-gray-900 p-1">
-					{#each ([['added', 'Recent'], ['title', 'A–Z'], ['runtime', 'Runtime']] as const) as [key, label] (key)}
-						<button
-							class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key
-								? 'bg-gray-700 text-white'
-								: 'text-gray-400 hover:text-white'}"
-							onclick={() => (sortBy = key)}
-						>
-							{label}
-						</button>
+					{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
+						<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+							onclick={() => (sortBy = key)}>{label}</button>
 					{/each}
 				</div>
 			</div>
 
-			<!-- View toggle -->
+			<!-- View -->
 			<div class="flex items-center gap-1.5">
 				<span class="text-xs text-gray-500">View</span>
 				<div class="flex gap-0.5 rounded-lg bg-gray-900 p-1">
-					<button
-						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid'
-							? 'bg-gray-700 text-white'
-							: 'text-gray-400 hover:text-white'}"
-						onclick={() => (viewMode = 'grid')}
-						title="Grid"
-					>
-						⊞ Grid
-					</button>
-					<button
-						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes'
-							? 'bg-orange-500 text-white'
-							: 'text-gray-400 hover:text-white'}"
-						onclick={() => (viewMode = 'lanes')}
-						title="Swimlanes by provider"
-					>
-						≡ Lanes
-					</button>
+					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+						onclick={() => (viewMode = 'grid')}>⊞ Grid</button>
+					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+						onclick={() => (viewMode = 'list')}>☰ List</button>
+					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}"
+						onclick={() => (viewMode = 'lanes')}>≋ Gantt</button>
 				</div>
 			</div>
 		</div>
 	{/if}
 
-	<!-- Loading skeleton -->
+	<!-- Loading -->
 	{#if !loaded}
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-			{#each { length: 5 } as _, i (i)}
-				<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-800"></div>
-			{/each}
+			{#each { length: 5 } as _, i (i)}<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-800"></div>{/each}
 		</div>
 
-	<!-- Empty state -->
+	<!-- Empty -->
 	{:else if activeItems.length === 0}
 		<div class="flex flex-col items-center justify-center py-24 text-center">
 			{#if tab === 'queue'}
 				<p class="mb-4 text-5xl">🎬</p>
 				<p class="text-lg font-medium text-gray-300">Your queue is empty</p>
 				<p class="mt-1 text-sm text-gray-500">
-					<a class="text-orange-400 hover:underline" href="/search">Search for movies and shows</a>
-					to get started
+					<a class="text-orange-400 hover:underline" href="/search">Search for movies and shows</a> to get started
 				</p>
 			{:else}
 				<p class="mb-4 text-5xl">✅</p>
@@ -318,243 +334,301 @@
 			{/if}
 		</div>
 
-	<!-- ── GRID view ───────────────────────────────────────────────────────── -->
+	<!-- ── GRID ──────────────────────────────────────────────────────────────── -->
 	{:else if viewMode === 'grid'}
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each flatItems as item (item.id)}
+				{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
+				{@const cardPct = Math.min(100, (effectiveRuntime(item) / (budgetHours * 60)) * 100)}
+				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
+				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 				<div class="flex flex-col overflow-hidden rounded-xl bg-gray-900">
 					<div class="relative aspect-[2/3] bg-gray-800">
 						{#if item.poster_path}
-							<img
-								src="{TMDB_IMG}/w300{item.poster_path}"
-								alt={item.title}
-								class="h-full w-full object-cover"
-							/>
+							<img src="{TMDB_IMG}/w300{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
 						{:else}
-							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-600">
-								🎬
-							</div>
+							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-600">🎬</div>
 						{/if}
-						<span
-							class="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-300"
-						>
+						<span class="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-300">
 							{item.media_type === 'movie' ? 'Film' : 'TV'}
 						</span>
 					</div>
 					<div class="flex flex-1 flex-col gap-2 p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
-						{#if item.runtime_minutes}
-							<p class="text-xs text-gray-500">
-								🕐 {formatRuntime(item.runtime_minutes, item.media_type)}
-							</p>
-						{/if}
+						<!-- Runtime sparkline -->
+						<div class="flex items-center gap-2">
+							<div class="relative flex-1">
+								<div class="h-px w-full bg-gray-800"></div>
+								<div class="absolute top-0 left-0 h-px transition-all duration-300"
+									style="width:{cardPct}%; background:{cardLine}; opacity:0.75;"></div>
+								<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
+									style="left:{cardPct}%; margin-left:-3px; background:{cardDot};"></div>
+							</div>
+							<span class="shrink-0 text-[10px] tabular-nums text-gray-500">
+								{#if item.runtime_minutes}
+									{formatRuntime(item.runtime_minutes, item.media_type)}
+								{:else}
+									~{hms(DEFAULT_RUNTIME[item.media_type])}
+								{/if}
+							</span>
+						</div>
 						{#if item.providers.length > 0}
 							<div class="flex flex-wrap gap-1">
 								{#each item.providers.slice(0, 4) as p (p.provider_id)}
-									<img
-										src="{TMDB_IMG}/w92{p.logo_path}"
-										alt={p.provider_name}
-										title={p.provider_name}
-										class="h-5 w-5 rounded"
-									/>
+									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
 								{/each}
-								{#if item.providers.length > 4}
-									<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>
-								{/if}
+								{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
 							</div>
 						{:else}
 							<p class="text-xs text-gray-600">Not streaming</p>
 						{/if}
 						<div class="mt-auto flex gap-1.5 pt-1">
-							<button
-								class="flex-1 rounded-md bg-gray-800 py-1 text-xs font-medium transition-colors hover:bg-gray-700 disabled:opacity-40"
-								disabled={busy.has(item.id)}
-								onclick={() => toggle(item)}
-							>
+							<button class="flex-1 rounded-md bg-gray-800 py-1 text-xs font-medium transition-colors hover:bg-gray-700 disabled:opacity-40"
+								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
 								{item.watched_at ? 'Unwatch' : '✓ Watched'}
 							</button>
-							<button
-								class="rounded-md bg-gray-800 px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
-								disabled={busy.has(item.id)}
-								onclick={() => remove(item)}
-								aria-label="Remove"
-							>
-								✕
-							</button>
+							<button class="rounded-md bg-gray-800 px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
+								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
 						</div>
 					</div>
 				</div>
 			{/each}
 		</div>
 
-	<!-- ── LANES view ──────────────────────────────────────────────────────── -->
-	{:else}
-		<div class="space-y-1">
-			{#each lanes as lane (lane.key)}
-				<div class="flex items-stretch gap-0 rounded-xl bg-gray-900/60 overflow-hidden">
+	<!-- ── LIST ─────────────────────────────────────────────────────────────── -->
+	{:else if viewMode === 'list'}
+		<div class="divide-y divide-gray-800/60 rounded-xl overflow-hidden">
+			{#each flatItems as item (item.id)}
+				{@const rt = effectiveRuntime(item)}
+				{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
+				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
+				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#4b5563'}
+				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
+				<div class="flex items-center gap-3 bg-gray-900/40 px-3 py-2 hover:bg-gray-900/80 transition-colors">
 
-					<!-- Lane header: fixed left column -->
-					<div class="flex w-36 shrink-0 flex-col items-center justify-center gap-1.5 border-r border-gray-800 px-3 py-4 text-center">
-						{#if lane.logo}
-							<img
-								src="{TMDB_IMG}/w92{lane.logo}"
-								alt={lane.label}
-								class="h-9 w-9 rounded-lg object-cover"
-							/>
+					<!-- Poster -->
+					<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-800">
+						{#if item.poster_path}
+							<img src="{TMDB_IMG}/w92{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
 						{:else}
-							<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-800 text-lg">
-								📺
-							</div>
+							<div class="flex h-full w-full items-center justify-center text-sm text-gray-600">🎬</div>
 						{/if}
-						<p class="text-xs font-semibold leading-tight text-gray-200">{lane.label}</p>
-						<p class="text-xs text-gray-600">{lane.items.length} title{lane.items.length === 1 ? '' : 's'}</p>
 					</div>
 
-					<!-- Scrollable ribbon -->
-					<div class="flex gap-2 overflow-x-auto p-3 scrollbar-thin" style="scrollbar-color: #374151 transparent;">
-						{#each lane.items as item (item.id)}
-							<!-- Thumbnail wrapper -->
-							<div class="relative shrink-0" data-thumb>
-								<!-- Poster thumbnail -->
-								<button
-									class="group relative block h-24 w-16 overflow-hidden rounded-lg bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
-									onclick={(e) => {
-										e.stopPropagation();
-										activeItem = activeItem?.id === item.id ? null : item;
-									}}
-									title={item.title}
-								>
-									{#if item.poster_path}
-										<img
-											src="{TMDB_IMG}/w185{item.poster_path}"
-											alt={item.title}
-											class="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-										/>
-									{:else}
-										<div class="flex h-full w-full items-center justify-center text-2xl text-gray-600">
-											🎬
-										</div>
+					<!-- Title + meta -->
+					<div class="min-w-0 w-48 shrink-0">
+						<p class="truncate text-sm font-medium leading-tight">{item.title}</p>
+						<div class="mt-0.5 flex items-center gap-1.5">
+							<span class="rounded bg-gray-800 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+								{item.media_type === 'movie' ? 'Film' : 'TV'}
+							</span>
+							{#if item.providers.length > 0}
+								<div class="flex gap-0.5">
+									{#each item.providers.slice(0, 3) as p (p.provider_id)}
+										<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
+									{/each}
+									{#if item.providers.length > 3}
+										<span class="text-[9px] text-gray-600">+{item.providers.length - 3}</span>
 									{/if}
+								</div>
+							{/if}
+						</div>
+					</div>
 
-									<!-- Runtime badge bottom-left -->
-									{#if item.runtime_minutes}
-										<span class="absolute bottom-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[9px] leading-none text-gray-300">
-											{formatRuntime(item.runtime_minutes, item.media_type)}
-										</span>
-									{/if}
+					<!-- Sparkline -->
+					<div class="flex min-w-0 flex-1 items-center gap-2">
+						<div class="relative flex-1">
+							<!-- Track -->
+							<div class="h-px w-full bg-gray-800"></div>
+							<!-- Line -->
+							<div
+								class="absolute top-0 left-0 h-px transition-all duration-300"
+								style="width:{pct}%; background:{lineColor}; opacity:0.7;"
+							></div>
+							<!-- Terminal dot -->
+							<div
+								class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
+								style="left:{pct}%; margin-left:-3px; background:{dotColor};"
+							></div>
+						</div>
+						<!-- Runtime label -->
+						<span class="shrink-0 text-[10px] tabular-nums text-gray-500 w-14 text-right">
+							{#if item.runtime_minutes}
+								{formatRuntime(item.runtime_minutes, item.media_type)}
+							{:else}
+								<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
+							{/if}
+						</span>
+					</div>
 
-									<!-- Type badge top-right -->
-									<span class="absolute right-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-semibold uppercase leading-none text-gray-300">
-										{item.media_type === 'movie' ? 'F' : 'TV'}
-									</span>
-
-									<!-- Hover dim -->
-									<div class="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20"></div>
-								</button>
-
-								<!-- Title label below poster -->
-								<p class="mt-1 w-16 truncate text-center text-[10px] leading-tight text-gray-400">
-									{item.title}
-								</p>
-
-								<!-- Pop-up detail card (anchored to thumbnail) -->
-								{#if activeItem?.id === item.id}
-									<div
-										class="absolute bottom-full left-1/2 z-30 mb-2 w-52 -translate-x-1/2 rounded-xl bg-gray-800 p-3 shadow-2xl ring-1 ring-gray-700"
-										data-thumb
-									>
-										<!-- Arrow -->
-										<div class="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 bg-gray-800 ring-1 ring-gray-700"></div>
-
-										<p class="mb-1 text-sm font-semibold leading-snug">{item.title}</p>
-
-										{#if item.runtime_minutes}
-											<p class="mb-2 text-xs text-gray-400">
-												🕐 {formatRuntime(item.runtime_minutes, item.media_type)}
-											</p>
-										{/if}
-
-										{#if item.overview}
-											<p class="mb-2 line-clamp-3 text-xs text-gray-500">{item.overview}</p>
-										{/if}
-
-										{#if item.providers.length > 0}
-											<div class="mb-2 flex flex-wrap gap-1">
-												{#each item.providers as p (p.provider_id)}
-													<img
-														src="{TMDB_IMG}/w92{p.logo_path}"
-														alt={p.provider_name}
-														title={p.provider_name}
-														class="h-5 w-5 rounded"
-													/>
-												{/each}
-											</div>
-										{/if}
-
-										<div class="flex gap-1.5">
-											<button
-												class="flex-1 rounded-md bg-gray-700 py-1.5 text-xs font-medium transition-colors hover:bg-gray-600 disabled:opacity-40"
-												disabled={busy.has(item.id)}
-												onclick={() => toggle(item)}
-											>
-												{item.watched_at ? 'Unwatch' : '✓ Watched'}
-											</button>
-											<button
-												class="rounded-md bg-gray-700 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
-												disabled={busy.has(item.id)}
-												onclick={() => remove(item)}
-												aria-label="Remove"
-											>
-												✕
-											</button>
-										</div>
-									</div>
-								{/if}
-							</div>
-						{/each}
+					<!-- Actions -->
+					<div class="flex shrink-0 gap-1">
+						<button
+							class="rounded bg-gray-800 px-2 py-1 text-[10px] font-medium text-gray-300 transition-colors hover:bg-gray-700 disabled:opacity-40"
+							disabled={busy.has(item.id)} onclick={() => toggle(item)}>
+							{item.watched_at ? 'Unwatch' : '✓'}
+						</button>
+						<button
+							class="rounded bg-gray-800 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
+							disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
 					</div>
 				</div>
 			{/each}
 		</div>
+
+	<!-- ── GANTT LANES ────────────────────────────────────────────────────────── -->
+	{:else}
+		<!-- X-axis header -->
+		<div class="flex items-center gap-0 pl-40">
+			<div class="flex-1 border-t border-dashed border-gray-700 pt-1">
+				<div class="flex justify-between text-[10px] text-gray-600">
+					<span>0</span>
+					<span class="font-medium text-gray-500">{budgetHours}h / mo</span>
+				</div>
+			</div>
+		</div>
+
+		<div class="space-y-1.5">
+			{#each lanes as lane (lane.key)}
+				{@const colors = laneColors(resolvedHue(lane.providerId, lane.logo))}
+				{@const isDragOver = dragOverKey === lane.key && dragKey !== lane.key}
+				{@const budgetMins = budgetHours * 60}
+
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="flex items-stretch overflow-visible rounded-xl transition-all duration-150 {isDragOver ? 'ring-2 ring-white/20 scale-[1.005]' : ''}"
+					style="background:{colors.row}; border-left:{colors.border};"
+					draggable="true"
+					ondragstart={() => onDragStart(lane.key)}
+					ondragover={(e) => onDragOver(e, lane.key)}
+					ondrop={() => onDrop(lane.key)}
+					ondragend={onDragEnd}
+				>
+					<!-- Lane header -->
+					<div class="flex w-40 shrink-0 flex-col items-center justify-center gap-1.5 px-3 py-2.5 text-center"
+						style="background:{colors.header};">
+						<div class="cursor-grab text-base opacity-25 active:cursor-grabbing" title="Drag to reorder">⠿</div>
+						{#if lane.logo}
+							<img src="{TMDB_IMG}/w92{lane.logo}" alt={lane.label} class="h-8 w-8 rounded-lg object-cover shadow" />
+						{:else}
+							<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-800 text-base">📺</div>
+						{/if}
+						<p class="text-[11px] font-semibold leading-tight" style="color:{colors.labelText}">{lane.label}</p>
+						<p class="text-[10px] text-gray-600">{lane.items.length} title{lane.items.length === 1 ? '' : 's'} · {hms(lane.totalMins)}</p>
+					</div>
+
+					<!-- Budget zone: clips at month boundary -->
+					<div class="relative min-w-0 flex-1 overflow-hidden py-3 pr-0">
+						<!-- Month-end marker line -->
+						<div class="pointer-events-none absolute inset-y-0 right-0 w-px border-r border-dashed border-white/15"></div>
+
+						<!-- Bar ribbon -->
+						<div class="flex h-8 items-stretch gap-0 pl-2">
+							{#each lane.items as item (item.id)}
+								{@const pct = (effectiveRuntime(item) / budgetMins) * 100}
+								{@const isActive = activeItem?.id === item.id}
+								{@const posterW = Math.round(BAR_H * 2 / 3)}
+
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div class="relative shrink-0" style="flex: 0 0 {pct}%; min-width: 18px;" data-item>
+									<button
+										class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive ? 'ring-2 ring-white/50 brightness-125' : 'hover:brightness-110'}"
+										style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace('1px solid ', '')};"
+										onclick={(e) => { e.stopPropagation(); activeItem = isActive ? null : item; }}
+										title="{item.title} · {item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '~' + hms(DEFAULT_RUNTIME[item.media_type])}"
+									>
+										{#if item.poster_path}
+											<img
+												src="{TMDB_IMG}/w92{item.poster_path}"
+												alt=""
+												class="h-full shrink-0 object-cover"
+												style="width:{posterW}px;"
+											/>
+										{/if}
+										<div class="flex min-w-0 flex-col justify-center gap-0.5 px-1.5">
+											<p class="truncate text-[10px] font-semibold leading-tight text-white/90">{item.title}</p>
+											<p class="truncate text-[9px] leading-tight text-white/50">
+												{#if item.runtime_minutes}
+													{formatRuntime(item.runtime_minutes, item.media_type)}
+												{:else}
+													~{hms(DEFAULT_RUNTIME[item.media_type])}
+												{/if}
+											</p>
+										</div>
+									</button>
+
+									<!-- Detail pop-up -->
+									{#if isActive}
+										<div
+											class="absolute bottom-full left-0 z-30 mb-2 w-56 rounded-xl bg-gray-800 p-3 shadow-2xl ring-1 ring-white/10"
+											data-item
+										>
+											<div class="absolute -bottom-1.5 left-4 h-3 w-3 rotate-45 bg-gray-800 ring-1 ring-white/10"></div>
+											<p class="mb-1 text-sm font-semibold leading-snug">{item.title}</p>
+											<p class="mb-1 text-xs text-gray-400">
+												{#if item.runtime_minutes}
+													🕐 {formatRuntime(item.runtime_minutes, item.media_type)}
+												{:else}
+													🕐 ~{hms(DEFAULT_RUNTIME[item.media_type])} <span class="italic text-gray-600">(estimated)</span>
+												{/if}
+											</p>
+											{#if item.overview}
+												<p class="mb-2 line-clamp-3 text-xs text-gray-500">{item.overview}</p>
+											{/if}
+											{#if item.providers.length > 0}
+												<div class="mb-2 flex flex-wrap gap-1">
+													{#each item.providers as p (p.provider_id)}<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />{/each}
+												</div>
+											{/if}
+											<div class="flex gap-1.5">
+												<button class="flex-1 rounded-md bg-gray-700 py-1.5 text-xs font-medium transition-colors hover:bg-gray-600 disabled:opacity-40"
+													disabled={busy.has(item.id)} onclick={() => toggle(item)}>
+													{item.watched_at ? 'Unwatch' : '✓ Watched'}
+												</button>
+												<button class="rounded-md bg-gray-700 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
+													disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
+											</div>
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Overflow badge (outside the clipped zone) -->
+					{#if lane.overMins > 0}
+						<div class="flex shrink-0 items-center px-2">
+							<span class="whitespace-nowrap rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-semibold text-orange-400">
+								{overLabel(lane.overMins)}
+							</span>
+						</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+
+		{#if lanes.length > 1}
+			<p class="pt-1 text-center text-[11px] text-gray-700">Drag lanes to reorder · bar width = runtime · budget = {budgetHours}h/mo</p>
+		{/if}
 	{/if}
 </div>
 
 <!-- ── Export Modal ──────────────────────────────────────────────────────── -->
 {#if showExportModal}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Export watchlist"
-	>
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Export watchlist">
 		<div class="w-full max-w-sm space-y-4 rounded-2xl bg-gray-900 p-6">
 			<h2 class="text-lg font-semibold">Export Watchlist</h2>
-			<p class="text-sm text-gray-400">
-				Your watchlist will be encrypted with a passphrase and saved as a <code
-					class="text-orange-400">.streamq</code
-				> file. You'll need this passphrase to import it later.
-			</p>
-			<input
-				type="password"
-				placeholder="Passphrase"
-				bind:value={exportPassphrase}
+			<p class="text-sm text-gray-400">Your watchlist will be encrypted with a passphrase and saved as a <code class="text-orange-400">.streamq</code> file.</p>
+			<input type="password" placeholder="Passphrase" bind:value={exportPassphrase}
 				class="w-full rounded-lg bg-gray-800 px-4 py-2.5 text-sm placeholder-gray-500 outline-none ring-1 ring-gray-700 focus:ring-orange-500"
-				onkeydown={(e) => e.key === 'Enter' && doExport()}
-			/>
+				onkeydown={(e) => e.key === 'Enter' && doExport()} />
 			<div class="flex gap-2">
-				<button
-					class="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-					disabled={!exportPassphrase || exporting}
-					onclick={doExport}
-				>
+				<button class="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					disabled={!exportPassphrase || exporting} onclick={doExport}>
 					{exporting ? 'Encrypting…' : 'Download'}
 				</button>
-				<button
-					class="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700"
-					onclick={() => { showExportModal = false; exportPassphrase = ''; }}
-				>
-					Cancel
-				</button>
+				<button class="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700"
+					onclick={() => { showExportModal = false; exportPassphrase = ''; }}>Cancel</button>
 			</div>
 		</div>
 	</div>
@@ -562,48 +636,24 @@
 
 <!-- ── Import Modal ──────────────────────────────────────────────────────── -->
 {#if showImportModal}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Import watchlist"
-	>
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Import watchlist">
 		<div class="w-full max-w-sm space-y-4 rounded-2xl bg-gray-900 p-6">
 			<h2 class="text-lg font-semibold">Import Watchlist</h2>
-			<p class="text-sm text-gray-400">
-				Select a <code class="text-orange-400">.streamq</code> backup file and enter your passphrase.
-				<span class="font-medium text-red-400">This will replace your current queue.</span>
-			</p>
-			<input
-				type="file"
-				accept=".streamq"
+			<p class="text-sm text-gray-400">Select a <code class="text-orange-400">.streamq</code> file and enter your passphrase. <span class="font-medium text-red-400">This will replace your current queue.</span></p>
+			<input type="file" accept=".streamq"
 				class="w-full cursor-pointer rounded-lg bg-gray-800 px-3 py-2 text-sm text-gray-300 file:mr-3 file:rounded file:border-0 file:bg-gray-700 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-200"
-				onchange={onFileChange}
-			/>
-			<input
-				type="password"
-				placeholder="Passphrase"
-				bind:value={importPassphrase}
+				onchange={onFileChange} />
+			<input type="password" placeholder="Passphrase" bind:value={importPassphrase}
 				class="w-full rounded-lg bg-gray-800 px-4 py-2.5 text-sm placeholder-gray-500 outline-none ring-1 ring-gray-700 focus:ring-orange-500"
-				onkeydown={(e) => e.key === 'Enter' && doImport()}
-			/>
-			{#if importError}
-				<p class="text-xs text-red-400">{importError}</p>
-			{/if}
+				onkeydown={(e) => e.key === 'Enter' && doImport()} />
+			{#if importError}<p class="text-xs text-red-400">{importError}</p>{/if}
 			<div class="flex gap-2">
-				<button
-					class="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-					disabled={!importFile || !importPassphrase || importing}
-					onclick={doImport}
-				>
+				<button class="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					disabled={!importFile || !importPassphrase || importing} onclick={doImport}>
 					{importing ? 'Decrypting…' : 'Import'}
 				</button>
-				<button
-					class="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700"
-					onclick={() => { showImportModal = false; importFile = null; importPassphrase = ''; importError = ''; }}
-				>
-					Cancel
-				</button>
+				<button class="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700"
+					onclick={() => { showImportModal = false; importFile = null; importPassphrase = ''; importError = ''; }}>Cancel</button>
 			</div>
 		</div>
 	</div>
