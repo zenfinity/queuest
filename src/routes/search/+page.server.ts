@@ -1,12 +1,13 @@
 import type { PageServerLoad } from './$types';
 import type { SearchResult } from '$lib/types';
 import { searchMulti, getWatchProviders } from '$lib/tmdb';
+import { env } from '$env/dynamic/private';
 
-export const load: PageServerLoad = async ({ url, platform }) => {
+export const load: PageServerLoad = async ({ url }) => {
 	const query = url.searchParams.get('q')?.trim() ?? '';
 	if (!query) return { results: [] as SearchResult[], query: '' };
 
-	const apiKey = platform?.env?.TMDB_API_KEY ?? '';
+	const apiKey = env.TMDB_API_KEY ?? '';
 
 	const raw = await searchMulti(query, apiKey);
 

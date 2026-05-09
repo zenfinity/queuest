@@ -5,7 +5,6 @@ declare global {
 		interface Platform {
 			env: {
 				DB: D1Database;
-				TMDB_API_KEY: string;
 			};
 			context: {
 				waitUntil(promise: Promise<unknown>): void;

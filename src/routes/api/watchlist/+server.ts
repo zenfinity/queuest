@@ -1,10 +1,11 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getWatchProviders } from '$lib/tmdb';
+import { env } from '$env/dynamic/private';
 
 export const POST: RequestHandler = async ({ request, platform }) => {
 	const db = platform?.env?.DB;
-	const apiKey = platform?.env?.TMDB_API_KEY ?? '';
+	const apiKey = env.TMDB_API_KEY ?? '';
 	if (!db) throw error(503, 'Database not available');
 
 	const body = (await request.json()) as {
