@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
+	import { addItem } from '$lib/db';
 	import { page } from '$app/state';
 
 	let { data }: { data: PageData } = $props();
@@ -9,26 +10,33 @@
 	let query = $state(page.url.searchParams.get('q') ?? '');
 	let adding = $state(new Set<number>());
 	let added = $state(new Set<number>());
+	let errors = $state(new Map<number, string>());
 
 	async function addToQueue(result: SearchResult) {
 		adding = new Set(adding).add(result.id);
+		const nextErrors = new Map(errors);
+		nextErrors.delete(result.id);
+		errors = nextErrors;
 
-		await fetch('/api/watchlist', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
+		try {
+			await addItem({
 				tmdb_id: result.id,
 				media_type: result.media_type,
 				title: result.title,
 				poster_path: result.poster_path,
-				overview: result.overview
-			})
-		});
-
-		const nextAdding = new Set(adding);
-		nextAdding.delete(result.id);
-		adding = nextAdding;
-		added = new Set(added).add(result.id);
+				overview: result.overview,
+				providers: result.providers,
+				runtime_minutes: result.runtime_minutes
+			});
+			added = new Set(added).add(result.id);
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : 'Already in queue';
+			errors = new Map(errors).set(result.id, msg);
+		} finally {
+			const nextAdding = new Set(adding);
+			nextAdding.delete(result.id);
+			adding = nextAdding;
+		}
 	}
 </script>
 
