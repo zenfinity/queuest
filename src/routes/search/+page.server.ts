@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import type { SearchResult } from '$lib/types';
-import { searchMulti, getWatchProviders } from '$lib/tmdb';
+import { searchMulti, getWatchProviders, getRuntime } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -13,20 +13,22 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	const results: SearchResult[] = await Promise.all(
 		raw.slice(0, 8).map(async (item) => {
-			const providers = await getWatchProviders(
-				item.id as number,
-				item.media_type as 'movie' | 'tv',
-				apiKey
-			);
+			const id = item.id as number;
+			const mediaType = item.media_type as 'movie' | 'tv';
+			const [providers, runtime_minutes] = await Promise.all([
+				getWatchProviders(id, mediaType, apiKey),
+				getRuntime(id, mediaType, apiKey)
+			]);
 			const dateStr = (item.release_date ?? item.first_air_date ?? '') as string;
 			return {
-				id: item.id as number,
-				media_type: item.media_type as 'movie' | 'tv',
+				id,
+				media_type: mediaType,
 				title: (item.title ?? item.name) as string,
 				poster_path: (item.poster_path as string) ?? null,
 				overview: (item.overview as string) ?? '',
 				year: dateStr.slice(0, 4) || null,
-				providers
+				providers,
+				runtime_minutes
 			};
 		})
 	);

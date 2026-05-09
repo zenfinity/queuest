@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getWatchProviders } from '$lib/tmdb';
+import { getWatchProviders, getRuntime } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
 
 export const POST: RequestHandler = async ({ request, platform }) => {
@@ -16,12 +16,15 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		overview: string;
 	};
 
-	const providers = await getWatchProviders(body.tmdb_id, body.media_type, apiKey);
+	const [providers, runtime_minutes] = await Promise.all([
+		getWatchProviders(body.tmdb_id, body.media_type, apiKey),
+		getRuntime(body.tmdb_id, body.media_type, apiKey)
+	]);
 
 	await db
 		.prepare(
-			`INSERT OR IGNORE INTO watchlist (tmdb_id, media_type, title, poster_path, overview, providers)
-       VALUES (?, ?, ?, ?, ?, ?)`
+			`INSERT OR IGNORE INTO watchlist (tmdb_id, media_type, title, poster_path, overview, providers, runtime_minutes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
 		)
 		.bind(
 			body.tmdb_id,
@@ -29,7 +32,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			body.title,
 			body.poster_path,
 			body.overview,
-			JSON.stringify(providers)
+			JSON.stringify(providers),
+			runtime_minutes
 		)
 		.run();
 
