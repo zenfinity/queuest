@@ -2,7 +2,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
 	import type { WatchlistItem } from '$lib/types';
-	import { TMDB_IMG } from '$lib/tmdb';
+	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 
 	let { data }: { data: PageData } = $props();
 
@@ -116,6 +116,13 @@
 					<!-- Info -->
 					<div class="flex flex-1 flex-col gap-2 p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
+
+						<!-- Runtime -->
+						{#if item.runtime_minutes}
+							<p class="text-xs text-gray-500">
+								🕐 {formatRuntime(item.runtime_minutes, item.media_type)}
+							</p>
+						{/if}
 
 						<!-- Providers -->
 						{#if item.providers.length > 0}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$lib/types';
-	import { TMDB_IMG } from '$lib/tmdb';
+	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { page } from '$app/state';
 
 	let { data }: { data: PageData } = $props();
@@ -93,6 +93,13 @@
 					<!-- Info -->
 					<div class="flex flex-1 flex-col gap-2 p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{result.title}</p>
+
+						<!-- Runtime -->
+						{#if result.runtime_minutes}
+							<p class="text-xs text-gray-500">
+								🕐 {formatRuntime(result.runtime_minutes, result.media_type)}
+							</p>
+						{/if}
 
 						<!-- Providers -->
 						{#if result.providers.length > 0}

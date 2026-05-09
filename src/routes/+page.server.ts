@@ -17,6 +17,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 		poster_path: (row.poster_path as string) ?? null,
 		overview: (row.overview as string) ?? null,
 		providers: JSON.parse((row.providers as string) ?? '[]'),
+		runtime_minutes: (row.runtime_minutes as number) ?? null,
 		added_at: row.added_at as string,
 		watched_at: (row.watched_at as string) ?? null
 	}));
