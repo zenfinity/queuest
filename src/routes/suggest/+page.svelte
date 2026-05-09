@@ -74,13 +74,6 @@
 			{/each}
 		</div>
 
-		<p class="text-center text-xs text-gray-600">
-			Streaming data from <a
-				class="hover:text-gray-400"
-				href="https://www.themoviedb.org/"
-				target="_blank"
-				rel="noopener noreferrer">TMDB</a
-			> / JustWatch · US only
-		</p>
+		<p class="text-center text-xs text-gray-600">Streaming data via TMDB / JustWatch · US only</p>
 	{/if}
 </div>

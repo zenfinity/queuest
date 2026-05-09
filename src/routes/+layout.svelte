@@ -39,4 +39,17 @@
 	<main class="mx-auto max-w-5xl px-4 py-8">
 		{@render children()}
 	</main>
+
+	<footer class="mt-16 border-t border-gray-800 py-6">
+		<div class="mx-auto flex max-w-5xl flex-col items-center gap-3 px-4 sm:flex-row sm:justify-between">
+			<img
+				src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"
+				alt="The Movie Database (TMDB)"
+				class="h-4 opacity-70"
+			/>
+			<p class="text-center text-xs text-gray-600 sm:text-right">
+				This website uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.
+			</p>
+		</div>
+	</footer>
 </div>
