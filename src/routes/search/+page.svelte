@@ -26,7 +26,11 @@
 				poster_path: result.poster_path,
 				overview: result.overview,
 				providers: result.providers,
-				runtime_minutes: result.runtime_minutes
+				runtime_minutes: result.runtime_minutes,
+				seasons: result.seasons,
+				watched_seasons: [],
+				current_season: null,
+				current_episode: null
 			});
 			added = new Set(added).add(result.id);
 		} catch (e) {

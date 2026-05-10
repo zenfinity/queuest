@@ -71,6 +71,30 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 	});
 }
 
+export async function updateShowProgress(
+	id: number,
+	watchedSeasons: number[],
+	currentSeason: number | null,
+	currentEpisode: number | null
+): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const get = store.get(id);
+		get.onsuccess = () => {
+			const item = get.result as WatchlistItem;
+			item.watched_seasons = watchedSeasons;
+			item.current_season = currentSeason;
+			item.current_episode = currentEpisode;
+			const put = store.put(item);
+			put.onsuccess = () => resolve();
+			put.onerror = () => reject(put.error);
+		};
+		get.onerror = () => reject(get.error);
+	});
+}
+
 export async function replaceAll(items: WatchlistItem[]): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {

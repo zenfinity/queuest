@@ -1,17 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { WatchlistItem } from '$lib/types';
-	import { getAll, removeItem, setWatched, replaceAll } from '$lib/db';
+	import { getAll, removeItem, setWatched, replaceAll, updateShowProgress } from '$lib/db';
 	import { encrypt, decrypt } from '$lib/crypto';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
+	import { remainingRuntime, progressLabel } from '$lib/progress';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
 	const DEFAULT_RUNTIME: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
 
 	function effectiveRuntime(item: WatchlistItem): number {
-		return item.runtime_minutes ?? DEFAULT_RUNTIME[item.media_type];
+		return remainingRuntime(item);
 	}
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
@@ -30,7 +31,20 @@
 	let loaded      = $state(false);
 	let tab         = $state<'queue' | 'watched'>('queue');
 	let busy        = $state(new Set<number>());
-	let activeItem  = $state<WatchlistItem | null>(null);
+	// Gantt detail popup — fixed-position to escape the overflow:hidden budget zone
+	let activeItem       = $state<WatchlistItem | null>(null);
+	let ganttPopupAnchor = $state<{ x: number; y: number } | null>(null);
+
+	function openGanttPopup(e: MouseEvent, item: WatchlistItem) {
+		e.stopPropagation();
+		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; return; }
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		ganttPopupAnchor = {
+			x: Math.min(rect.left, window.innerWidth - 248),
+			y: rect.bottom + 8
+		};
+		activeItem = item;
+	}
 
 	let sortBy      = $state<SortKey>('added');
 	let viewMode    = $state<ViewKey>('grid');
@@ -78,8 +92,7 @@
 		});
 	}
 
-	let flatItems   = $derived(sorted(activeItems));
-	let maxRuntime  = $derived(Math.max(1, ...flatItems.map(effectiveRuntime)));
+	let flatItems = $derived(sorted(activeItems));
 
 	type Lane = {
 		key: string;
@@ -173,16 +186,45 @@
 	async function toggle(item: WatchlistItem) {
 		busy = new Set(busy).add(item.id);
 		await setWatched(item.id, !item.watched_at);
-		if (activeItem?.id === item.id) activeItem = null;
+		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
 		await reload();
 		const next = new Set(busy); next.delete(item.id); busy = next;
 	}
 	async function remove(item: WatchlistItem) {
 		busy = new Set(busy).add(item.id);
 		await removeItem(item.id);
-		if (activeItem?.id === item.id) activeItem = null;
+		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
 		await reload();
 		const next = new Set(busy); next.delete(item.id); busy = next;
+	}
+
+	// ── Season / episode progress ─────────────────────────────────────────────
+	async function toggleSeason(item: WatchlistItem, seasonNum: number) {
+		const current = item.watched_seasons ?? [];
+		const isWatched = current.includes(seasonNum);
+		const next = isWatched
+			? current.filter((s) => s !== seasonNum)
+			: [...current, seasonNum];
+		// If marking watched and it was the current season, clear current position
+		const newCurrentSeason =
+			!isWatched && seasonNum === item.current_season ? null : item.current_season;
+		const newCurrentEpisode =
+			newCurrentSeason === null && item.current_season === seasonNum
+				? null
+				: item.current_episode;
+		await updateShowProgress(item.id, next, newCurrentSeason, newCurrentEpisode);
+		await reload();
+	}
+
+	async function setCurrentProgress(
+		item: WatchlistItem,
+		season: number | null,
+		episode: number | null
+	) {
+		// Moving to a season means you're not done with it — remove from watched if present
+		const watched = (item.watched_seasons ?? []).filter((s) => s !== season);
+		await updateShowProgress(item.id, watched, season, episode);
+		await reload();
 	}
 
 	// ── Lane drag-to-reorder ──────────────────────────────────────────────────
@@ -229,6 +271,7 @@
 		} finally { importing = false; }
 	}
 
+	// ── Helpers ───────────────────────────────────────────────────────────────
 	function hms(mins: number): string {
 		const h = Math.floor(mins / 60), m = mins % 60;
 		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
@@ -242,8 +285,62 @@
 <svelte:head><title>StreamQ — My Queue</title></svelte:head>
 
 <svelte:document onclick={(e) => {
-	if (activeItem && !(e.target as Element).closest('[data-item]')) activeItem = null;
+	if (activeItem && !(e.target as Element).closest('[data-item]')) {
+		activeItem = null; ganttPopupAnchor = null;
+	}
 }} />
+
+{#snippet seasonPicker(item: WatchlistItem)}
+	{#if item.media_type === 'tv' && item.seasons?.length}
+		<div class="space-y-1 pt-0.5">
+			<!-- Season chips -->
+			<div class="flex flex-wrap gap-0.5">
+				{#each item.seasons as season (season.season_number)}
+					{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
+					{@const isCurrent = item.current_season === season.season_number}
+					<button
+						class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
+							{watched
+								? 'bg-teal-900/60 text-teal-400'
+								: isCurrent
+									? 'bg-orange-900/50 text-orange-400'
+									: 'bg-gray-800 text-gray-500 hover:text-gray-300'}"
+						onclick={() => toggleSeason(item, season.season_number)}
+						title="{season.name} · {season.episode_count} eps"
+					>
+						{watched ? '✓' : isCurrent ? '▶' : ''}{watched || isCurrent ? ' ' : ''}S{season.season_number}
+					</button>
+				{/each}
+			</div>
+			<!-- Current episode -->
+			<div class="flex items-center gap-1">
+				<span class="text-[9px] text-gray-600">On</span>
+				<span class="text-[9px] text-gray-600">S</span>
+				<input
+					type="number" min="1" max="99"
+					value={item.current_season ?? ''}
+					onchange={(e) => {
+						const v = parseInt((e.currentTarget as HTMLInputElement).value);
+						setCurrentProgress(item, isNaN(v) ? null : v, item.current_episode);
+					}}
+					class="w-7 rounded bg-gray-800 px-1 py-0.5 text-center text-[9px] text-gray-300 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none focus:ring-1 focus:ring-orange-500/50"
+					placeholder="–"
+				/>
+				<span class="text-[9px] text-gray-600">E</span>
+				<input
+					type="number" min="1" max="999"
+					value={item.current_episode ?? ''}
+					onchange={(e) => {
+						const v = parseInt((e.currentTarget as HTMLInputElement).value);
+						setCurrentProgress(item, item.current_season, isNaN(v) ? null : v);
+					}}
+					class="w-7 rounded bg-gray-800 px-1 py-0.5 text-center text-[9px] text-gray-300 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none focus:ring-1 focus:ring-orange-500/50"
+					placeholder="–"
+				/>
+			</div>
+		</div>
+	{/if}
+{/snippet}
 
 <div class="space-y-6">
 	<!-- Header -->
@@ -372,6 +469,7 @@
 								{/if}
 							</span>
 						</div>
+						{@render seasonPicker(item)}
 						{#if item.providers.length > 0}
 							<div class="flex flex-wrap gap-1">
 								{#each item.providers.slice(0, 4) as p (p.provider_id)}
@@ -404,74 +502,75 @@
 				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#4b5563'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
-				<div class="flex items-center gap-3 bg-gray-900/40 px-3 py-2 hover:bg-gray-900/80 transition-colors">
-
-					<!-- Poster -->
-					<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-800">
-						{#if item.poster_path}
-							<img src="{TMDB_IMG}/w92{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
-						{:else}
-							<div class="flex h-full w-full items-center justify-center text-sm text-gray-600">🎬</div>
-						{/if}
-					</div>
-
-					<!-- Title + meta -->
-					<div class="min-w-0 w-48 shrink-0">
-						<p class="truncate text-sm font-medium leading-tight">{item.title}</p>
-						<div class="mt-0.5 flex items-center gap-1.5">
-							<span class="rounded bg-gray-800 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-								{item.media_type === 'movie' ? 'Film' : 'TV'}
-							</span>
-							{#if item.providers.length > 0}
-								<div class="flex gap-0.5">
-									{#each item.providers.slice(0, 3) as p (p.provider_id)}
-										<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
-									{/each}
-									{#if item.providers.length > 3}
-										<span class="text-[9px] text-gray-600">+{item.providers.length - 3}</span>
-									{/if}
-								</div>
-							{/if}
-						</div>
-					</div>
-
-					<!-- Sparkline -->
-					<div class="flex min-w-0 flex-1 items-center gap-2">
-						<div class="relative flex-1">
-							<!-- Track -->
-							<div class="h-px w-full bg-gray-800"></div>
-							<!-- Line -->
-							<div
-								class="absolute top-0 left-0 h-px transition-all duration-300"
-								style="width:{pct}%; background:{lineColor}; opacity:0.7;"
-							></div>
-							<!-- Terminal dot -->
-							<div
-								class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
-								style="left:{pct}%; margin-left:-3px; background:{dotColor};"
-							></div>
-						</div>
-						<!-- Runtime label -->
-						<span class="shrink-0 text-[10px] tabular-nums text-gray-500 w-14 text-right">
-							{#if item.runtime_minutes}
-								{formatRuntime(item.runtime_minutes, item.media_type)}
+				<div class="flex flex-col bg-gray-900/40 px-3 py-2 hover:bg-gray-900/80 transition-colors">
+					<!-- Main row -->
+					<div class="flex items-center gap-3">
+						<!-- Poster -->
+						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-800">
+							{#if item.poster_path}
+								<img src="{TMDB_IMG}/w92{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
 							{:else}
-								<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
+								<div class="flex h-full w-full items-center justify-center text-sm text-gray-600">🎬</div>
 							{/if}
-						</span>
-					</div>
+						</div>
 
-					<!-- Actions -->
-					<div class="flex shrink-0 gap-1">
-						<button
-							class="rounded bg-gray-800 px-2 py-1 text-[10px] font-medium text-gray-300 transition-colors hover:bg-gray-700 disabled:opacity-40"
-							disabled={busy.has(item.id)} onclick={() => toggle(item)}>
-							{item.watched_at ? 'Unwatch' : '✓'}
-						</button>
-						<button
-							class="rounded bg-gray-800 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
-							disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
+						<!-- Title + meta -->
+						<div class="min-w-0 w-44 shrink-0">
+							<p class="truncate text-sm font-medium leading-tight">{item.title}</p>
+							<div class="mt-0.5 flex items-center gap-1.5">
+								<span class="rounded bg-gray-800 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+									{item.media_type === 'movie' ? 'Film' : 'TV'}
+								</span>
+								{#if item.providers.length > 0}
+									<div class="flex gap-0.5">
+										{#each item.providers.slice(0, 3) as p (p.provider_id)}
+											<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
+										{/each}
+										{#if item.providers.length > 3}
+											<span class="text-[9px] text-gray-600">+{item.providers.length - 3}</span>
+										{/if}
+									</div>
+								{/if}
+								{#if progressLabel(item)}
+									<span class="text-[9px] text-orange-400/70">{progressLabel(item)}</span>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Sparkline -->
+						<div class="flex min-w-0 flex-1 items-center gap-2">
+							<div class="relative flex-1">
+								<div class="h-px w-full bg-gray-800"></div>
+								<div class="absolute top-0 left-0 h-px transition-all duration-300"
+									style="width:{pct}%; background:{lineColor}; opacity:0.7;"></div>
+								<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
+									style="left:{pct}%; margin-left:-3px; background:{dotColor};"></div>
+							</div>
+							<span class="shrink-0 text-[10px] tabular-nums text-gray-500 w-14 text-right">
+								{#if item.runtime_minutes}
+									{formatRuntime(effectiveRuntime(item), item.media_type)}
+								{:else}
+									<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
+								{/if}
+							</span>
+						</div>
+
+						<!-- Actions -->
+						<div class="flex shrink-0 gap-1">
+							<button class="rounded bg-gray-800 px-2 py-1 text-[10px] font-medium text-gray-300 transition-colors hover:bg-gray-700 disabled:opacity-40"
+								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
+								{item.watched_at ? 'Unwatch' : '✓'}
+							</button>
+							<button class="rounded bg-gray-800 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
+								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
+						</div>
 					</div>
+					<!-- Season picker (TV, indented to align with title) -->
+					{#if item.media_type === 'tv' && item.seasons?.length}
+						<div class="ml-11 mt-1">
+							{@render seasonPicker(item)}
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -534,7 +633,7 @@
 									<button
 										class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive ? 'ring-2 ring-white/50 brightness-125' : 'hover:brightness-110'}"
 										style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace('1px solid ', '')};"
-										onclick={(e) => { e.stopPropagation(); activeItem = isActive ? null : item; }}
+										onclick={(e) => openGanttPopup(e, item)}
 										title="{item.title} · {item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '~' + hms(DEFAULT_RUNTIME[item.media_type])}"
 									>
 										{#if item.poster_path}
@@ -557,39 +656,6 @@
 										</div>
 									</button>
 
-									<!-- Detail pop-up -->
-									{#if isActive}
-										<div
-											class="absolute bottom-full left-0 z-30 mb-2 w-56 rounded-xl bg-gray-800 p-3 shadow-2xl ring-1 ring-white/10"
-											data-item
-										>
-											<div class="absolute -bottom-1.5 left-4 h-3 w-3 rotate-45 bg-gray-800 ring-1 ring-white/10"></div>
-											<p class="mb-1 text-sm font-semibold leading-snug">{item.title}</p>
-											<p class="mb-1 text-xs text-gray-400">
-												{#if item.runtime_minutes}
-													🕐 {formatRuntime(item.runtime_minutes, item.media_type)}
-												{:else}
-													🕐 ~{hms(DEFAULT_RUNTIME[item.media_type])} <span class="italic text-gray-600">(estimated)</span>
-												{/if}
-											</p>
-											{#if item.overview}
-												<p class="mb-2 line-clamp-3 text-xs text-gray-500">{item.overview}</p>
-											{/if}
-											{#if item.providers.length > 0}
-												<div class="mb-2 flex flex-wrap gap-1">
-													{#each item.providers as p (p.provider_id)}<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />{/each}
-												</div>
-											{/if}
-											<div class="flex gap-1.5">
-												<button class="flex-1 rounded-md bg-gray-700 py-1.5 text-xs font-medium transition-colors hover:bg-gray-600 disabled:opacity-40"
-													disabled={busy.has(item.id)} onclick={() => toggle(item)}>
-													{item.watched_at ? 'Unwatch' : '✓ Watched'}
-												</button>
-												<button class="rounded-md bg-gray-700 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
-													disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
-											</div>
-										</div>
-									{/if}
 								</div>
 							{/each}
 						</div>
@@ -612,6 +678,43 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- ── Gantt detail popup (fixed-position, escapes overflow:hidden) ──────── -->
+{#if activeItem && ganttPopupAnchor}
+	<div
+		class="fixed z-50 w-56 rounded-xl bg-gray-800 p-3 shadow-2xl ring-1 ring-white/10"
+		style="left:{ganttPopupAnchor.x}px; top:{ganttPopupAnchor.y}px;"
+		data-item
+	>
+		<p class="mb-1 text-sm font-semibold leading-snug">{activeItem.title}</p>
+		<p class="mb-1 text-xs text-gray-400">
+			{#if activeItem.runtime_minutes}
+				🕐 {formatRuntime(activeItem.runtime_minutes, activeItem.media_type)}
+			{:else}
+				🕐 ~{hms(DEFAULT_RUNTIME[activeItem.media_type])} <span class="italic text-gray-600">(estimated)</span>
+			{/if}
+		</p>
+		{#if activeItem.overview}
+			<p class="mb-2 line-clamp-3 text-xs text-gray-500">{activeItem.overview}</p>
+		{/if}
+		{@render seasonPicker(activeItem)}
+		{#if activeItem.providers.length > 0}
+			<div class="mt-2 mb-2 flex flex-wrap gap-1">
+				{#each activeItem.providers as p (p.provider_id)}
+					<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
+				{/each}
+			</div>
+		{/if}
+		<div class="flex gap-1.5">
+			<button class="flex-1 rounded-md bg-gray-700 py-1.5 text-xs font-medium transition-colors hover:bg-gray-600 disabled:opacity-40"
+				disabled={busy.has(activeItem.id)} onclick={() => toggle(activeItem!)}>
+				{activeItem.watched_at ? 'Unwatch' : '✓ Watched'}
+			</button>
+			<button class="rounded-md bg-gray-700 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
+				disabled={busy.has(activeItem.id)} onclick={() => remove(activeItem!)} aria-label="Remove">✕</button>
+		</div>
+	</div>
+{/if}
 
 <!-- ── Export Modal ──────────────────────────────────────────────────────── -->
 {#if showExportModal}
