@@ -97,15 +97,17 @@
 						</p>
 					</div>
 
-					<!-- Bar -->
-					<div class="hidden w-36 sm:block">
-						<div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
-							<div
-								class="h-full rounded-full bg-orange-500 transition-all"
-								style="width: {Math.round((suggestion.count / topCount) * 100)}%"
-							></div>
+					<!-- Bar — only meaningful with 3+ providers -->
+					{#if suggestions.length >= 3}
+						<div class="hidden w-36 sm:block">
+							<div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+								<div
+									class="h-full rounded-full bg-orange-500 transition-all"
+									style="width: {Math.round((suggestion.count / topCount) * 100)}%"
+								></div>
+							</div>
 						</div>
-					</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
