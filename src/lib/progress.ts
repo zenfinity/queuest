@@ -47,17 +47,7 @@ export function remainingRuntime(item: WatchlistItem): number {
 export function progressLabel(item: WatchlistItem): string | null {
 	if (item.media_type !== 'tv') return null;
 	const watched = item.watched_seasons ?? [];
-	const hasCurrent = item.current_season != null;
-	if (!watched.length && !hasCurrent) return null;
-
-	const parts: string[] = [];
-	if (watched.length) {
-		const sorted = [...watched].sort((a, b) => a - b);
-		parts.push('S' + sorted.join(' S') + ' done');
-	}
-	if (hasCurrent) {
-		const ep = item.current_episode != null ? ` E${item.current_episode}` : '';
-		parts.push(`S${item.current_season}${ep}`);
-	}
-	return parts.join(' · ');
+	if (!watched.length) return null;
+	const sorted = [...watched].sort((a, b) => a - b);
+	return 'S' + sorted.join(' S') + ' done';
 }

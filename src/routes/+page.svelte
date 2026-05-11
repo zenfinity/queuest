@@ -198,32 +198,13 @@
 		const next = new Set(busy); next.delete(item.id); busy = next;
 	}
 
-	// ── Season / episode progress ─────────────────────────────────────────────
+	// ── Season progress ───────────────────────────────────────────────────────
 	async function toggleSeason(item: WatchlistItem, seasonNum: number) {
 		const current = item.watched_seasons ?? [];
-		const isWatched = current.includes(seasonNum);
-		const next = isWatched
+		const next = current.includes(seasonNum)
 			? current.filter((s) => s !== seasonNum)
 			: [...current, seasonNum];
-		// If marking watched and it was the current season, clear current position
-		const newCurrentSeason =
-			!isWatched && seasonNum === item.current_season ? null : item.current_season;
-		const newCurrentEpisode =
-			newCurrentSeason === null && item.current_season === seasonNum
-				? null
-				: item.current_episode;
-		await updateShowProgress(item.id, next, newCurrentSeason, newCurrentEpisode);
-		await reload();
-	}
-
-	async function setCurrentProgress(
-		item: WatchlistItem,
-		season: number | null,
-		episode: number | null
-	) {
-		// Moving to a season means you're not done with it — remove from watched if present
-		const watched = (item.watched_seasons ?? []).filter((s) => s !== season);
-		await updateShowProgress(item.id, watched, season, episode);
+		await updateShowProgress(item.id, next, item.current_season, item.current_episode);
 		await reload();
 	}
 
@@ -292,52 +273,20 @@
 
 {#snippet seasonPicker(item: WatchlistItem)}
 	{#if item.media_type === 'tv' && item.seasons?.length}
-		<div class="space-y-1 pt-0.5">
-			<!-- Season chips -->
-			<div class="flex flex-wrap gap-0.5">
-				{#each item.seasons as season (season.season_number)}
-					{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
-					{@const isCurrent = item.current_season === season.season_number}
-					<button
-						class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
-							{watched
-								? 'bg-teal-900/60 text-teal-400'
-								: isCurrent
-									? 'bg-orange-900/50 text-orange-400'
-									: 'bg-gray-800 text-gray-500 hover:text-gray-300'}"
-						onclick={() => toggleSeason(item, season.season_number)}
-						title="{season.name} · {season.episode_count} eps"
-					>
-						{watched ? '✓' : isCurrent ? '▶' : ''}{watched || isCurrent ? ' ' : ''}S{season.season_number}
-					</button>
-				{/each}
-			</div>
-			<!-- Current episode -->
-			<div class="flex items-center gap-1">
-				<span class="text-[9px] text-gray-600">On</span>
-				<span class="text-[9px] text-gray-600">S</span>
-				<input
-					type="number" min="1" max="99"
-					value={item.current_season ?? ''}
-					onchange={(e) => {
-						const v = parseInt((e.currentTarget as HTMLInputElement).value);
-						setCurrentProgress(item, isNaN(v) ? null : v, item.current_episode);
-					}}
-					class="w-7 rounded bg-gray-800 px-1 py-0.5 text-center text-[9px] text-gray-300 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none focus:ring-1 focus:ring-orange-500/50"
-					placeholder="–"
-				/>
-				<span class="text-[9px] text-gray-600">E</span>
-				<input
-					type="number" min="1" max="999"
-					value={item.current_episode ?? ''}
-					onchange={(e) => {
-						const v = parseInt((e.currentTarget as HTMLInputElement).value);
-						setCurrentProgress(item, item.current_season, isNaN(v) ? null : v);
-					}}
-					class="w-7 rounded bg-gray-800 px-1 py-0.5 text-center text-[9px] text-gray-300 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none focus:ring-1 focus:ring-orange-500/50"
-					placeholder="–"
-				/>
-			</div>
+		<div class="flex flex-wrap gap-0.5 pt-0.5">
+			{#each item.seasons as season (season.season_number)}
+				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
+				<button
+					class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
+						{watched
+							? 'bg-teal-900/60 text-teal-400'
+							: 'bg-gray-800 text-gray-500 hover:text-gray-300'}"
+					onclick={() => toggleSeason(item, season.season_number)}
+					title="{season.name} · {season.episode_count} eps"
+				>
+					{watched ? '✓ ' : ''}S{season.season_number}
+				</button>
+			{/each}
 		</div>
 	{/if}
 {/snippet}
