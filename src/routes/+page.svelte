@@ -293,19 +293,16 @@
 
 <div class="space-y-6">
 	<!-- Header -->
-	<div class="flex items-center justify-between">
-		<h1 class="text-2xl font-bold">My Queue</h1>
-		<div class="flex items-center gap-2">
+	<div class="flex items-center justify-end gap-2">
+		<button class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
+			onclick={() => (showImportModal = true)}>Import</button>
+		{#if items.length > 0}
 			<button class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
-				onclick={() => (showImportModal = true)}>Import</button>
-			{#if items.length > 0}
-				<button class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
-					onclick={() => (showExportModal = true)}>Export</button>
-			{/if}
-			<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
-				+ Add Titles
-			</a>
-		</div>
+				onclick={() => (showExportModal = true)}>Export</button>
+		{/if}
+		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
+			+ Add Titles
+		</a>
 	</div>
 
 	<!-- Toolbar -->

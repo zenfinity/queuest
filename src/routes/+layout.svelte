@@ -4,34 +4,35 @@
 
 	let { children } = $props();
 
-	function isActive(path: string) {
-		return page.url.pathname.startsWith(path);
+	const navLinks = [
+		{ href: '/',        label: 'My Queue', exact: true },
+		{ href: '/suggest', label: 'Suggest',  exact: false },
+	];
+
+	function isActive(href: string, exact: boolean) {
+		return exact ? page.url.pathname === href : page.url.pathname.startsWith(href);
 	}
 </script>
 
 <div class="min-h-screen bg-gray-950 text-gray-100">
 	<nav class="sticky top-0 z-50 border-b border-gray-800 bg-gray-900/90 backdrop-blur">
-		<div class="mx-auto flex h-14 max-w-5xl items-center gap-6 px-4">
-			<a class="text-xl font-bold tracking-tight text-white" href="/">
+		<div class="mx-auto flex h-14 max-w-5xl items-stretch gap-6 px-4">
+			<a class="flex items-center text-xl font-bold tracking-tight text-white" href="/">
 				Stream<span class="text-orange-400">Q</span>
 			</a>
 			<div class="flex gap-5">
-				<a
-					class="text-sm transition-colors {isActive('/search')
-						? 'text-white'
-						: 'text-gray-400 hover:text-white'}"
-					href="/search"
-				>
-					Search
-				</a>
-				<a
-					class="text-sm transition-colors {isActive('/suggest')
-						? 'text-white'
-						: 'text-gray-400 hover:text-white'}"
-					href="/suggest"
-				>
-					Suggest
-				</a>
+				{#each navLinks as link (link.href)}
+					{@const active = isActive(link.href, link.exact)}
+					<a
+						class="flex items-center border-b-2 text-sm transition-colors
+							{active
+								? 'border-white font-semibold text-white'
+								: 'border-transparent text-gray-400 hover:text-white'}"
+						href={link.href}
+					>
+						{link.label}
+					</a>
+				{/each}
 			</div>
 		</div>
 	</nav>
