@@ -115,7 +115,7 @@ export async function extractLogoHue(logoPath: string, tmdbImgBase: string): Pro
 }
 
 // ── Lane colour palette from a known hue ─────────────────────────────────
-export function laneColors(hue: number | null): {
+export function laneColors(hue: number | null, dark = true): {
 	row: string;
 	header: string;
 	border: string;
@@ -123,23 +123,46 @@ export function laneColors(hue: number | null): {
 	barStroke: string;
 	labelText: string;
 } {
-	if (hue === null) {
+	if (dark) {
+		if (hue === null) {
+			return {
+				row:         'hsl(0 0% 7%)',
+				header:      'hsl(0 0% 10%)',
+				border:      '3px solid hsl(0 0% 22%)',
+				barGradient: 'linear-gradient(to right, hsl(0 0% 24%), hsl(0 0% 16%))',
+				barStroke:   '1px solid hsl(0 0% 32%)',
+				labelText:   'hsl(0 0% 55%)'
+			};
+		}
+		const h = hue;
 		return {
-			row:         'hsl(0 0% 7%)',
-			header:      'hsl(0 0% 10%)',
-			border:      '3px solid hsl(0 0% 22%)',
-			barGradient: 'linear-gradient(to right, hsl(0 0% 24%), hsl(0 0% 16%))',
-			barStroke:   '1px solid hsl(0 0% 32%)',
-			labelText:   'hsl(0 0% 55%)'
+			row:         `hsl(${h} 25% 7%)`,
+			header:      `hsl(${h} 28% 11%)`,
+			border:      `3px solid hsl(${h} 65% 42%)`,
+			barGradient: `linear-gradient(to right, hsl(${h} 58% 30%), hsl(${h} 42% 20%))`,
+			barStroke:   `1px solid hsl(${h} 72% 52%)`,
+			labelText:   `hsl(${h} 60% 72%)`
+		};
+	} else {
+		// Light mode — pale tinted rows, vibrant bars, dark label text
+		if (hue === null) {
+			return {
+				row:         'hsl(0 0% 95%)',
+				header:      'hsl(0 0% 91%)',
+				border:      '3px solid hsl(0 0% 65%)',
+				barGradient: 'linear-gradient(to right, hsl(0 0% 52%), hsl(0 0% 42%))',
+				barStroke:   '1px solid hsl(0 0% 62%)',
+				labelText:   'hsl(0 0% 30%)'
+			};
+		}
+		const h = hue;
+		return {
+			row:         `hsl(${h} 40% 95%)`,
+			header:      `hsl(${h} 35% 90%)`,
+			border:      `3px solid hsl(${h} 65% 42%)`,
+			barGradient: `linear-gradient(to right, hsl(${h} 58% 38%), hsl(${h} 42% 28%))`,
+			barStroke:   `1px solid hsl(${h} 72% 52%)`,
+			labelText:   `hsl(${h} 55% 28%)`
 		};
 	}
-	const h = hue;
-	return {
-		row:         `hsl(${h} 25% 7%)`,
-		header:      `hsl(${h} 28% 11%)`,
-		border:      `3px solid hsl(${h} 65% 42%)`,
-		barGradient: `linear-gradient(to right, hsl(${h} 58% 30%), hsl(${h} 42% 20%))`,
-		barStroke:   `1px solid hsl(${h} 72% 52%)`,
-		labelText:   `hsl(${h} 60% 72%)`
-	};
 }

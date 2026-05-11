@@ -4,6 +4,13 @@ export interface Provider {
 	logo_path: string;
 }
 
+export interface SeasonSummary {
+	season_number: number;
+	episode_count: number;
+	name: string;
+	runtime_minutes: number; // estimated: episode_count × avg_episode_runtime
+}
+
 export interface WatchlistItem {
 	id: number;
 	tmdb_id: number;
@@ -12,7 +19,11 @@ export interface WatchlistItem {
 	poster_path: string | null;
 	overview: string | null;
 	providers: Provider[];
-	runtime_minutes: number | null;
+	runtime_minutes: number | null;   // total runtime (all seasons)
+	seasons: SeasonSummary[];          // TV only; empty array for movies / pre-feature items
+	watched_seasons: number[];         // season numbers fully completed
+	current_season: number | null;    // season currently in progress
+	current_episode: number | null;   // episode currently on within current_season
 	added_at: string;
 	watched_at: string | null;
 }
@@ -26,6 +37,7 @@ export interface SearchResult {
 	year: string | null;
 	providers: Provider[];
 	runtime_minutes: number | null;
+	seasons: SeasonSummary[];
 }
 
 export interface Suggestion {
