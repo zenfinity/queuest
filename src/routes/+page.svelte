@@ -250,51 +250,43 @@
 {/snippet}
 
 <div class="space-y-6">
-	<!-- Header -->
-	<div class="flex items-center justify-end">
-		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
-			+ Add Titles
-		</a>
-	</div>
-
 	<!-- Toolbar -->
-	{#if loaded && items.length > 0}
-		<div class="flex flex-wrap items-center gap-3">
-			<!-- Queue / Watched tabs -->
-			<div class="flex gap-1 rounded-lg bg-gray-900 p-1">
-				<button class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors {tab === 'queue' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+	<div class="flex flex-wrap items-center gap-3">
+		<!-- Add Titles -->
+		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
+			<span class="sm:hidden">+</span>
+			<span class="hidden sm:inline">+ Add Titles</span>
+		</a>
+
+		<!-- Filter + Sort: one unified pill group -->
+		{#if loaded && items.length > 0}
+			<div class="flex items-center gap-0.5 rounded-lg bg-gray-900 p-1">
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'queue' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
 					onclick={() => (tab = 'queue')}>To Watch ({queued.length})</button>
-				<button class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors {tab === 'watched' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'watched' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
 					onclick={() => (tab = 'watched')}>Watched ({watched.length})</button>
+				<div class="mx-1 w-px self-stretch bg-gray-700"></div>
+				{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
+					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+						onclick={() => (sortBy = key)}>{label}</button>
+				{/each}
 			</div>
+		{/if}
 
-			<div class="flex-1"></div>
+		<div class="flex-1"></div>
 
-			<!-- Sort -->
-			<div class="flex items-center gap-1.5">
-				<span class="text-xs text-gray-500">Sort</span>
-				<div class="flex gap-0.5 rounded-lg bg-gray-900 p-1">
-					{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-						<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
-							onclick={() => (sortBy = key)}>{label}</button>
-					{/each}
-				</div>
+		<!-- View -->
+		{#if loaded && items.length > 0}
+			<div class="flex gap-0.5 rounded-lg bg-gray-900 p-1">
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+					onclick={() => (viewMode = 'grid')}>⊞<span class="hidden sm:inline"> Grid</span></button>
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+					onclick={() => (viewMode = 'list')}>☰<span class="hidden sm:inline"> List</span></button>
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}"
+					onclick={() => (viewMode = 'lanes')}>≋<span class="hidden sm:inline"> Gantt</span></button>
 			</div>
-
-			<!-- View -->
-			<div class="flex items-center gap-1.5">
-				<span class="text-xs text-gray-500">View</span>
-				<div class="flex gap-0.5 rounded-lg bg-gray-900 p-1">
-					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
-						onclick={() => (viewMode = 'grid')}>⊞ Grid</button>
-					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
-						onclick={() => (viewMode = 'list')}>☰ List</button>
-					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}"
-						onclick={() => (viewMode = 'lanes')}>≋ Gantt</button>
-				</div>
-			</div>
-		</div>
-	{/if}
+		{/if}
+	</div>
 
 	<!-- Loading -->
 	{#if !loaded}
