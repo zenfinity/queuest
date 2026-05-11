@@ -35,6 +35,10 @@
 	let activeItem       = $state<WatchlistItem | null>(null);
 	let ganttPopupAnchor = $state<{ x: number; y: number } | null>(null);
 
+	// Toolbar dropdowns
+	let filterOpen = $state(false);
+	let viewOpen   = $state(false);
+
 	function openGanttPopup(e: MouseEvent, item: WatchlistItem) {
 		e.stopPropagation();
 		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; return; }
@@ -225,9 +229,9 @@
 <svelte:head><title>StreamQ — My Queue</title></svelte:head>
 
 <svelte:document onclick={(e) => {
-	if (activeItem && !(e.target as Element).closest('[data-item]')) {
-		activeItem = null; ganttPopupAnchor = null;
-	}
+	const t = e.target as Element;
+	if (activeItem && !t.closest('[data-item]')) { activeItem = null; ganttPopupAnchor = null; }
+	if (!t.closest('[data-dropdown]')) { filterOpen = false; viewOpen = false; }
 }} />
 
 {#snippet seasonPicker(item: WatchlistItem)}
@@ -252,39 +256,77 @@
 
 <div class="space-y-6">
 	<!-- Toolbar -->
-	<div class="flex flex-wrap items-center gap-3">
+	<div class="flex items-center gap-2">
 		<!-- Add Titles -->
 		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
 			<span class="sm:hidden">+</span>
 			<span class="hidden sm:inline">+ Add Titles</span>
 		</a>
 
-		<!-- Filter + Sort: one unified pill group -->
 		{#if loaded && items.length > 0}
-			<div class="flex items-center gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'queue' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-					onclick={() => (tab = 'queue')}>To Watch ({queued.length})</button>
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'watched' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-					onclick={() => (tab = 'watched')}>Watched ({watched.length})</button>
-				<div class="mx-1 w-px self-stretch bg-gray-300 dark:bg-gray-700"></div>
-				{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-						onclick={() => (sortBy = key)}>{label}</button>
-				{/each}
+			<!-- Filter dropdown -->
+			<div class="relative" data-dropdown="filter">
+				<button
+					onclick={() => { filterOpen = !filterOpen; viewOpen = false; }}
+					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
+						{filterOpen
+							? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white'
+							: 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
+				>
+					<!-- Funnel icon -->
+					<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0">
+						<path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 018 18.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 6.22A2.25 2.25 0 012 4.629V2.34a.75.75 0 01.628-.74z" clip-rule="evenodd" />
+					</svg>
+					<span class="hidden sm:inline">Filter</span>
+				</button>
+				{#if filterOpen}
+					<div class="absolute left-0 top-full z-40 mt-1 min-w-max space-y-1.5 rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10">
+						<!-- Tab filter -->
+						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'queue' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (tab = 'queue')}>To Watch ({queued.length})</button>
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'watched' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (tab = 'watched')}>Watched ({watched.length})</button>
+						</div>
+						<!-- Sort -->
+						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+							{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
+								<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+									onclick={() => (sortBy = key)}>{label}</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
 			</div>
-		{/if}
 
-		<div class="flex-1"></div>
-
-		<!-- View -->
-		{#if loaded && items.length > 0}
-			<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-					onclick={() => (viewMode = 'grid')}>⊞<span class="hidden sm:inline"> Grid</span></button>
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-					onclick={() => (viewMode = 'list')}>☰<span class="hidden sm:inline"> List</span></button>
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-					onclick={() => (viewMode = 'lanes')}>≋<span class="hidden sm:inline"> Gantt</span></button>
+			<!-- View dropdown -->
+			<div class="relative" data-dropdown="view">
+				<button
+					onclick={() => { viewOpen = !viewOpen; filterOpen = false; }}
+					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
+						{viewOpen
+							? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white'
+							: 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
+				>
+					<!-- Eye icon -->
+					<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0">
+						<path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+						<path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41z" clip-rule="evenodd" />
+					</svg>
+					<span class="hidden sm:inline">View</span>
+				</button>
+				{#if viewOpen}
+					<div class="absolute left-0 top-full z-40 mt-1 min-w-max rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10">
+						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (viewMode = 'grid')}>⊞ Grid</button>
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (viewMode = 'list')}>☰ List</button>
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (viewMode = 'lanes')}>≋ Gantt</button>
+						</div>
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>
