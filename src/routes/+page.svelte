@@ -4,6 +4,7 @@
 	import { getAll, removeItem, setWatched, updateShowProgress } from '$lib/db';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
+	import { theme } from '$lib/theme.svelte';
 	import { remainingRuntime, progressLabel } from '$lib/progress';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
@@ -468,7 +469,7 @@
 
 		<div class="space-y-1.5">
 			{#each lanes as lane (lane.key)}
-				{@const colors = laneColors(resolvedHue(lane.providerId, lane.logo))}
+				{@const colors = laneColors(resolvedHue(lane.providerId, lane.logo), theme.dark)}
 				{@const isDragOver = dragOverKey === lane.key && dragKey !== lane.key}
 				{@const budgetMins = budgetHours * 60}
 
