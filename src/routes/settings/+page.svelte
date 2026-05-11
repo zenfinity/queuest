@@ -5,6 +5,10 @@
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { openWelcome } from '$lib/welcome.svelte';
 	import type { WatchlistItem } from '$lib/types';
+	import pkg from '../../../package.json';
+
+	const VERSION = pkg.version;
+	const GITHUB_REPO = 'https://github.com/zenfinity/streamq';
 
 	// ── Budget ────────────────────────────────────────────────────────────────
 	let budgetHours = $state(40);
@@ -78,6 +82,42 @@
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Import failed.';
 		} finally { importing = false; }
+	}
+
+	// ── Feedback ──────────────────────────────────────────────────────────────
+	let feedbackOpen      = $state(false);
+	let feedbackTitle     = $state('');
+	let feedbackBody      = $state('');
+	let feedbackSending   = $state(false);
+	let feedbackError     = $state('');
+	let feedbackIssueUrl  = $state('');
+
+	function openFeedback() {
+		feedbackOpen = true; feedbackTitle = ''; feedbackBody = '';
+		feedbackError = ''; feedbackIssueUrl = '';
+	}
+	function closeFeedback() { feedbackOpen = false; }
+
+	async function submitFeedback() {
+		if (!feedbackTitle.trim()) return;
+		feedbackSending = true; feedbackError = ''; feedbackIssueUrl = '';
+		try {
+			const res = await fetch('/api/feedback', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ title: feedbackTitle, body: feedbackBody })
+			});
+			if (!res.ok) {
+				const msg = await res.text().catch(() => res.statusText);
+				feedbackError = msg || 'Something went wrong.';
+			} else {
+				const data = await res.json();
+				feedbackIssueUrl = data.url;
+				feedbackTitle = ''; feedbackBody = '';
+			}
+		} catch (e) {
+			feedbackError = e instanceof Error ? e.message : 'Network error.';
+		} finally { feedbackSending = false; }
 	}
 
 	// ── Persistence ───────────────────────────────────────────────────────────
@@ -193,14 +233,107 @@
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
 	<!-- About -->
-	<section class="space-y-3">
+	<section class="space-y-4">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">About</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">New here, or just want a refresher on how StreamQ works?</p>
-		<button
-			onclick={openWelcome}
-			class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-		>
-			Show welcome guide
-		</button>
+
+		<div class="flex items-center justify-between">
+			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+				Stream<span class="text-orange-400">Q</span>
+			</span>
+			<span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+				v{VERSION}
+			</span>
+		</div>
+
+		<div class="flex flex-wrap gap-2">
+			<button
+				onclick={openWelcome}
+				class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+			>
+				Show welcome guide
+			</button>
+
+			<a
+				href={GITHUB_REPO}
+				target="_blank"
+				rel="noopener noreferrer"
+				class="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+			>
+				<svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+					<path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+				</svg>
+				GitHub
+			</a>
+
+			<button
+				onclick={openFeedback}
+				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+			>
+				Send feedback
+			</button>
+		</div>
 	</section>
 </div>
+
+<!-- ── Feedback modal ─────────────────────────────────────────────────────── -->
+{#if feedbackOpen}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+		onclick={closeFeedback}
+	>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Send Feedback</h2>
+			<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+				This opens a public GitHub issue — don't include personal info. Check
+				<a href="{GITHUB_REPO}/issues" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">existing issues</a>
+				first!
+			</p>
+
+			<div class="space-y-3">
+				<input
+					type="text"
+					placeholder="Title (required)"
+					bind:value={feedbackTitle}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				<textarea
+					placeholder="Details (optional)"
+					bind:value={feedbackBody}
+					rows="4"
+					class="w-full resize-none rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				></textarea>
+			</div>
+
+			{#if feedbackError}
+				<p class="mt-2 text-xs text-red-500">{feedbackError}</p>
+			{/if}
+			{#if feedbackIssueUrl}
+				<p class="mt-2 text-xs text-teal-600 dark:text-teal-400">
+					✓ Issue filed!
+					<a href={feedbackIssueUrl} target="_blank" rel="noopener noreferrer" class="underline">View it on GitHub →</a>
+				</p>
+			{/if}
+
+			<div class="mt-4 flex gap-2">
+				<button
+					onclick={closeFeedback}
+					class="flex-1 rounded-lg bg-gray-100 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={submitFeedback}
+					disabled={!feedbackTitle.trim() || feedbackSending}
+					class="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+				>
+					{feedbackSending ? 'Submitting…' : feedbackIssueUrl ? 'Send another' : 'Submit'}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
