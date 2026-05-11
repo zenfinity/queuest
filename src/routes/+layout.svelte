@@ -20,6 +20,8 @@
 			<a class="flex items-center text-xl font-bold tracking-tight text-white" href="/">
 				Stream<span class="text-orange-400">Q</span>
 			</a>
+
+			<!-- Left links -->
 			<div class="flex gap-5">
 				{#each navLinks as link (link.href)}
 					{@const active = isActive(link.href, link.exact)}
@@ -34,6 +36,22 @@
 					</a>
 				{/each}
 			</div>
+
+			<!-- Spacer -->
+			<div class="flex-1"></div>
+
+			<!-- Settings (right-justified; gear icon on mobile, text on sm+) -->
+			<a
+				class="flex items-center border-b-2 text-sm transition-colors
+					{isActive('/settings', false)
+						? 'border-white font-semibold text-white'
+						: 'border-transparent text-gray-400 hover:text-white'}"
+				href="/settings"
+				aria-label="Settings"
+			>
+				<span class="sm:hidden" aria-hidden="true">⚙</span>
+				<span class="hidden sm:inline">Settings</span>
+			</a>
 		</div>
 	</nav>
 

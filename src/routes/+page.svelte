@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { WatchlistItem } from '$lib/types';
-	import { getAll, removeItem, setWatched, replaceAll, updateShowProgress } from '$lib/db';
-	import { encrypt, decrypt } from '$lib/crypto';
+	import { getAll, removeItem, setWatched, updateShowProgress } from '$lib/db';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { remainingRuntime, progressLabel } from '$lib/progress';
@@ -66,16 +65,6 @@
 		}
 		return providerId !== null ? providerHue(providerId) : null;
 	}
-
-	// Export / Import
-	let exporting        = $state(false);
-	let exportPassphrase = $state('');
-	let showExportModal  = $state(false);
-	let importing        = $state(false);
-	let importFile       = $state<File | null>(null);
-	let importPassphrase = $state('');
-	let importError      = $state('');
-	let showImportModal  = $state(false);
 
 	// ── Derived lists ─────────────────────────────────────────────────────────
 	let queued      = $derived(items.filter((i) => !i.watched_at));
@@ -221,37 +210,6 @@
 	}
 	function onDragEnd() { dragKey = dragOverKey = null; }
 
-	// ── Export ────────────────────────────────────────────────────────────────
-	async function doExport() {
-		if (!exportPassphrase) return;
-		exporting = true;
-		try {
-			const buf = await encrypt(JSON.stringify(items), exportPassphrase);
-			const url = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
-			const a = Object.assign(document.createElement('a'), {
-				href: url, download: `streamq-${new Date().toISOString().slice(0, 10)}.streamq`
-			});
-			a.click(); URL.revokeObjectURL(url);
-			showExportModal = false; exportPassphrase = '';
-		} finally { exporting = false; }
-	}
-
-	// ── Import ────────────────────────────────────────────────────────────────
-	function onFileChange(e: Event) {
-		importFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null; importError = '';
-	}
-	async function doImport() {
-		if (!importFile || !importPassphrase) return;
-		importing = true; importError = '';
-		try {
-			await replaceAll(JSON.parse(await decrypt(await importFile.arrayBuffer(), importPassphrase)));
-			await reload();
-			showImportModal = false; importFile = null; importPassphrase = '';
-		} catch (e) {
-			importError = e instanceof Error ? e.message : 'Import failed.';
-		} finally { importing = false; }
-	}
-
 	// ── Helpers ───────────────────────────────────────────────────────────────
 	function hms(mins: number): string {
 		const h = Math.floor(mins / 60), m = mins % 60;
@@ -293,13 +251,7 @@
 
 <div class="space-y-6">
 	<!-- Header -->
-	<div class="flex items-center justify-end gap-2">
-		<button class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
-			onclick={() => (showImportModal = true)}>Import</button>
-		{#if items.length > 0}
-			<button class="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
-				onclick={() => (showExportModal = true)}>Export</button>
-		{/if}
+	<div class="flex items-center justify-end">
 		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
 			+ Add Titles
 		</a>
@@ -317,17 +269,6 @@
 			</div>
 
 			<div class="flex-1"></div>
-
-			<!-- Budget -->
-			<div class="flex items-center gap-1.5">
-				<span class="text-xs text-gray-500">Budget</span>
-				<input
-					type="number" min="10" max="200" step="5"
-					bind:value={budgetHours}
-					class="w-16 rounded-lg bg-gray-900 px-2 py-1 text-center text-xs font-medium text-white outline-none ring-1 ring-gray-700 focus:ring-orange-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-				/>
-				<span class="text-xs text-gray-500">h / mo</span>
-			</div>
 
 			<!-- Sort -->
 			<div class="flex items-center gap-1.5">
@@ -662,48 +603,3 @@
 	</div>
 {/if}
 
-<!-- ── Export Modal ──────────────────────────────────────────────────────── -->
-{#if showExportModal}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Export watchlist">
-		<div class="w-full max-w-sm space-y-4 rounded-2xl bg-gray-900 p-6">
-			<h2 class="text-lg font-semibold">Export Watchlist</h2>
-			<p class="text-sm text-gray-400">Your watchlist will be encrypted with a passphrase and saved as a <code class="text-orange-400">.streamq</code> file.</p>
-			<input type="password" placeholder="Passphrase" bind:value={exportPassphrase}
-				class="w-full rounded-lg bg-gray-800 px-4 py-2.5 text-sm placeholder-gray-500 outline-none ring-1 ring-gray-700 focus:ring-orange-500"
-				onkeydown={(e) => e.key === 'Enter' && doExport()} />
-			<div class="flex gap-2">
-				<button class="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-					disabled={!exportPassphrase || exporting} onclick={doExport}>
-					{exporting ? 'Encrypting…' : 'Download'}
-				</button>
-				<button class="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700"
-					onclick={() => { showExportModal = false; exportPassphrase = ''; }}>Cancel</button>
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- ── Import Modal ──────────────────────────────────────────────────────── -->
-{#if showImportModal}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Import watchlist">
-		<div class="w-full max-w-sm space-y-4 rounded-2xl bg-gray-900 p-6">
-			<h2 class="text-lg font-semibold">Import Watchlist</h2>
-			<p class="text-sm text-gray-400">Select a <code class="text-orange-400">.streamq</code> file and enter your passphrase. <span class="font-medium text-red-400">This will replace your current queue.</span></p>
-			<input type="file" accept=".streamq"
-				class="w-full cursor-pointer rounded-lg bg-gray-800 px-3 py-2 text-sm text-gray-300 file:mr-3 file:rounded file:border-0 file:bg-gray-700 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-200"
-				onchange={onFileChange} />
-			<input type="password" placeholder="Passphrase" bind:value={importPassphrase}
-				class="w-full rounded-lg bg-gray-800 px-4 py-2.5 text-sm placeholder-gray-500 outline-none ring-1 ring-gray-700 focus:ring-orange-500"
-				onkeydown={(e) => e.key === 'Enter' && doImport()} />
-			{#if importError}<p class="text-xs text-red-400">{importError}</p>{/if}
-			<div class="flex gap-2">
-				<button class="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-					disabled={!importFile || !importPassphrase || importing} onclick={doImport}>
-					{importing ? 'Decrypting…' : 'Import'}
-				</button>
-				<button class="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700"
-					onclick={() => { showImportModal = false; importFile = null; importPassphrase = ''; importError = ''; }}>Cancel</button>
-			</div>
-		</div>
-	</div>
-{/if}
