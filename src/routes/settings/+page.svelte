@@ -3,6 +3,8 @@
 	import { getAll, replaceAll } from '$lib/db';
 	import { encrypt, decrypt } from '$lib/crypto';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
+	import { openWelcome } from '$lib/welcome.svelte';
+	import type { WatchlistItem } from '$lib/types';
 
 	// ── Budget ────────────────────────────────────────────────────────────────
 	let budgetHours = $state(40);
@@ -17,7 +19,13 @@
 		exporting = true; exportDone = false;
 		try {
 			const items = await getAll();
-			const buf = await encrypt(JSON.stringify(items), exportPassphrase);
+			// Wrap items + preferences so a restore is complete
+			const payload = {
+				version: 1,
+				prefs: { theme: theme.dark ? 'dark' : 'light', budget: budgetHours },
+				items
+			};
+			const buf = await encrypt(JSON.stringify(payload), exportPassphrase);
 			const url = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
 			Object.assign(document.createElement('a'), {
 				href: url,
@@ -45,7 +53,27 @@
 		if (!importFile || !importPassphrase) return;
 		importing = true; importError = ''; importDone = false;
 		try {
-			await replaceAll(JSON.parse(await decrypt(await importFile.arrayBuffer(), importPassphrase)));
+			const parsed = JSON.parse(await decrypt(await importFile.arrayBuffer(), importPassphrase));
+
+			let items: WatchlistItem[];
+			if (Array.isArray(parsed)) {
+				// Legacy format — bare array
+				items = parsed;
+			} else {
+				// v1 format — { version, prefs, items }
+				items = parsed.items ?? [];
+				if (parsed.prefs?.theme) {
+					const dark = parsed.prefs.theme === 'dark';
+					theme.dark = dark;
+					localStorage.setItem('sq:theme', parsed.prefs.theme);
+					document.documentElement.classList.toggle('dark', dark);
+				}
+				if (typeof parsed.prefs?.budget === 'number') {
+					budgetHours = parsed.prefs.budget;
+				}
+			}
+
+			await replaceAll(items);
 			importFile = null; importPassphrase = ''; importDone = true;
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Import failed.';
@@ -76,11 +104,7 @@
 				onclick={toggleTheme}
 				class="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 			>
-				{#if theme.dark}
-					☀ Light mode
-				{:else}
-					☾ Dark mode
-				{/if}
+				{#if theme.dark}☀ Light mode{:else}☾ Dark mode{/if}
 			</button>
 		</div>
 	</section>
@@ -91,7 +115,7 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Viewing Budget</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Sets the monthly watch-time budget used to normalise runtime bars in all views.
+			Your estimated monthly watch time. Used to normalise bar widths across all views.
 		</p>
 		<div class="flex items-center gap-3">
 			<input
@@ -109,7 +133,7 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Export Watchlist</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Downloads your queue as an encrypted <code class="text-orange-500">. streamq</code> file. Choose a passphrase you'll remember — it's required to import.
+			Downloads your queue and preferences as an encrypted <code class="text-orange-500">.streamq</code> file. The passphrase is required to import — keep it somewhere safe.
 		</p>
 		<div class="flex gap-2">
 			<input
@@ -138,7 +162,7 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Import Watchlist</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Restore from a <code class="text-orange-500">.streamq</code> file.
+			Restore from a <code class="text-orange-500">.streamq</code> file. Theme and budget preferences are restored too.
 			<span class="font-medium text-red-500">This replaces your current queue.</span>
 		</p>
 		<input
@@ -163,6 +187,20 @@
 			</button>
 		</div>
 		{#if importError}<p class="text-xs text-red-500">{importError}</p>{/if}
-		{#if importDone}<p class="text-xs text-teal-600 dark:text-teal-400">✓ Queue replaced successfully.</p>{/if}
+		{#if importDone}<p class="text-xs text-teal-600 dark:text-teal-400">✓ Queue restored successfully.</p>{/if}
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- About -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">About</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">New here, or just want a refresher on how StreamQ works?</p>
+		<button
+			onclick={openWelcome}
+			class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+		>
+			Show welcome guide
+		</button>
 	</section>
 </div>

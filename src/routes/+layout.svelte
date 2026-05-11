@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { initTheme } from '$lib/theme.svelte';
+	import { welcomeState, initWelcome, closeWelcome } from '$lib/welcome.svelte';
 
 	let { children } = $props();
 
@@ -15,7 +16,7 @@
 		return exact ? page.url.pathname === href : page.url.pathname.startsWith(href);
 	}
 
-	onMount(() => initTheme());
+	onMount(() => { initTheme(); initWelcome(); });
 </script>
 
 <div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
@@ -25,7 +26,6 @@
 				Stream<span class="text-orange-400">Q</span>
 			</a>
 
-			<!-- Left links -->
 			<div class="flex gap-5">
 				{#each navLinks as link (link.href)}
 					{@const active = isActive(link.href, link.exact)}
@@ -41,10 +41,8 @@
 				{/each}
 			</div>
 
-			<!-- Spacer -->
 			<div class="flex-1"></div>
 
-			<!-- Settings -->
 			<a
 				class="flex items-center border-b-2 text-sm transition-colors
 					{isActive('/settings', false)
@@ -71,8 +69,71 @@
 				class="h-4 opacity-70"
 			/>
 			<p class="text-center text-xs text-gray-500 sm:text-right">
-				This website uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.
+				This website uses TMDB and the TMDB APIs but is not endorsed or approved by TMDB.
 			</p>
 		</div>
 	</footer>
+
+	<!-- ── Welcome modal ─────────────────────────────────────────────────── -->
+{#if welcomeState.show}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+		onclick={closeWelcome}
+	>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl dark:bg-gray-900"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<!-- Brand -->
+			<div class="mb-7 text-center">
+				<p class="text-2xl font-bold tracking-tight">
+					Stream<span class="text-orange-400">Q</span>
+				</p>
+				<p class="mt-2 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+					Figure out how long you actually need a streaming subscription — before paying for another month.
+				</p>
+			</div>
+
+			<!-- Three points -->
+			<div class="mb-8 space-y-5">
+				<div class="flex gap-4">
+					<span class="mt-0.5 text-xl leading-none">🔍</span>
+					<div>
+						<p class="text-sm font-semibold">Build your watch queue</p>
+						<p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+							Search for movies and shows and add them. StreamQ fetches runtime and which services carry each title.
+						</p>
+					</div>
+				</div>
+				<div class="flex gap-4">
+					<span class="mt-0.5 text-xl leading-none">≋</span>
+					<div>
+						<p class="text-sm font-semibold">See your subscription value</p>
+						<p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+							The Gantt view groups titles by provider. Bar width = watch time relative to your monthly budget. If a provider's lane fits in a month, one month is all you need.
+						</p>
+					</div>
+				</div>
+				<div class="flex gap-4">
+					<span class="mt-0.5 text-xl leading-none">🔒</span>
+					<div>
+						<p class="text-sm font-semibold">Your data, your device</p>
+						<p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+							Everything lives in your browser — no account needed. Use <span class="font-medium text-gray-700 dark:text-gray-300">Settings → Export</span> to save an encrypted <code class="text-orange-500">.streamq</code> file you can restore on any device.
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<button
+				onclick={closeWelcome}
+				class="w-full rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-400"
+			>
+				Get started →
+			</button>
+		</div>
+	</div>
+{/if}
 </div>
