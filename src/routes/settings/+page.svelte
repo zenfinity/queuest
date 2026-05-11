@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { getAll, replaceAll } from '$lib/db';
 	import { encrypt, decrypt } from '$lib/crypto';
+	import { theme, toggleTheme } from '$lib/theme.svelte';
 
 	// ── Budget ────────────────────────────────────────────────────────────────
 	let budgetHours = $state(40);
@@ -66,36 +67,56 @@
 <div class="mx-auto max-w-md space-y-10">
 	<h1 class="text-2xl font-bold">Settings</h1>
 
+	<!-- Appearance -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Appearance</h2>
+		<div class="flex items-center justify-between">
+			<span class="text-sm text-gray-600 dark:text-gray-400">Theme</span>
+			<button
+				onclick={toggleTheme}
+				class="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+			>
+				{#if theme.dark}
+					☀ Light mode
+				{:else}
+					☾ Dark mode
+				{/if}
+			</button>
+		</div>
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
 	<!-- Budget -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Viewing Budget</h2>
-		<p class="text-sm text-gray-400">
+		<p class="text-sm text-gray-600 dark:text-gray-400">
 			Sets the monthly watch-time budget used to normalise runtime bars in all views.
 		</p>
 		<div class="flex items-center gap-3">
 			<input
 				type="number" min="10" max="500" step="5"
 				bind:value={budgetHours}
-				class="w-24 rounded-lg bg-gray-900 px-3 py-2 text-center text-sm font-medium text-white outline-none ring-1 ring-gray-700 focus:ring-orange-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				class="w-24 rounded-lg bg-gray-100 px-3 py-2 text-center text-sm font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 			/>
-			<span class="text-sm text-gray-400">hours / month</span>
+			<span class="text-sm text-gray-600 dark:text-gray-400">hours / month</span>
 		</div>
 	</section>
 
-	<div class="border-t border-gray-800"></div>
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
 	<!-- Export -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Export Watchlist</h2>
-		<p class="text-sm text-gray-400">
-			Downloads your queue as an encrypted <code class="text-orange-400">.streamq</code> file. Choose a passphrase you'll remember — it's required to import.
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Downloads your queue as an encrypted <code class="text-orange-500">. streamq</code> file. Choose a passphrase you'll remember — it's required to import.
 		</p>
 		<div class="flex gap-2">
 			<input
 				type="password"
 				placeholder="Passphrase"
 				bind:value={exportPassphrase}
-				class="flex-1 rounded-lg bg-gray-900 px-4 py-2 text-sm placeholder-gray-500 outline-none ring-1 ring-gray-700 focus:ring-orange-500"
+				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 				onkeydown={(e) => e.key === 'Enter' && doExport()}
 			/>
 			<button
@@ -107,22 +128,22 @@
 			</button>
 		</div>
 		{#if exportDone}
-			<p class="text-xs text-teal-400">✓ File downloaded.</p>
+			<p class="text-xs text-teal-600 dark:text-teal-400">✓ File downloaded.</p>
 		{/if}
 	</section>
 
-	<div class="border-t border-gray-800"></div>
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
 	<!-- Import -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Import Watchlist</h2>
-		<p class="text-sm text-gray-400">
-			Restore from a <code class="text-orange-400">.streamq</code> file.
-			<span class="font-medium text-red-400">This replaces your current queue.</span>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Restore from a <code class="text-orange-500">.streamq</code> file.
+			<span class="font-medium text-red-500">This replaces your current queue.</span>
 		</p>
 		<input
 			type="file" accept=".streamq"
-			class="w-full cursor-pointer rounded-lg bg-gray-900 px-3 py-2 text-sm text-gray-300 file:mr-3 file:rounded file:border-0 file:bg-gray-800 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-200 hover:file:bg-gray-700"
+			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
 			onchange={onFileChange}
 		/>
 		<div class="flex gap-2">
@@ -130,7 +151,7 @@
 				type="password"
 				placeholder="Passphrase"
 				bind:value={importPassphrase}
-				class="flex-1 rounded-lg bg-gray-900 px-4 py-2 text-sm placeholder-gray-500 outline-none ring-1 ring-gray-700 focus:ring-orange-500"
+				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 				onkeydown={(e) => e.key === 'Enter' && doImport()}
 			/>
 			<button
@@ -141,7 +162,7 @@
 				{importing ? 'Decrypting…' : 'Import'}
 			</button>
 		</div>
-		{#if importError}<p class="text-xs text-red-400">{importError}</p>{/if}
-		{#if importDone}<p class="text-xs text-teal-400">✓ Queue replaced successfully.</p>{/if}
+		{#if importError}<p class="text-xs text-red-500">{importError}</p>{/if}
+		{#if importDone}<p class="text-xs text-teal-600 dark:text-teal-400">✓ Queue replaced successfully.</p>{/if}
 	</section>
 </div>

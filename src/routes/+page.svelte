@@ -237,8 +237,8 @@
 				<button
 					class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
 						{watched
-							? 'bg-teal-900/60 text-teal-400'
-							: 'bg-gray-800 text-gray-500 hover:text-gray-300'}"
+							? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
+							: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
 					onclick={() => toggleSeason(item, season.season_number)}
 					title="{season.name} · {season.episode_count} eps"
 				>
@@ -260,14 +260,14 @@
 
 		<!-- Filter + Sort: one unified pill group -->
 		{#if loaded && items.length > 0}
-			<div class="flex items-center gap-0.5 rounded-lg bg-gray-900 p-1">
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'queue' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+			<div class="flex items-center gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'queue' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 					onclick={() => (tab = 'queue')}>To Watch ({queued.length})</button>
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'watched' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'watched' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 					onclick={() => (tab = 'watched')}>Watched ({watched.length})</button>
-				<div class="mx-1 w-px self-stretch bg-gray-700"></div>
+				<div class="mx-1 w-px self-stretch bg-gray-300 dark:bg-gray-700"></div>
 				{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+					<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 						onclick={() => (sortBy = key)}>{label}</button>
 				{/each}
 			</div>
@@ -277,12 +277,12 @@
 
 		<!-- View -->
 		{#if loaded && items.length > 0}
-			<div class="flex gap-0.5 rounded-lg bg-gray-900 p-1">
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+			<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 					onclick={() => (viewMode = 'grid')}>⊞<span class="hidden sm:inline"> Grid</span></button>
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}"
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 					onclick={() => (viewMode = 'list')}>☰<span class="hidden sm:inline"> List</span></button>
-				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}"
+				<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 					onclick={() => (viewMode = 'lanes')}>≋<span class="hidden sm:inline"> Gantt</span></button>
 			</div>
 		{/if}
@@ -291,7 +291,7 @@
 	<!-- Loading -->
 	{#if !loaded}
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-			{#each { length: 5 } as _, i (i)}<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-800"></div>{/each}
+			{#each { length: 5 } as _, i (i)}<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>{/each}
 		</div>
 
 	<!-- Empty -->
@@ -299,13 +299,13 @@
 		<div class="flex flex-col items-center justify-center py-24 text-center">
 			{#if tab === 'queue'}
 				<p class="mb-4 text-5xl">🎬</p>
-				<p class="text-lg font-medium text-gray-300">Your queue is empty</p>
+				<p class="text-lg font-medium text-gray-700 dark:text-gray-300">Your queue is empty</p>
 				<p class="mt-1 text-sm text-gray-500">
-					<a class="text-orange-400 hover:underline" href="/search">Search for movies and shows</a> to get started
+					<a class="text-orange-500 hover:underline" href="/search">Search for movies and shows</a> to get started
 				</p>
 			{:else}
 				<p class="mb-4 text-5xl">✅</p>
-				<p class="text-lg font-medium text-gray-300">Nothing watched yet</p>
+				<p class="text-lg font-medium text-gray-700 dark:text-gray-300">Nothing watched yet</p>
 				<p class="mt-1 text-sm text-gray-500">Mark titles as watched and they'll appear here</p>
 			{/if}
 		</div>
@@ -318,14 +318,14 @@
 				{@const cardPct = Math.min(100, (effectiveRuntime(item) / (budgetHours * 60)) * 100)}
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
-				<div class="flex flex-col overflow-hidden rounded-xl bg-gray-900">
-					<div class="relative aspect-[2/3] bg-gray-800">
+				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
+					<div class="relative aspect-[2/3] bg-gray-200 dark:bg-gray-800">
 						{#if item.poster_path}
 							<img src="{TMDB_IMG}/w300{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
 						{:else}
-							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-600">🎬</div>
+							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
 						{/if}
-						<span class="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-300">
+						<span class="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-200">
 							{item.media_type === 'movie' ? 'Film' : 'TV'}
 						</span>
 					</div>
@@ -334,7 +334,7 @@
 						<!-- Runtime sparkline -->
 						<div class="flex items-center gap-2">
 							<div class="relative flex-1">
-								<div class="h-px w-full bg-gray-800"></div>
+								<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
 								<div class="absolute top-0 left-0 h-px transition-all duration-300"
 									style="width:{cardPct}%; background:{cardLine}; opacity:0.75;"></div>
 								<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
@@ -357,14 +357,14 @@
 								{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
 							</div>
 						{:else}
-							<p class="text-xs text-gray-600">Not streaming</p>
+							<p class="text-xs text-gray-400 dark:text-gray-600">Not streaming</p>
 						{/if}
 						<div class="mt-auto flex gap-1.5 pt-1">
-							<button class="flex-1 rounded-md bg-gray-800 py-1 text-xs font-medium transition-colors hover:bg-gray-700 disabled:opacity-40"
+							<button class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
 								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
 								{item.watched_at ? 'Unwatch' : '✓ Watched'}
 							</button>
-							<button class="rounded-md bg-gray-800 px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
+							<button class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
 								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
 						</div>
 					</div>
@@ -374,22 +374,22 @@
 
 	<!-- ── LIST ─────────────────────────────────────────────────────────────── -->
 	{:else if viewMode === 'list'}
-		<div class="divide-y divide-gray-800/60 rounded-xl overflow-hidden">
+		<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
 			{#each flatItems as item (item.id)}
 				{@const rt = effectiveRuntime(item)}
 				{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
 				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
-				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#4b5563'}
+				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
-				<div class="flex flex-col bg-gray-900/40 px-3 py-2 hover:bg-gray-900/80 transition-colors">
+				<div class="flex flex-col bg-white px-3 py-2 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80">
 					<!-- Main row -->
 					<div class="flex items-center gap-3">
 						<!-- Poster -->
-						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-800">
+						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
 							{#if item.poster_path}
 								<img src="{TMDB_IMG}/w92{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
 							{:else}
-								<div class="flex h-full w-full items-center justify-center text-sm text-gray-600">🎬</div>
+								<div class="flex h-full w-full items-center justify-center text-sm text-gray-400 dark:text-gray-600">🎬</div>
 							{/if}
 						</div>
 
@@ -397,7 +397,7 @@
 						<div class="min-w-0 w-44 shrink-0">
 							<p class="truncate text-sm font-medium leading-tight">{item.title}</p>
 							<div class="mt-0.5 flex items-center gap-1.5">
-								<span class="rounded bg-gray-800 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+								<span class="rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
 									{item.media_type === 'movie' ? 'Film' : 'TV'}
 								</span>
 								{#if item.providers.length > 0}
@@ -406,12 +406,12 @@
 											<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
 										{/each}
 										{#if item.providers.length > 3}
-											<span class="text-[9px] text-gray-600">+{item.providers.length - 3}</span>
+											<span class="text-[9px] text-gray-400 dark:text-gray-600">+{item.providers.length - 3}</span>
 										{/if}
 									</div>
 								{/if}
 								{#if progressLabel(item)}
-									<span class="text-[9px] text-orange-400/70">{progressLabel(item)}</span>
+									<span class="text-[9px] text-orange-500/70">{progressLabel(item)}</span>
 								{/if}
 							</div>
 						</div>
@@ -419,7 +419,7 @@
 						<!-- Sparkline -->
 						<div class="flex min-w-0 flex-1 items-center gap-2">
 							<div class="relative flex-1">
-								<div class="h-px w-full bg-gray-800"></div>
+								<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
 								<div class="absolute top-0 left-0 h-px transition-all duration-300"
 									style="width:{pct}%; background:{lineColor}; opacity:0.7;"></div>
 								<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
@@ -436,11 +436,11 @@
 
 						<!-- Actions -->
 						<div class="flex shrink-0 gap-1">
-							<button class="rounded bg-gray-800 px-2 py-1 text-[10px] font-medium text-gray-300 transition-colors hover:bg-gray-700 disabled:opacity-40"
+							<button class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
 								{item.watched_at ? 'Unwatch' : '✓'}
 							</button>
-							<button class="rounded bg-gray-800 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
+							<button class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-red-900/50 dark:hover:text-red-400"
 								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
 						</div>
 					</div>
@@ -458,8 +458,8 @@
 	{:else}
 		<!-- X-axis header -->
 		<div class="flex items-center gap-0 pl-40">
-			<div class="flex-1 border-t border-dashed border-gray-700 pt-1">
-				<div class="flex justify-between text-[10px] text-gray-600">
+			<div class="flex-1 border-t border-dashed border-gray-300 pt-1 dark:border-gray-700">
+				<div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-600">
 					<span>0</span>
 					<span class="font-medium text-gray-500">{budgetHours}h / mo</span>
 				</div>
@@ -489,10 +489,10 @@
 						{#if lane.logo}
 							<img src="{TMDB_IMG}/w92{lane.logo}" alt={lane.label} class="h-8 w-8 rounded-lg object-cover shadow" />
 						{:else}
-							<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-800 text-base">📺</div>
+							<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-200 text-base dark:bg-gray-800">📺</div>
 						{/if}
 						<p class="text-[11px] font-semibold leading-tight" style="color:{colors.labelText}">{lane.label}</p>
-						<p class="text-[10px] text-gray-600">{lane.items.length} title{lane.items.length === 1 ? '' : 's'} · {hms(lane.totalMins)}</p>
+						<p class="text-[10px] text-gray-400 dark:text-gray-600">{lane.items.length} title{lane.items.length === 1 ? '' : 's'} · {hms(lane.totalMins)}</p>
 					</div>
 
 					<!-- Budget zone: clips at month boundary -->
@@ -553,7 +553,7 @@
 		</div>
 
 		{#if lanes.length > 1}
-			<p class="pt-1 text-center text-[11px] text-gray-700">Drag lanes to reorder · bar width = runtime · budget = {budgetHours}h/mo</p>
+			<p class="pt-1 text-center text-[11px] text-gray-400 dark:text-gray-700">Drag lanes to reorder · bar width = runtime · budget = {budgetHours}h/mo</p>
 		{/if}
 	{/if}
 </div>
@@ -561,16 +561,16 @@
 <!-- ── Gantt detail popup (fixed-position, escapes overflow:hidden) ──────── -->
 {#if activeItem && ganttPopupAnchor}
 	<div
-		class="fixed z-50 w-56 rounded-xl bg-gray-800 p-3 shadow-2xl ring-1 ring-white/10"
+		class="fixed z-50 w-56 rounded-xl bg-white p-3 shadow-2xl ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-white/10"
 		style="left:{ganttPopupAnchor.x}px; top:{ganttPopupAnchor.y}px;"
 		data-item
 	>
 		<p class="mb-1 text-sm font-semibold leading-snug">{activeItem.title}</p>
-		<p class="mb-1 text-xs text-gray-400">
+		<p class="mb-1 text-xs text-gray-500 dark:text-gray-400">
 			{#if activeItem.runtime_minutes}
 				🕐 {formatRuntime(activeItem.runtime_minutes, activeItem.media_type)}
 			{:else}
-				🕐 ~{hms(DEFAULT_RUNTIME[activeItem.media_type])} <span class="italic text-gray-600">(estimated)</span>
+				🕐 ~{hms(DEFAULT_RUNTIME[activeItem.media_type])} <span class="italic text-gray-400 dark:text-gray-600">(estimated)</span>
 			{/if}
 		</p>
 		{#if activeItem.overview}
@@ -585,11 +585,11 @@
 			</div>
 		{/if}
 		<div class="flex gap-1.5">
-			<button class="flex-1 rounded-md bg-gray-700 py-1.5 text-xs font-medium transition-colors hover:bg-gray-600 disabled:opacity-40"
+			<button class="flex-1 rounded-md bg-gray-100 py-1.5 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-gray-600"
 				disabled={busy.has(activeItem.id)} onclick={() => toggle(activeItem!)}>
 				{activeItem.watched_at ? 'Unwatch' : '✓ Watched'}
 			</button>
-			<button class="rounded-md bg-gray-700 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:bg-red-900/50 hover:text-red-400 disabled:opacity-40"
+			<button class="rounded-md bg-gray-100 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-red-900/50 dark:hover:text-red-400"
 				disabled={busy.has(activeItem.id)} onclick={() => remove(activeItem!)} aria-label="Remove">✕</button>
 		</div>
 	</div>

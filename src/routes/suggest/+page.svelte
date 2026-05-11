@@ -44,7 +44,7 @@
 <div class="space-y-8">
 	<div>
 		<h1 class="text-2xl font-bold">What to Subscribe to Next</h1>
-		<p class="mt-1 text-sm text-gray-400">
+		<p class="mt-1 text-sm text-gray-500">
 			Based on your {totalUnwatched} unwatched title{totalUnwatched === 1 ? '' : 's'}
 		</p>
 	</div>
@@ -52,31 +52,31 @@
 	{#if !loaded}
 		<div class="space-y-3">
 			{#each { length: 4 } as _, i (i)}
-				<div class="h-[72px] animate-pulse rounded-xl bg-gray-800"></div>
+				<div class="h-[72px] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>
 			{/each}
 		</div>
 	{:else if suggestions.length === 0}
 		<div class="flex flex-col items-center justify-center py-24 text-center">
 			<p class="mb-4 text-5xl">📺</p>
-			<p class="text-lg font-medium text-gray-300">No suggestions yet</p>
+			<p class="text-lg font-medium text-gray-700 dark:text-gray-300">No suggestions yet</p>
 			<p class="mt-1 text-sm text-gray-500">
-				<a class="text-orange-400 hover:underline" href="/search">Add titles to your queue</a>
+				<a class="text-orange-500 hover:underline" href="/search">Add titles to your queue</a>
 				to get streaming recommendations
 			</p>
 		</div>
 	{:else}
 		<div class="space-y-3">
 			{#each suggestions as suggestion, i (suggestion.provider_id)}
-				<div class="flex items-center gap-4 rounded-xl bg-gray-900 p-4">
+				<div class="flex items-center gap-4 rounded-xl bg-white p-4 ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
 					<!-- Rank -->
 					<div
 						class="w-6 text-center text-lg font-bold {i === 0
 							? 'text-orange-400'
 							: i === 1
-								? 'text-gray-300'
+								? 'text-gray-400 dark:text-gray-300'
 								: i === 2
 									? 'text-amber-700'
-									: 'text-gray-600'}"
+									: 'text-gray-400 dark:text-gray-600'}"
 					>
 						{i + 1}
 					</div>
@@ -91,7 +91,7 @@
 					<!-- Name + count -->
 					<div class="flex-1">
 						<p class="font-medium">{suggestion.name}</p>
-						<p class="text-sm text-gray-400">
+						<p class="text-sm text-gray-500">
 							{suggestion.count}
 							{suggestion.count === 1 ? 'title' : 'titles'} in your queue
 						</p>
@@ -99,7 +99,7 @@
 
 					<!-- Bar -->
 					<div class="hidden w-36 sm:block">
-						<div class="h-2 overflow-hidden rounded-full bg-gray-800">
+						<div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
 							<div
 								class="h-full rounded-full bg-orange-500 transition-all"
 								style="width: {Math.round((suggestion.count / topCount) * 100)}%"
@@ -110,6 +110,6 @@
 			{/each}
 		</div>
 
-		<p class="text-center text-xs text-gray-600">Streaming data via TMDB / JustWatch · US only</p>
+		<p class="text-center text-xs text-gray-400">Streaming data via TMDB / JustWatch · US only</p>
 	{/if}
 </div>
