@@ -18,10 +18,10 @@ function isFuture(iso: string): boolean {
  * noteworthy to surface (i.e. already released and on streaming).
  *
  * Examples:
- *   "🎬 Theaters May 22, 2026 · Est. streaming ~Jul 2026"
- *   "📺 Streaming Jun 15, 2026"
- *   "📺 S4 premieres Aug 4, 2026"
- *   "↩ S2 returning — no date yet"
+ *   "Theaters May 22, 2026 · Est. streaming ~Jul 2026"
+ *   "Streaming Jun 15, 2026"
+ *   "S4 premieres Aug 4, 2026"
+ *   "S2 returning — no date yet"
  */
 export function releaseChip(r: ReleaseInfo | null | undefined): string | null {
 	if (!r) return null;
@@ -31,21 +31,21 @@ export function releaseChip(r: ReleaseInfo | null | undefined): string | null {
 		const label = r.next_season != null ? `S${r.next_season}` : 'Next season';
 		const dateStr = fmtDate(r.next_season_date);
 		const prefix = isFuture(r.next_season_date) ? 'premieres' : 'premiered';
-		return `📺 ${label} ${prefix} ${dateStr}`;
+		return `${label} ${prefix} ${dateStr}`;
 	}
 	if (r.status === 'Returning Series') {
 		const season = r.next_season != null ? `S${r.next_season}` : 'Next season';
-		return `↩ ${season} returning — no date yet`;
+		return `${season} returning — no date yet`;
 	}
 
 	// ── Movie ────────────────────────────────────────────────────────────────
 	if (r.digital_date && isFuture(r.digital_date)) {
-		return `📺 Streaming ${fmtDate(r.digital_date)}`;
+		return `Streaming ${fmtDate(r.digital_date)}`;
 	}
 	if (r.theatrical_date || r.streaming_estimate) {
 		const parts: string[] = [];
 		if (r.theatrical_date && isFuture(r.theatrical_date)) {
-			parts.push(`🎬 Theaters ${fmtDate(r.theatrical_date)}`);
+			parts.push(`Theaters ${fmtDate(r.theatrical_date)}`);
 		}
 		if (r.streaming_estimate) {
 			// Show month + year only for estimates

@@ -370,9 +370,6 @@
 						{:else}
 							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
 						{/if}
-						<span class="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-200">
-							{item.media_type === 'movie' ? 'Film' : 'TV'}
-						</span>
 					</div>
 					<div class="flex flex-1 flex-col gap-2 p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
@@ -394,16 +391,17 @@
 							</span>
 						</div>
 						{@render seasonPicker(item)}
-						{#if item.providers.length > 0}
-							<div class="flex flex-wrap gap-1">
-								{#each item.providers.slice(0, 4) as p (p.provider_id)}
-									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
-								{/each}
-								{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
-							</div>
-						{:else}
-							<p class="text-xs text-gray-400 dark:text-gray-600">Not streaming</p>
-						{/if}
+						<!-- Type chip + providers -->
+						<div class="flex flex-wrap items-center gap-1">
+							<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
+								{item.media_type === 'movie' ? '🎬' : '📺'}
+							</span>
+							{#each item.providers.slice(0, 4) as p (p.provider_id)}
+								<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
+							{/each}
+							{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
+							{#if !item.providers.length}<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming</span>{/if}
+						</div>
 						{#if releaseChip(item.release)}
 							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(item.release)}</p>
 						{/if}
@@ -453,7 +451,7 @@
 					<!-- Row 2: type chip · provider icons · sparkline · runtime -->
 					<div class="ml-11 mt-1.5 flex items-center gap-2">
 						<span class="shrink-0 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-							{item.media_type === 'movie' ? 'Film' : 'TV'}
+							{item.media_type === 'movie' ? '🎬' : '📺'}
 						</span>
 						{#if item.providers.length > 0}
 							<div class="flex shrink-0 gap-0.5">
@@ -608,13 +606,14 @@
 				🕐 {formatRuntime(effectiveRuntime(activeItem), activeItem.media_type)} remaining
 		</p>
 		{@render seasonPicker(activeItem)}
-		{#if activeItem.providers.length > 0}
-			<div class="mt-2 mb-2 flex flex-wrap gap-1">
-				{#each activeItem.providers as p (p.provider_id)}
-					<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
-				{/each}
-			</div>
-		{/if}
+		<div class="mt-2 mb-2 flex flex-wrap items-center gap-1">
+			<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-700">
+				{activeItem.media_type === 'movie' ? '🎬' : '📺'}
+			</span>
+			{#each activeItem.providers as p (p.provider_id)}
+				<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
+			{/each}
+		</div>
 		<div class="flex gap-1.5">
 			<button class="flex-1 rounded-md bg-gray-100 py-1.5 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-gray-600"
 				disabled={busy.has(activeItem.id)} onclick={() => toggle(activeItem!)}>
