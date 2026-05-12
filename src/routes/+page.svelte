@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { WatchlistItem } from '$lib/types';
 	import { getAll, removeItem, setWatched, updateShowProgress } from '$lib/db';
-	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
+	import { TMDB_IMG, formatRuntime, filterProviders } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
 	import { remainingRuntime, progressLabel } from '$lib/progress';
@@ -141,7 +141,12 @@
 	});
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
-	async function reload() { items = await getAll(); }
+	async function reload() {
+		const raw = await getAll();
+		// Re-apply provider filtering at load time so that items stored before the
+		// bundle-pair detection was introduced are cleaned up without a re-fetch.
+		items = raw.map((item) => ({ ...item, providers: filterProviders(item.providers) }));
+	}
 
 	onMount(async () => {
 		sortBy      = loadPref<SortKey>('sq:sort', 'added');
