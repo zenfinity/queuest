@@ -5,7 +5,7 @@
 	import { TMDB_IMG, formatRuntime, filterProviders } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
-	import { remainingRuntime, progressLabel } from '$lib/progress';
+	import { remainingRuntime, progressLabel, releaseChip } from '$lib/progress';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
@@ -407,6 +407,9 @@
 						{:else}
 							<p class="text-xs text-gray-400 dark:text-gray-600">Not streaming</p>
 						{/if}
+						{#if releaseChip(item.release)}
+							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(item.release)}</p>
+						{/if}
 						<div class="mt-auto flex gap-1.5 pt-1">
 							<button class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
 								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
@@ -460,6 +463,9 @@
 								{/if}
 								{#if progressLabel(item)}
 									<span class="text-[9px] text-orange-500/70">{progressLabel(item)}</span>
+								{/if}
+								{#if releaseChip(item.release)}
+									<span class="text-[9px] text-amber-500 dark:text-amber-400">{releaseChip(item.release)}</span>
 								{/if}
 							</div>
 						</div>

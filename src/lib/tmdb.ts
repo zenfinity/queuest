@@ -57,6 +57,7 @@ interface RuntimeResult {
 	networkIds: number[];
 	/** Production company IDs from the TMDB response (movies; empty for TV) */
 	companyIds: number[];
+	release: import('./types').ReleaseInfo | null;
 }
 
 export async function getRuntime(
@@ -64,19 +65,34 @@ export async function getRuntime(
 	mediaType: 'movie' | 'tv',
 	apiKey: string
 ): Promise<RuntimeResult> {
-	const res = await fetch(`${BASE}/${mediaType}/${id}?api_key=${apiKey}&language=en-US`);
-	if (!res.ok) return { runtime_minutes: null, seasons: [], networkIds: [], companyIds: [] };
+	// Movies: append release_dates so we get digital date in one call
+	const qs = mediaType === 'movie' ? '&append_to_response=release_dates' : '';
+	const res = await fetch(`${BASE}/${mediaType}/${id}?api_key=${apiKey}&language=en-US${qs}`);
+	if (!res.ok) return { runtime_minutes: null, seasons: [], networkIds: [], companyIds: [], release: null };
 
 	if (mediaType === 'movie') {
 		const data = (await res.json()) as {
 			runtime?: number;
+			status?: string;
+			release_date?: string;
 			production_companies?: Array<{ id: number }>;
+			release_dates?: {
+				results?: Array<{
+					iso_3166_1: string;
+					release_dates: Array<{ type: number; release_date: string }>;
+				}>;
+			};
 		};
+
+		const companyIds = (data.production_companies ?? []).map((c) => c.id);
+		const release = movieReleaseInfo(data.status, data.release_date, data.release_dates?.results, companyIds);
+
 		return {
 			runtime_minutes: data.runtime ?? null,
 			seasons: [],
 			networkIds: [],
-			companyIds: (data.production_companies ?? []).map((c) => c.id)
+			companyIds,
+			release
 		};
 	}
 
@@ -86,6 +102,8 @@ export async function getRuntime(
 		last_episode_to_air?: { runtime?: number };
 		seasons?: Array<{ season_number: number; episode_count: number; name: string }>;
 		networks?: Array<{ id: number }>;
+		status?: string;
+		next_episode_to_air?: { air_date?: string; season_number?: number } | null;
 	};
 
 	const avgRuntime = data.episode_run_time?.length
@@ -105,8 +123,108 @@ export async function getRuntime(
 	const totalEps = data.number_of_episodes ?? 0;
 	const runtime_minutes = totalEps && avgRuntime ? Math.round(totalEps * avgRuntime) : null;
 	const networkIds = (data.networks ?? []).map((n) => n.id);
+	const release = tvReleaseInfo(data.status, data.next_episode_to_air);
 
-	return { runtime_minutes, seasons, networkIds, companyIds: [] };
+	return { runtime_minutes, seasons, networkIds, companyIds: [], release };
+}
+
+// ── Release info helpers ──────────────────────────────────────────────────────
+
+// TMDB release_dates type codes
+const RELEASE_TYPE_DIGITAL = 4;
+const RELEASE_TYPE_THEATRICAL = 3;
+
+// Movies not yet at these statuses are still unreleased
+const UNRELEASED_STATUSES = new Set(['Rumored', 'Planned', 'In Production', 'Post Production']);
+
+/** Days after theatrical release before a film typically hits streaming */
+function streamingLagDays(companyIds: number[]): number {
+	// Disney/Marvel/Pixar/Lucasfilm content goes to Disney+ faster (~45 days)
+	const isDisney = companyIds.some((id) => DISNEY_PLUS_COMPANY_IDS.has(id));
+	return isDisney ? 45 : 90;
+}
+
+function isoDate(d: Date): string {
+	return d.toISOString().slice(0, 10);
+}
+
+function addDays(isoStr: string, days: number): string {
+	const d = new Date(isoStr);
+	d.setUTCDate(d.getUTCDate() + days);
+	return isoDate(d);
+}
+
+function movieReleaseInfo(
+	status: string | undefined,
+	release_date: string | undefined,
+	releaseDates: Array<{ iso_3166_1: string; release_dates: Array<{ type: number; release_date: string }> }> | undefined,
+	companyIds: number[]
+): import('./types').ReleaseInfo | null {
+	if (!status) return null;
+
+	// Find US digital and theatrical dates from release_dates
+	const us = (releaseDates ?? []).find((r) => r.iso_3166_1 === 'US');
+	const digital = us?.release_dates.find((r) => r.type === RELEASE_TYPE_DIGITAL);
+	const theatrical = us?.release_dates.find((r) => r.type === RELEASE_TYPE_THEATRICAL);
+
+	const theatricalDate = theatrical?.release_date?.slice(0, 10) ?? release_date ?? null;
+	const digitalDate = digital?.release_date?.slice(0, 10) ?? null;
+
+	// Already released and on streaming — nothing to surface
+	if (status === 'Released' && digitalDate) {
+		const now = new Date().toISOString().slice(0, 10);
+		if (digitalDate <= now) return null;
+		// Digital date is in the future — show it
+		return { status, digital_date: digitalDate };
+	}
+
+	// Unreleased: in production / post-production / theatrical
+	if (UNRELEASED_STATUSES.has(status) || (status === 'Released' && !digitalDate)) {
+		if (!theatricalDate) return { status };
+
+		const now = new Date().toISOString().slice(0, 10);
+		const lag = streamingLagDays(companyIds);
+
+		if (digitalDate) {
+			return { status, theatrical_date: theatricalDate, digital_date: digitalDate };
+		}
+
+		// No digital date yet — estimate from theatrical.
+		// If the estimate has already passed, we don't know the streaming status —
+		// don't surface a stale chip (provider logos will or won't be shown separately).
+		const estimatedStreaming = addDays(theatricalDate, lag);
+		if (estimatedStreaming <= now) return null;
+
+		return {
+			status,
+			theatrical_date: theatricalDate > now ? theatricalDate : null,
+			streaming_estimate: estimatedStreaming
+		};
+	}
+
+	return null;
+}
+
+function tvReleaseInfo(
+	status: string | undefined,
+	nextEpisode: { air_date?: string; season_number?: number } | null | undefined
+): import('./types').ReleaseInfo | null {
+	if (!status) return null;
+
+	if (nextEpisode?.air_date) {
+		return {
+			status,
+			next_season: nextEpisode.season_number ?? null,
+			next_season_date: nextEpisode.air_date
+		};
+	}
+
+	// Returning but no date announced yet
+	if (status === 'Returning Series') {
+		return { status };
+	}
+
+	return null;
 }
 
 // Strip providers whose names explicitly mention bundles or add-ons.

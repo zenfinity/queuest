@@ -3,6 +3,7 @@
 	import type { SearchResult } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { addItem } from '$lib/db';
+	import { releaseChip } from '$lib/progress';
 	import { page } from '$app/state';
 
 	let { data }: { data: PageData } = $props();
@@ -30,7 +31,8 @@
 				seasons: result.seasons,
 				watched_seasons: [],
 				current_season: null,
-				current_episode: null
+				current_episode: null,
+				release: result.release
 			});
 			added = new Set(added).add(result.id);
 		} catch (e) {
@@ -124,6 +126,11 @@
 							</div>
 						{:else}
 							<p class="text-xs text-gray-400 dark:text-gray-600">Not on streaming</p>
+						{/if}
+
+						<!-- Release chip -->
+						{#if releaseChip(result.release)}
+							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(result.release)}</p>
 						{/if}
 
 						<button
