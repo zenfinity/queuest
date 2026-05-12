@@ -228,7 +228,9 @@ function tvReleaseInfo(
 }
 
 // Strip providers whose names explicitly mention bundles or add-ons.
-const BUNDLE_NAME_RE = /bundle|with hulu|with disney|with max|\bvia\b/i;
+// "Amazon Channel" covers add-on tiers sold through Prime Video Channels
+// (e.g. "Apple TV Amazon Channel", "Paramount+ Amazon Channel").
+const BUNDLE_NAME_RE = /bundle|with hulu|with disney|with max|\bvia\b|amazon channel/i;
 
 // When BOTH IDs in a pair appear together in the same flatrate list it means
 // JustWatch is attributing the title to the whole bundle rather than the platform
