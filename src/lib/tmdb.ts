@@ -274,7 +274,13 @@ export function filterProviders(providers: Provider[]): Provider[] {
 	}
 
 	const clean = named.filter((p) => !drop.has(p.provider_id));
-	return [...clean, ...synthetic];
+	const merged = [...clean, ...synthetic];
+
+	// Deduplicate tier variants: if one name is a prefix of another
+	// (e.g. "Peacock Premium" vs "Peacock Premium Plus"), keep only the base.
+	return merged.filter(
+		(p) => !merged.some((other) => other !== p && p.provider_name.startsWith(other.provider_name + ' '))
+	);
 }
 
 /**
