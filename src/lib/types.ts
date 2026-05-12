@@ -61,5 +61,6 @@ export interface Suggestion {
 	provider_id: number;
 	name: string;
 	logo_path: string;
-	count: number;
+	runtime_minutes: number;
+	title_count: number;
 }

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getAll } from '$lib/db';
-	import { TMDB_IMG } from '$lib/tmdb';
+	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
+	import { remainingRuntime } from '$lib/progress';
 	import type { Suggestion } from '$lib/types';
 
 	let suggestions = $state<Suggestion[]>([]);
@@ -13,28 +14,31 @@
 		const unwatched = raw.filter((i) => !i.watched_at);
 		totalUnwatched = unwatched.length;
 
-		const counts = new Map<string, Suggestion>();
+		const byProvider = new Map<string, Suggestion>();
 		for (const item of unwatched) {
+			const mins = remainingRuntime(item);
 			for (const p of item.providers) {
-				const existing = counts.get(p.provider_name);
+				const existing = byProvider.get(p.provider_name);
 				if (existing) {
-					existing.count++;
+					existing.runtime_minutes += mins;
+					existing.title_count++;
 				} else {
-					counts.set(p.provider_name, {
+					byProvider.set(p.provider_name, {
 						provider_id: p.provider_id,
 						name: p.provider_name,
 						logo_path: p.logo_path,
-						count: 1
+						runtime_minutes: mins,
+						title_count: 1
 					});
 				}
 			}
 		}
 
-		suggestions = Array.from(counts.values()).sort((a, b) => b.count - a.count);
+		suggestions = Array.from(byProvider.values()).sort((a, b) => b.runtime_minutes - a.runtime_minutes);
 		loaded = true;
 	});
 
-	const topCount = $derived(suggestions[0]?.count ?? 1);
+	const topRuntime = $derived(suggestions[0]?.runtime_minutes ?? 1);
 </script>
 
 <svelte:head>
@@ -88,12 +92,12 @@
 						class="h-10 w-10 rounded-lg object-cover"
 					/>
 
-					<!-- Name + count -->
+					<!-- Name + runtime -->
 					<div class="flex-1">
 						<p class="font-medium">{suggestion.name}</p>
 						<p class="text-sm text-gray-500">
-							{suggestion.count}
-							{suggestion.count === 1 ? 'title' : 'titles'} in your queue
+							{formatRuntime(suggestion.runtime_minutes, 'tv')} remaining
+							· {suggestion.title_count} {suggestion.title_count === 1 ? 'title' : 'titles'}
 						</p>
 					</div>
 
@@ -103,7 +107,7 @@
 							<div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
 								<div
 									class="h-full rounded-full bg-orange-500 transition-all"
-									style="width: {Math.round((suggestion.count / topCount) * 100)}%"
+									style="width: {Math.round((suggestion.runtime_minutes / topRuntime) * 100)}%"
 								></div>
 							</div>
 						</div>
