@@ -123,9 +123,13 @@
 								<span class="text-xs text-gray-500">+{result.providers.length - 4}</span>
 							{/if}
 							{#if !result.providers.length}
-								<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming —</span>
-								<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(result.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Kanopy</a>
-								<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(result.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Hoopla</a>
+								{#if releaseChip(result.release)}
+									<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming</span>
+								{:else}
+									<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming —</span>
+									<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(result.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Kanopy</a>
+									<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(result.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Hoopla</a>
+								{/if}
 							{/if}
 						</div>
 
