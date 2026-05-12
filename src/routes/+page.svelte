@@ -382,7 +382,11 @@
 								<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
 							{/each}
 							{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
-							{#if !item.providers.length}<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming</span>{/if}
+							{#if !item.providers.length}
+								<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming —</span>
+								<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Kanopy</a>
+								<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Hoopla</a>
+							{/if}
 						</div>
 						{#if releaseChip(item.release)}
 							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(item.release)}</p>
@@ -444,6 +448,9 @@
 									<span class="text-[9px] text-gray-400 dark:text-gray-600">+{item.providers.length - 3}</span>
 								{/if}
 							</div>
+						{:else}
+							<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="shrink-0 text-[9px] text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Kanopy</a>
+							<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="shrink-0 text-[9px] text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Hoopla</a>
 						{/if}
 						<div class="relative min-w-0 flex-1">
 							<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
