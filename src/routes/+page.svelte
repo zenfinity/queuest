@@ -615,9 +615,6 @@
 				🕐 ~{hms(DEFAULT_RUNTIME[activeItem.media_type])} <span class="italic text-gray-400 dark:text-gray-600">(estimated)</span>
 			{/if}
 		</p>
-		{#if activeItem.overview}
-			<p class="mb-2 line-clamp-3 text-xs text-gray-500">{activeItem.overview}</p>
-		{/if}
 		{@render seasonPicker(activeItem)}
 		{#if activeItem.providers.length > 0}
 			<div class="mt-2 mb-2 flex flex-wrap gap-1">
