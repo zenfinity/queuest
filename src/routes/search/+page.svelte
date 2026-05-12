@@ -3,6 +3,7 @@
 	import type { SearchResult } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { addItem } from '$lib/db';
+	import { releaseChip } from '$lib/progress';
 	import { page } from '$app/state';
 
 	let { data }: { data: PageData } = $props();
@@ -30,7 +31,8 @@
 				seasons: result.seasons,
 				watched_seasons: [],
 				current_season: null,
-				current_episode: null
+				current_episode: null,
+				release: result.release
 			});
 			added = new Set(added).add(result.id);
 		} catch (e) {
@@ -86,9 +88,6 @@
 								🎬
 							</div>
 						{/if}
-						<span class="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-200">
-							{result.media_type === 'movie' ? 'Film' : 'TV'}
-						</span>
 						{#if result.year}
 							<span class="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs text-gray-200">
 								{result.year}
@@ -107,23 +106,30 @@
 							</p>
 						{/if}
 
-						<!-- Providers -->
-						{#if result.providers.length > 0}
-							<div class="flex flex-wrap items-center gap-1">
-								{#each result.providers.slice(0, 4) as p (p.provider_id)}
-									<img
-										src="{TMDB_IMG}/w92{p.logo_path}"
-										alt={p.provider_name}
-										title={p.provider_name}
-										class="h-5 w-5 rounded"
-									/>
-								{/each}
-								{#if result.providers.length > 4}
-									<span class="text-xs text-gray-500">+{result.providers.length - 4}</span>
-								{/if}
-							</div>
-						{:else}
-							<p class="text-xs text-gray-400 dark:text-gray-600">Not on streaming</p>
+						<!-- Type chip + providers -->
+						<div class="flex flex-wrap items-center gap-1">
+							<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
+								{result.media_type === 'movie' ? '🎬' : '📺'}
+							</span>
+							{#each result.providers.slice(0, 4) as p (p.provider_id)}
+								<img
+									src="{TMDB_IMG}/w92{p.logo_path}"
+									alt={p.provider_name}
+									title={p.provider_name}
+									class="h-5 w-5 rounded"
+								/>
+							{/each}
+							{#if result.providers.length > 4}
+								<span class="text-xs text-gray-500">+{result.providers.length - 4}</span>
+							{/if}
+							{#if !result.providers.length}
+								<span class="text-xs text-gray-400 dark:text-gray-600">Not on streaming</span>
+							{/if}
+						</div>
+
+						<!-- Release chip -->
+						{#if releaseChip(result.release)}
+							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(result.release)}</p>
 						{/if}
 
 						<button

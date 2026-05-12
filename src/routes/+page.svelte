@@ -5,7 +5,7 @@
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
-	import { remainingRuntime, progressLabel } from '$lib/progress';
+	import { remainingRuntime, releaseChip } from '$lib/progress';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
@@ -54,10 +54,6 @@
 	let viewMode    = $state<ViewKey>('grid');
 	let budgetHours = $state(40); // user-adjustable month budget
 
-	// lane drag state
-	let laneOrder   = $state<string[]>([]);
-	let dragKey     = $state<string | null>(null);
-	let dragOverKey = $state<string | null>(null);
 
 	// logo-derived hues: logo_path → extracted hue (populated async)
 	let logoHues = $state(new Map<string, number>());
@@ -120,7 +116,15 @@
 		}
 
 		const out: Lane[] = [...map.values()]
-			.sort((a, b) => b.totalMins - a.totalMins)
+			.sort((a, b) => {
+				if (sortBy === 'title') return a.label.localeCompare(b.label);
+				if (sortBy === 'added') {
+					const aMax = a.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
+					const bMax = b.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
+					return bMax.localeCompare(aMax);
+				}
+				return b.totalMins - a.totalMins;
+			})
 			.map((l) => ({ ...l, overMins: Math.max(0, l.totalMins - budgetMins) }));
 
 		if (noProvider.length) {
@@ -131,23 +135,17 @@
 		return out;
 	});
 
-	// Apply saved lane order; new providers append at end
-	let lanes = $derived.by((): Lane[] => {
-		const byKey = new Map(rawLanes.map((l) => [l.key, l]));
-		const ordered: Lane[] = [];
-		for (const key of laneOrder) { const l = byKey.get(key); if (l) ordered.push(l); }
-		for (const lane of rawLanes) { if (!laneOrder.includes(lane.key)) ordered.push(lane); }
-		return ordered;
-	});
+	let lanes = $derived(rawLanes);
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
-	async function reload() { items = await getAll(); }
+	async function reload() {
+		items = await getAll();
+	}
 
 	onMount(async () => {
 		sortBy      = loadPref<SortKey>('sq:sort', 'added');
 		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
 		budgetHours = loadJSON<number>('sq:budget', 40);
-		laneOrder   = loadJSON<string[]>('sq:laneOrder', []);
 		await reload();
 		loaded = true;
 	});
@@ -157,7 +155,6 @@
 			localStorage.setItem('sq:sort', sortBy);
 			localStorage.setItem('sq:view', viewMode);
 			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
-			localStorage.setItem('sq:laneOrder', JSON.stringify(laneOrder));
 		} catch {}
 	});
 
@@ -201,19 +198,6 @@
 		await updateShowProgress(item.id, next, item.current_season, item.current_episode);
 		await reload();
 	}
-
-	// ── Lane drag-to-reorder ──────────────────────────────────────────────────
-	function onDragStart(key: string) { dragKey = key; }
-	function onDragOver(e: DragEvent, key: string) { e.preventDefault(); dragOverKey = key; }
-	function onDrop(key: string) {
-		if (!dragKey || dragKey === key) { dragKey = dragOverKey = null; return; }
-		const cur  = lanes.map((l) => l.key);
-		const from = cur.indexOf(dragKey);
-		const to   = cur.indexOf(key);
-		const next = [...cur]; next.splice(from, 1); next.splice(to, 0, dragKey);
-		laneOrder = next; dragKey = dragOverKey = null;
-	}
-	function onDragEnd() { dragKey = dragOverKey = null; }
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 	function hms(mins: number): string {
@@ -368,9 +352,6 @@
 						{:else}
 							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
 						{/if}
-						<span class="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-200">
-							{item.media_type === 'movie' ? 'Film' : 'TV'}
-						</span>
 					</div>
 					<div class="flex flex-1 flex-col gap-2 p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
@@ -392,15 +373,19 @@
 							</span>
 						</div>
 						{@render seasonPicker(item)}
-						{#if item.providers.length > 0}
-							<div class="flex flex-wrap gap-1">
-								{#each item.providers.slice(0, 4) as p (p.provider_id)}
-									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
-								{/each}
-								{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
-							</div>
-						{:else}
-							<p class="text-xs text-gray-400 dark:text-gray-600">Not streaming</p>
+						<!-- Type chip + providers -->
+						<div class="flex flex-wrap items-center gap-1">
+							<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
+								{item.media_type === 'movie' ? '🎬' : '📺'}
+							</span>
+							{#each item.providers.slice(0, 4) as p (p.provider_id)}
+								<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
+							{/each}
+							{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
+							{#if !item.providers.length}<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming</span>{/if}
+						</div>
+						{#if releaseChip(item.release)}
+							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(item.release)}</p>
 						{/if}
 						<div class="mt-auto flex gap-1.5 pt-1">
 							<button class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
@@ -424,10 +409,9 @@
 				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
-				<div class="flex flex-col bg-white px-3 py-2 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80">
-					<!-- Main row -->
+				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80">
+					<!-- Row 1: poster · title · actions -->
 					<div class="flex items-center gap-3">
-						<!-- Poster -->
 						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
 							{#if item.poster_path}
 								<img src="{TMDB_IMG}/w92{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
@@ -435,49 +419,7 @@
 								<div class="flex h-full w-full items-center justify-center text-sm text-gray-400 dark:text-gray-600">🎬</div>
 							{/if}
 						</div>
-
-						<!-- Title + meta -->
-						<div class="min-w-0 w-44 shrink-0">
-							<p class="truncate text-sm font-medium leading-tight">{item.title}</p>
-							<div class="mt-0.5 flex items-center gap-1.5">
-								<span class="rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-									{item.media_type === 'movie' ? 'Film' : 'TV'}
-								</span>
-								{#if item.providers.length > 0}
-									<div class="flex gap-0.5">
-										{#each item.providers.slice(0, 3) as p (p.provider_id)}
-											<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
-										{/each}
-										{#if item.providers.length > 3}
-											<span class="text-[9px] text-gray-400 dark:text-gray-600">+{item.providers.length - 3}</span>
-										{/if}
-									</div>
-								{/if}
-								{#if progressLabel(item)}
-									<span class="text-[9px] text-orange-500/70">{progressLabel(item)}</span>
-								{/if}
-							</div>
-						</div>
-
-						<!-- Sparkline -->
-						<div class="flex min-w-0 flex-1 items-center gap-2">
-							<div class="relative flex-1">
-								<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
-								<div class="absolute top-0 left-0 h-px transition-all duration-300"
-									style="width:{pct}%; background:{lineColor}; opacity:0.7;"></div>
-								<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
-									style="left:{pct}%; margin-left:-3px; background:{dotColor};"></div>
-							</div>
-							<span class="shrink-0 text-[10px] tabular-nums text-gray-500 w-14 text-right">
-								{#if item.runtime_minutes}
-									{formatRuntime(effectiveRuntime(item), item.media_type)}
-								{:else}
-									<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
-								{/if}
-							</span>
-						</div>
-
-						<!-- Actions -->
+						<p class="min-w-0 flex-1 text-sm font-medium leading-tight">{item.title}</p>
 						<div class="flex shrink-0 gap-1">
 							<button class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
@@ -487,7 +429,44 @@
 								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
 						</div>
 					</div>
-					<!-- Season picker (TV, indented to align with title) -->
+
+					<!-- Row 2: type chip · provider icons · sparkline · runtime -->
+					<div class="ml-11 mt-1.5 flex items-center gap-2">
+						<span class="shrink-0 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+							{item.media_type === 'movie' ? '🎬' : '📺'}
+						</span>
+						{#if item.providers.length > 0}
+							<div class="flex shrink-0 gap-0.5">
+								{#each item.providers.slice(0, 3) as p (p.provider_id)}
+									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
+								{/each}
+								{#if item.providers.length > 3}
+									<span class="text-[9px] text-gray-400 dark:text-gray-600">+{item.providers.length - 3}</span>
+								{/if}
+							</div>
+						{/if}
+						<div class="relative min-w-0 flex-1">
+							<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
+							<div class="absolute top-0 left-0 h-px transition-all duration-300"
+								style="width:{pct}%; background:{lineColor}; opacity:0.7;"></div>
+							<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
+								style="left:{pct}%; margin-left:-3px; background:{dotColor};"></div>
+						</div>
+						<span class="shrink-0 w-12 text-right text-[10px] tabular-nums text-gray-500">
+							{#if item.runtime_minutes}
+								{formatRuntime(effectiveRuntime(item), item.media_type)}
+							{:else}
+								<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
+							{/if}
+						</span>
+					</div>
+
+					<!-- Row 3: release chip -->
+					{#if releaseChip(item.release)}
+						<p class="ml-11 mt-0.5 text-[10px] leading-snug text-amber-500 dark:text-amber-400">{releaseChip(item.release)}</p>
+					{/if}
+
+					<!-- Row 4: season picker -->
 					{#if item.media_type === 'tv' && item.seasons?.length}
 						<div class="ml-11 mt-1">
 							{@render seasonPicker(item)}
@@ -512,23 +491,15 @@
 		<div class="space-y-1.5">
 			{#each lanes as lane (lane.key)}
 				{@const colors = laneColors(resolvedHue(lane.providerId, lane.logo), theme.dark)}
-				{@const isDragOver = dragOverKey === lane.key && dragKey !== lane.key}
 				{@const budgetMins = budgetHours * 60}
 
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="flex items-stretch overflow-visible rounded-xl transition-all duration-150 {isDragOver ? 'ring-2 ring-white/20 scale-[1.005]' : ''}"
+					class="flex items-stretch overflow-visible rounded-xl"
 					style="background:{colors.row}; border-left:{colors.border};"
-					draggable="true"
-					ondragstart={() => onDragStart(lane.key)}
-					ondragover={(e) => onDragOver(e, lane.key)}
-					ondrop={() => onDrop(lane.key)}
-					ondragend={onDragEnd}
 				>
 					<!-- Lane header -->
 					<div class="flex w-40 shrink-0 flex-col items-center justify-center gap-1.5 px-3 py-2.5 text-center"
 						style="background:{colors.header};">
-						<div class="cursor-grab text-base opacity-25 active:cursor-grabbing" title="Drag to reorder">⠿</div>
 						{#if lane.logo}
 							<img src="{TMDB_IMG}/w92{lane.logo}" alt={lane.label} class="h-8 w-8 rounded-lg object-cover shadow" />
 						{:else}
@@ -556,7 +527,7 @@
 										class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive ? 'ring-2 ring-white/50 brightness-125' : 'hover:brightness-110'}"
 										style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace('1px solid ', '')};"
 										onclick={(e) => openGanttPopup(e, item)}
-										title="{item.title} · {item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '~' + hms(DEFAULT_RUNTIME[item.media_type])}"
+										title="{item.title} · {formatRuntime(effectiveRuntime(item), item.media_type)} remaining"
 									>
 										{#if item.poster_path}
 											<img
@@ -569,11 +540,7 @@
 										<div class="flex min-w-0 flex-col justify-center gap-0.5 px-1.5">
 											<p class="truncate text-[10px] font-semibold leading-tight text-white/90">{item.title}</p>
 											<p class="truncate text-[9px] leading-tight text-white/50">
-												{#if item.runtime_minutes}
-													{formatRuntime(item.runtime_minutes, item.media_type)}
-												{:else}
-													~{hms(DEFAULT_RUNTIME[item.media_type])}
-												{/if}
+												{formatRuntime(effectiveRuntime(item), item.media_type)}
 											</p>
 										</div>
 									</button>
@@ -596,7 +563,7 @@
 		</div>
 
 		{#if lanes.length > 1}
-			<p class="pt-1 text-center text-[11px] text-gray-400 dark:text-gray-700">Drag lanes to reorder · bar width = runtime · budget = {budgetHours}h/mo</p>
+			<p class="pt-1 text-center text-[11px] text-gray-400 dark:text-gray-700">Lanes sorted by filter selection · bar width = runtime · budget = {budgetHours}h/mo</p>
 		{/if}
 	{/if}
 </div>
@@ -610,23 +577,17 @@
 	>
 		<p class="mb-1 text-sm font-semibold leading-snug">{activeItem.title}</p>
 		<p class="mb-1 text-xs text-gray-500 dark:text-gray-400">
-			{#if activeItem.runtime_minutes}
-				🕐 {formatRuntime(activeItem.runtime_minutes, activeItem.media_type)}
-			{:else}
-				🕐 ~{hms(DEFAULT_RUNTIME[activeItem.media_type])} <span class="italic text-gray-400 dark:text-gray-600">(estimated)</span>
-			{/if}
+				🕐 {formatRuntime(effectiveRuntime(activeItem), activeItem.media_type)} remaining
 		</p>
-		{#if activeItem.overview}
-			<p class="mb-2 line-clamp-3 text-xs text-gray-500">{activeItem.overview}</p>
-		{/if}
 		{@render seasonPicker(activeItem)}
-		{#if activeItem.providers.length > 0}
-			<div class="mt-2 mb-2 flex flex-wrap gap-1">
-				{#each activeItem.providers as p (p.provider_id)}
-					<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
-				{/each}
-			</div>
-		{/if}
+		<div class="mt-2 mb-2 flex flex-wrap items-center gap-1">
+			<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-700">
+				{activeItem.media_type === 'movie' ? '🎬' : '📺'}
+			</span>
+			{#each activeItem.providers as p (p.provider_id)}
+				<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
+			{/each}
+		</div>
 		<div class="flex gap-1.5">
 			<button class="flex-1 rounded-md bg-gray-100 py-1.5 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-gray-600"
 				disabled={busy.has(activeItem.id)} onclick={() => toggle(activeItem!)}>

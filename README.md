@@ -14,7 +14,7 @@ Search for movies and TV shows by name. StreamQ pulls metadata from TMDB — pos
 ### 2. See your subscription value
 The **Gantt view** groups your queue by provider. Each bar's width represents watch time relative to your monthly viewing budget (configurable in Settings). If a provider's lane fits inside one bar-width, one month is all you need.
 
-The **Suggest** tab ranks providers by how many of your unwatched titles they carry — useful for deciding what to subscribe to first.
+The **Suggest** tab ranks providers by total remaining watch time across your unwatched titles — useful for deciding what to subscribe to first. Checking off seasons reduces a show's contribution automatically.
 
 ### 3. Your data, your device
 Everything is stored locally in your browser's IndexedDB — no account, no server, no tracking. Use **Settings → Export** to save a passphrase-encrypted `.streamq` file you can restore on any device. Theme and budget preferences are included in the backup.
@@ -24,14 +24,16 @@ Everything is stored locally in your browser's IndexedDB — no account, no serv
 ## Features
 
 - 🔍 **Search** movies and TV shows (TMDB)
-- 📺 **Streaming providers** per title (JustWatch / US)
-- 📊 **Gantt view** — lane-per-provider, bar width = watch time vs. monthly budget
+- 📺 **Streaming providers** per title (JustWatch / US) — with bundle filtering and Disney+ inference (see below)
+- 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season premieres surfaced on every card
+- 📊 **Gantt view** — lane-per-provider, bar width = remaining watch time vs. monthly budget
 - 📋 **List & Grid views** with sort (A–Z, runtime, date added, watched)
-- ✅ **Watch tracking** — mark titles done, filter To Watch / Watched
-- 🏆 **Suggest** — ranked list of providers by queue coverage
+- ✅ **Watch tracking** — mark titles done, filter To Watch / Watched; season-level progress shrinks bar widths
+- 🏆 **Suggest** — providers ranked by total remaining watch time in your queue
 - 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto API
 - 🌙 **Dark / light mode** — persisted in preferences and backup file
 - ⏱ **Viewing budget** — configurable monthly hours, used to normalise bar widths
+- 🔄 **Refresh provider data** — re-fetches streaming info for every queued title in one click (Settings)
 - 💬 **In-app feedback** — files a GitHub issue directly from Settings
 
 ---
@@ -85,12 +87,16 @@ npm run preview   # uses wrangler pages dev
 - Provider data is sourced from TMDB/JustWatch and reflects US availability only. It can lag real-world changes by a few days.
 - This product uses the TMDB API but is not endorsed or certified by TMDB.
 
+### A note on Disney+ data
+
+Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API returns no Disney+ entries for the US. StreamQ works around this by inferring Disney+ availability from first-party TMDB metadata that is still present — the show's network (Disney+) for TV, and the production company (Lucasfilm, Marvel Studios, Pixar, Walt Disney Pictures, Walt Disney Animation) for films. This correctly attributes titles like Star Wars, the MCU, and Loki to Disney+ rather than showing them as unavailable or mislabelled as Hulu. FX/Hulu originals like The Bear are unaffected. Use **Settings → Refresh provider data** if anything looks wrong after a streaming rights change.
+
 ---
 
 ## Known limitations
 
 - Provider data is US-only (JustWatch regional restriction via TMDB)
-- Bundle-only availability (e.g. a title that requires a Hulu + Disney+ bundle) is filtered where detected, but edge cases exist — see [#5](https://github.com/zenfinity/streamq/issues/5)
+- Bundle-only availability (e.g. Hulu + Disney+ bundle) is filtered where detected; Disney+ data is inferred rather than sourced directly — see [#5](https://github.com/zenfinity/streamq/issues/5)
 - Importing watchlists from Letterboxd, Trakt, or IMDb is planned — see [#4](https://github.com/zenfinity/streamq/issues/4)
 
 ---

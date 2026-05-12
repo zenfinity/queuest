@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getAll, replaceAll } from '$lib/db';
+	import { getAll, replaceAll, patchProviders } from '$lib/db';
 	import { encrypt, decrypt } from '$lib/crypto';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { openWelcome } from '$lib/welcome.svelte';
@@ -11,7 +11,9 @@
 	const GITHUB_REPO = 'https://github.com/zenfinity/streamq';
 
 	// ── Budget ────────────────────────────────────────────────────────────────
-	let budgetHours = $state(40);
+	let hoursPerWeek  = $state(10);
+	let weeksPerMonth = $state(4);
+	let budgetHours   = $derived(hoursPerWeek * weeksPerMonth);
 
 	// ── Export ────────────────────────────────────────────────────────────────
 	let exportPassphrase = $state('');
@@ -73,7 +75,8 @@
 					document.documentElement.classList.toggle('dark', dark);
 				}
 				if (typeof parsed.prefs?.budget === 'number') {
-					budgetHours = parsed.prefs.budget;
+					weeksPerMonth = 4;
+					hoursPerWeek = Math.round(parsed.prefs.budget / weeksPerMonth);
 				}
 			}
 
@@ -82,6 +85,48 @@
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Import failed.';
 		} finally { importing = false; }
+	}
+
+	// ── Refresh providers ─────────────────────────────────────────────────────
+	let refreshing     = $state(false);
+	let refreshTotal   = $state(0);
+	let refreshDone    = $state(0);
+	let refreshError   = $state('');
+	let refreshSuccess = $state(false);
+
+	async function doRefresh() {
+		refreshing = true; refreshError = ''; refreshSuccess = false;
+		try {
+			const items = await getAll();
+			const payload = items.map(({ id, tmdb_id, media_type }) => ({ id, tmdb_id, media_type }));
+			refreshTotal = payload.length;
+			refreshDone = 0;
+
+			if (!payload.length) { refreshSuccess = true; return; }
+
+			const res = await fetch('/api/refresh-providers', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			});
+
+			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+
+			const results = await res.json() as Array<{
+				id: number;
+				providers: import('$lib/types').Provider[];
+				release: import('$lib/types').ReleaseInfo | null;
+			}>;
+
+			// Write back to IndexedDB one by one
+			for (const r of results) {
+				await patchProviders(r.id, r.providers, r.release);
+				refreshDone++;
+			}
+			refreshSuccess = true;
+		} catch (e) {
+			refreshError = e instanceof Error ? e.message : 'Refresh failed.';
+		} finally { refreshing = false; }
 	}
 
 	// ── Feedback ──────────────────────────────────────────────────────────────
@@ -122,11 +167,28 @@
 
 	// ── Persistence ───────────────────────────────────────────────────────────
 	onMount(() => {
-		try { budgetHours = JSON.parse(localStorage.getItem('sq:budget') ?? '40'); } catch {}
+		try {
+			const weekly = localStorage.getItem('sq:budget:weekly');
+			const weeks  = localStorage.getItem('sq:budget:weeks');
+			if (weekly !== null && weeks !== null) {
+				hoursPerWeek  = JSON.parse(weekly);
+				weeksPerMonth = JSON.parse(weeks);
+			} else {
+				// Migrate legacy single-value budget, defaulting to 10 × 4 = 40
+				const legacy = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
+				weeksPerMonth = 4;
+				hoursPerWeek  = Math.round(legacy / weeksPerMonth);
+			}
+		} catch {}
 	});
 
 	$effect(() => {
-		try { localStorage.setItem('sq:budget', JSON.stringify(budgetHours)); } catch {}
+		try {
+			localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
+			localStorage.setItem('sq:budget:weeks',  JSON.stringify(weeksPerMonth));
+			// Keep sq:budget in sync — used by the rest of the app and export format
+			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
+		} catch {}
 	});
 </script>
 
@@ -157,13 +219,20 @@
 		<p class="text-sm text-gray-600 dark:text-gray-400">
 			Your estimated monthly watch time. Used to normalise bar widths across all views.
 		</p>
-		<div class="flex items-center gap-3">
+		<div class="flex flex-wrap items-center gap-2 text-sm">
 			<input
-				type="number" min="10" max="500" step="5"
-				bind:value={budgetHours}
-				class="w-24 rounded-lg bg-gray-100 px-3 py-2 text-center text-sm font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				type="number" min="1" max="24" step="0.5"
+				bind:value={hoursPerWeek}
+				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 			/>
-			<span class="text-sm text-gray-600 dark:text-gray-400">hours / month</span>
+			<span class="text-gray-600 dark:text-gray-400">hrs ×</span>
+			<input
+				type="number" min="1" max="6" step="0.5"
+				bind:value={weeksPerMonth}
+				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+			/>
+			<span class="text-gray-600 dark:text-gray-400">weeks =</span>
+			<span class="font-semibold text-gray-900 dark:text-white">{budgetHours} hrs/month</span>
 		</div>
 	</section>
 
@@ -228,6 +297,34 @@
 		</div>
 		{#if importError}<p class="text-xs text-red-500">{importError}</p>{/if}
 		{#if importDone}<p class="text-xs text-teal-600 dark:text-teal-400">✓ Queue restored successfully.</p>{/if}
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- Refresh providers -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Streaming Data</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Re-fetches streaming providers and upcoming release dates for every title in your queue.
+			Useful if providers look wrong or a title has been added to a new service.
+		</p>
+		<button
+			onclick={doRefresh}
+			disabled={refreshing}
+			class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+		>
+			{#if refreshing}
+				Refreshing {refreshDone} / {refreshTotal}…
+			{:else}
+				↻ Refresh provider data
+			{/if}
+		</button>
+		{#if refreshSuccess && !refreshing}
+			<p class="text-xs text-teal-600 dark:text-teal-400">✓ Updated {refreshDone} title{refreshDone === 1 ? '' : 's'}.</p>
+		{/if}
+		{#if refreshError}
+			<p class="text-xs text-red-500">{refreshError}</p>
+		{/if}
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>

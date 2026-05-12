@@ -95,6 +95,28 @@ export async function updateShowProgress(
 	});
 }
 
+export async function patchProviders(
+	id: number,
+	providers: WatchlistItem['providers'],
+	release: WatchlistItem['release']
+): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const get = store.get(id);
+		get.onsuccess = () => {
+			const item = get.result as WatchlistItem;
+			item.providers = providers;
+			item.release = release;
+			const put = store.put(item);
+			put.onsuccess = () => resolve();
+			put.onerror = () => reject(put.error);
+		};
+		get.onerror = () => reject(get.error);
+	});
+}
+
 export async function replaceAll(items: WatchlistItem[]): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {

@@ -11,6 +11,21 @@ export interface SeasonSummary {
 	runtime_minutes: number; // estimated: episode_count × avg_episode_runtime
 }
 
+export interface ReleaseInfo {
+	/** For movies not yet on streaming: confirmed theatrical date */
+	theatrical_date?: string | null;
+	/** For movies: confirmed digital/streaming release date from TMDB */
+	digital_date?: string | null;
+	/** For movies: estimated streaming window (derived when no digital_date) */
+	streaming_estimate?: string | null;
+	/** For TV: upcoming season number */
+	next_season?: number | null;
+	/** For TV: upcoming season premiere date (ISO string) */
+	next_season_date?: string | null;
+	/** TMDB status string, e.g. "Post Production", "Returning Series", "Ended" */
+	status?: string | null;
+}
+
 export interface WatchlistItem {
 	id: number;
 	tmdb_id: number;
@@ -26,6 +41,7 @@ export interface WatchlistItem {
 	current_episode: number | null;   // episode currently on within current_season
 	added_at: string;
 	watched_at: string | null;
+	release?: ReleaseInfo | null;
 }
 
 export interface SearchResult {
@@ -38,11 +54,13 @@ export interface SearchResult {
 	providers: Provider[];
 	runtime_minutes: number | null;
 	seasons: SeasonSummary[];
+	release: ReleaseInfo | null;
 }
 
 export interface Suggestion {
 	provider_id: number;
 	name: string;
 	logo_path: string;
-	count: number;
+	runtime_minutes: number;
+	title_count: number;
 }
