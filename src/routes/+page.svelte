@@ -555,7 +555,7 @@
 										class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive ? 'ring-2 ring-white/50 brightness-125' : 'hover:brightness-110'}"
 										style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace('1px solid ', '')};"
 										onclick={(e) => openGanttPopup(e, item)}
-										title="{item.title} · {item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '~' + hms(DEFAULT_RUNTIME[item.media_type])}"
+										title="{item.title} · {formatRuntime(effectiveRuntime(item), item.media_type)} remaining"
 									>
 										{#if item.poster_path}
 											<img
@@ -568,11 +568,7 @@
 										<div class="flex min-w-0 flex-col justify-center gap-0.5 px-1.5">
 											<p class="truncate text-[10px] font-semibold leading-tight text-white/90">{item.title}</p>
 											<p class="truncate text-[9px] leading-tight text-white/50">
-												{#if item.runtime_minutes}
-													{formatRuntime(item.runtime_minutes, item.media_type)}
-												{:else}
-													~{hms(DEFAULT_RUNTIME[item.media_type])}
-												{/if}
+												{formatRuntime(effectiveRuntime(item), item.media_type)}
 											</p>
 										</div>
 									</button>
@@ -609,11 +605,7 @@
 	>
 		<p class="mb-1 text-sm font-semibold leading-snug">{activeItem.title}</p>
 		<p class="mb-1 text-xs text-gray-500 dark:text-gray-400">
-			{#if activeItem.runtime_minutes}
-				🕐 {formatRuntime(activeItem.runtime_minutes, activeItem.media_type)}
-			{:else}
-				🕐 ~{hms(DEFAULT_RUNTIME[activeItem.media_type])} <span class="italic text-gray-400 dark:text-gray-600">(estimated)</span>
-			{/if}
+				🕐 {formatRuntime(effectiveRuntime(activeItem), activeItem.media_type)} remaining
 		</p>
 		{@render seasonPicker(activeItem)}
 		{#if activeItem.providers.length > 0}
