@@ -54,10 +54,6 @@
 	let viewMode    = $state<ViewKey>('grid');
 	let budgetHours = $state(40); // user-adjustable month budget
 
-	// lane drag state
-	let laneOrder   = $state<string[]>([]);
-	let dragKey     = $state<string | null>(null);
-	let dragOverKey = $state<string | null>(null);
 
 	// logo-derived hues: logo_path → extracted hue (populated async)
 	let logoHues = $state(new Map<string, number>());
@@ -120,7 +116,15 @@
 		}
 
 		const out: Lane[] = [...map.values()]
-			.sort((a, b) => b.totalMins - a.totalMins)
+			.sort((a, b) => {
+				if (sortBy === 'title') return a.label.localeCompare(b.label);
+				if (sortBy === 'added') {
+					const aMax = a.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
+					const bMax = b.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
+					return bMax.localeCompare(aMax);
+				}
+				return b.totalMins - a.totalMins;
+			})
 			.map((l) => ({ ...l, overMins: Math.max(0, l.totalMins - budgetMins) }));
 
 		if (noProvider.length) {
@@ -131,14 +135,7 @@
 		return out;
 	});
 
-	// Apply saved lane order; new providers append at end
-	let lanes = $derived.by((): Lane[] => {
-		const byKey = new Map(rawLanes.map((l) => [l.key, l]));
-		const ordered: Lane[] = [];
-		for (const key of laneOrder) { const l = byKey.get(key); if (l) ordered.push(l); }
-		for (const lane of rawLanes) { if (!laneOrder.includes(lane.key)) ordered.push(lane); }
-		return ordered;
-	});
+	let lanes = $derived(rawLanes);
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	async function reload() {
@@ -149,7 +146,6 @@
 		sortBy      = loadPref<SortKey>('sq:sort', 'added');
 		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
 		budgetHours = loadJSON<number>('sq:budget', 40);
-		laneOrder   = loadJSON<string[]>('sq:laneOrder', []);
 		await reload();
 		loaded = true;
 	});
@@ -159,7 +155,6 @@
 			localStorage.setItem('sq:sort', sortBy);
 			localStorage.setItem('sq:view', viewMode);
 			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
-			localStorage.setItem('sq:laneOrder', JSON.stringify(laneOrder));
 		} catch {}
 	});
 
@@ -203,19 +198,6 @@
 		await updateShowProgress(item.id, next, item.current_season, item.current_episode);
 		await reload();
 	}
-
-	// ── Lane drag-to-reorder ──────────────────────────────────────────────────
-	function onDragStart(key: string) { dragKey = key; }
-	function onDragOver(e: DragEvent, key: string) { e.preventDefault(); dragOverKey = key; }
-	function onDrop(key: string) {
-		if (!dragKey || dragKey === key) { dragKey = dragOverKey = null; return; }
-		const cur  = lanes.map((l) => l.key);
-		const from = cur.indexOf(dragKey);
-		const to   = cur.indexOf(key);
-		const next = [...cur]; next.splice(from, 1); next.splice(to, 0, dragKey);
-		laneOrder = next; dragKey = dragOverKey = null;
-	}
-	function onDragEnd() { dragKey = dragOverKey = null; }
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 	function hms(mins: number): string {
@@ -509,23 +491,15 @@
 		<div class="space-y-1.5">
 			{#each lanes as lane (lane.key)}
 				{@const colors = laneColors(resolvedHue(lane.providerId, lane.logo), theme.dark)}
-				{@const isDragOver = dragOverKey === lane.key && dragKey !== lane.key}
 				{@const budgetMins = budgetHours * 60}
 
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="flex items-stretch overflow-visible rounded-xl transition-all duration-150 {isDragOver ? 'ring-2 ring-white/20 scale-[1.005]' : ''}"
+					class="flex items-stretch overflow-visible rounded-xl"
 					style="background:{colors.row}; border-left:{colors.border};"
-					draggable="true"
-					ondragstart={() => onDragStart(lane.key)}
-					ondragover={(e) => onDragOver(e, lane.key)}
-					ondrop={() => onDrop(lane.key)}
-					ondragend={onDragEnd}
 				>
 					<!-- Lane header -->
 					<div class="flex w-40 shrink-0 flex-col items-center justify-center gap-1.5 px-3 py-2.5 text-center"
 						style="background:{colors.header};">
-						<div class="cursor-grab text-base opacity-25 active:cursor-grabbing" title="Drag to reorder">⠿</div>
 						{#if lane.logo}
 							<img src="{TMDB_IMG}/w92{lane.logo}" alt={lane.label} class="h-8 w-8 rounded-lg object-cover shadow" />
 						{:else}
@@ -589,7 +563,7 @@
 		</div>
 
 		{#if lanes.length > 1}
-			<p class="pt-1 text-center text-[11px] text-gray-400 dark:text-gray-700">Drag lanes to reorder · bar width = runtime · budget = {budgetHours}h/mo</p>
+			<p class="pt-1 text-center text-[11px] text-gray-400 dark:text-gray-700">Lanes sorted by filter selection · bar width = runtime · budget = {budgetHours}h/mo</p>
 		{/if}
 	{/if}
 </div>
