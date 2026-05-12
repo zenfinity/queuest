@@ -429,10 +429,9 @@
 				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
-				<div class="flex flex-col bg-white px-3 py-2 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80">
-					<!-- Main row -->
+				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80">
+					<!-- Row 1: poster · title · actions -->
 					<div class="flex items-center gap-3">
-						<!-- Poster -->
 						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
 							{#if item.poster_path}
 								<img src="{TMDB_IMG}/w92{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
@@ -440,49 +439,7 @@
 								<div class="flex h-full w-full items-center justify-center text-sm text-gray-400 dark:text-gray-600">🎬</div>
 							{/if}
 						</div>
-
-						<!-- Title + meta -->
-						<div class="min-w-0 w-44 shrink-0">
-							<p class="truncate text-sm font-medium leading-tight">{item.title}</p>
-							<div class="mt-0.5 flex items-center gap-1.5">
-								<span class="rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-									{item.media_type === 'movie' ? 'Film' : 'TV'}
-								</span>
-								{#if item.providers.length > 0}
-									<div class="flex gap-0.5">
-										{#each item.providers.slice(0, 3) as p (p.provider_id)}
-											<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
-										{/each}
-										{#if item.providers.length > 3}
-											<span class="text-[9px] text-gray-400 dark:text-gray-600">+{item.providers.length - 3}</span>
-										{/if}
-									</div>
-								{/if}
-								{#if releaseChip(item.release)}
-									<span class="text-[9px] text-amber-500 dark:text-amber-400">{releaseChip(item.release)}</span>
-								{/if}
-							</div>
-						</div>
-
-						<!-- Sparkline -->
-						<div class="flex min-w-0 flex-1 items-center gap-2">
-							<div class="relative flex-1">
-								<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
-								<div class="absolute top-0 left-0 h-px transition-all duration-300"
-									style="width:{pct}%; background:{lineColor}; opacity:0.7;"></div>
-								<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
-									style="left:{pct}%; margin-left:-3px; background:{dotColor};"></div>
-							</div>
-							<span class="shrink-0 text-[10px] tabular-nums text-gray-500 w-14 text-right">
-								{#if item.runtime_minutes}
-									{formatRuntime(effectiveRuntime(item), item.media_type)}
-								{:else}
-									<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
-								{/if}
-							</span>
-						</div>
-
-						<!-- Actions -->
+						<p class="min-w-0 flex-1 text-sm font-medium leading-tight">{item.title}</p>
 						<div class="flex shrink-0 gap-1">
 							<button class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
@@ -492,7 +449,44 @@
 								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
 						</div>
 					</div>
-					<!-- Season picker (TV, indented to align with title) -->
+
+					<!-- Row 2: type chip · provider icons · sparkline · runtime -->
+					<div class="ml-11 mt-1.5 flex items-center gap-2">
+						<span class="shrink-0 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+							{item.media_type === 'movie' ? 'Film' : 'TV'}
+						</span>
+						{#if item.providers.length > 0}
+							<div class="flex shrink-0 gap-0.5">
+								{#each item.providers.slice(0, 3) as p (p.provider_id)}
+									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
+								{/each}
+								{#if item.providers.length > 3}
+									<span class="text-[9px] text-gray-400 dark:text-gray-600">+{item.providers.length - 3}</span>
+								{/if}
+							</div>
+						{/if}
+						<div class="relative min-w-0 flex-1">
+							<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
+							<div class="absolute top-0 left-0 h-px transition-all duration-300"
+								style="width:{pct}%; background:{lineColor}; opacity:0.7;"></div>
+							<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
+								style="left:{pct}%; margin-left:-3px; background:{dotColor};"></div>
+						</div>
+						<span class="shrink-0 w-12 text-right text-[10px] tabular-nums text-gray-500">
+							{#if item.runtime_minutes}
+								{formatRuntime(effectiveRuntime(item), item.media_type)}
+							{:else}
+								<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
+							{/if}
+						</span>
+					</div>
+
+					<!-- Row 3: release chip -->
+					{#if releaseChip(item.release)}
+						<p class="ml-11 mt-0.5 text-[10px] leading-snug text-amber-500 dark:text-amber-400">{releaseChip(item.release)}</p>
+					{/if}
+
+					<!-- Row 4: season picker -->
 					{#if item.media_type === 'tv' && item.seasons?.length}
 						<div class="ml-11 mt-1">
 							{@render seasonPicker(item)}
