@@ -5,7 +5,7 @@
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
-	import { remainingRuntime, progressLabel, releaseChip } from '$lib/progress';
+	import { remainingRuntime, releaseChip } from '$lib/progress';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
@@ -457,9 +457,6 @@
 											<span class="text-[9px] text-gray-400 dark:text-gray-600">+{item.providers.length - 3}</span>
 										{/if}
 									</div>
-								{/if}
-								{#if progressLabel(item)}
-									<span class="text-[9px] text-orange-500/70">{progressLabel(item)}</span>
 								{/if}
 								{#if releaseChip(item.release)}
 									<span class="text-[9px] text-amber-500 dark:text-amber-400">{releaseChip(item.release)}</span>
