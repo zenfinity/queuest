@@ -42,7 +42,7 @@
 </script>
 
 <svelte:head>
-	<title>StreamQ — What to Subscribe</title>
+	<title>Queuest — What to Subscribe</title>
 </svelte:head>
 
 <div class="space-y-8">

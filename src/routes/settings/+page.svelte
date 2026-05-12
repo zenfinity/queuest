@@ -35,7 +35,7 @@
 			const url = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
 			Object.assign(document.createElement('a'), {
 				href: url,
-				download: `streamq-${new Date().toISOString().slice(0, 10)}.streamq`
+				download: `queuest-${new Date().toISOString().slice(0, 10)}.queuest`
 			}).click();
 			URL.revokeObjectURL(url);
 			exportPassphrase = '';
@@ -192,7 +192,7 @@
 	});
 </script>
 
-<svelte:head><title>StreamQ — Settings</title></svelte:head>
+<svelte:head><title>Queuest — Settings</title></svelte:head>
 
 <div class="mx-auto max-w-md space-y-10">
 	<h1 class="text-2xl font-bold">Settings</h1>
@@ -242,7 +242,7 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Export Watchlist</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Downloads your queue and preferences as an encrypted <code class="text-orange-500">.streamq</code> file. The passphrase is required to import — keep it somewhere safe.
+			Downloads your queue and preferences as an encrypted <code class="text-orange-500">.queuest</code> file. The passphrase is required to import — keep it somewhere safe.
 		</p>
 		<div class="flex gap-2">
 			<input
@@ -271,11 +271,11 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Import Watchlist</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Restore from a <code class="text-orange-500">.streamq</code> file. Theme and budget preferences are restored too.
+			Restore from a <code class="text-orange-500">.queuest</code> file. Theme and budget preferences are restored too.
 			<span class="font-medium text-red-500">This replaces your current queue.</span>
 		</p>
 		<input
-			type="file" accept=".streamq"
+			type="file" accept=".queuest"
 			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
 			onchange={onFileChange}
 		/>
@@ -335,7 +335,7 @@
 
 		<div class="flex items-center justify-between">
 			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-				Stream<span class="text-orange-400">Q</span>
+				Queue<span class="text-orange-400">st</span>
 			</span>
 			<span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
 				v{VERSION}

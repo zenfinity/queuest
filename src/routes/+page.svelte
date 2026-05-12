@@ -210,7 +210,7 @@
 	}
 </script>
 
-<svelte:head><title>StreamQ — My Queue</title></svelte:head>
+<svelte:head><title>Queuest — My Queue</title></svelte:head>
 
 <svelte:document onclick={(e) => {
 	const t = e.target as Element;

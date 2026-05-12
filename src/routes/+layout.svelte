@@ -23,7 +23,7 @@
 	<nav class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
 		<div class="mx-auto flex h-14 max-w-5xl items-stretch gap-6 px-4">
 			<a class="flex items-center text-xl font-bold tracking-tight text-gray-900 dark:text-white" href="/">
-				Stream<span class="text-orange-400">Q</span>
+				Queue<span class="text-orange-400">st</span>
 			</a>
 
 			<div class="flex gap-5">
@@ -89,7 +89,7 @@
 			<!-- Brand -->
 			<div class="mb-7 text-center">
 				<p class="text-2xl font-bold tracking-tight">
-					Stream<span class="text-orange-400">Q</span>
+					Queue<span class="text-orange-400">st</span>
 				</p>
 				<p class="mt-2 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
 					Figure out how long you actually need a streaming subscription — before paying for another month.
@@ -103,7 +103,7 @@
 					<div>
 						<p class="text-sm font-semibold">Build your watch queue</p>
 						<p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-							Search for movies and shows and add them. StreamQ fetches runtime and which services carry each title.
+							Search for movies and shows and add them. Queuest fetches runtime and which services carry each title.
 						</p>
 					</div>
 				</div>
@@ -121,7 +121,7 @@
 					<div>
 						<p class="text-sm font-semibold">Your data, your device</p>
 						<p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-							Everything lives in your browser — no account needed. Use <span class="font-medium text-gray-700 dark:text-gray-300">Settings → Export</span> to save an encrypted <code class="text-orange-500">.streamq</code> file you can restore on any device.
+							Everything lives in your browser — no account needed. Use <span class="font-medium text-gray-700 dark:text-gray-300">Settings → Export</span> to save an encrypted <code class="text-orange-500">.queuest</code> file you can restore on any device.
 						</p>
 					</div>
 				</div>

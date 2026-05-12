@@ -47,7 +47,7 @@
 </script>
 
 <svelte:head>
-	<title>StreamQ — Search</title>
+	<title>Queuest — Search</title>
 </svelte:head>
 
 <div class="space-y-8">

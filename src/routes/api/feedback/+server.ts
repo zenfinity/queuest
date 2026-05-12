@@ -20,7 +20,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			Accept: 'application/vnd.github+json',
 			'X-GitHub-Api-Version': '2022-11-28',
 			'Content-Type': 'application/json',
-			'User-Agent': 'StreamQ-App'
+			'User-Agent': 'Queuest-App'
 		},
 		body: JSON.stringify({
 			title: title.trim(),
