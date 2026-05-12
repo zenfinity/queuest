@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getAll } from '$lib/db';
-	import { TMDB_IMG, filterProviders } from '$lib/tmdb';
+	import { TMDB_IMG } from '$lib/tmdb';
 	import type { Suggestion } from '$lib/types';
 
 	let suggestions = $state<Suggestion[]>([]);
@@ -10,9 +10,7 @@
 
 	onMount(async () => {
 		const raw = await getAll();
-		const unwatched = raw
-			.filter((i) => !i.watched_at)
-			.map((i) => ({ ...i, providers: filterProviders(i.providers) }));
+		const unwatched = raw.filter((i) => !i.watched_at);
 		totalUnwatched = unwatched.length;
 
 		const counts = new Map<string, Suggestion>();
