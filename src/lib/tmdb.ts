@@ -314,12 +314,14 @@ export async function getWatchProviders(
 	id: number,
 	mediaType: 'movie' | 'tv',
 	apiKey: string
-): Promise<Provider[]> {
+): Promise<{ providers: Provider[]; rentable: boolean }> {
 	const res = await fetch(`${BASE}/${mediaType}/${id}/watch/providers?api_key=${apiKey}`);
 	if (!res.ok) return [];
 	const data = (await res.json()) as {
-		results?: { US?: { flatrate?: Provider[] } };
+		results?: { US?: { flatrate?: Provider[]; rent?: Provider[]; buy?: Provider[] } };
 	};
-	const flatrate = data.results?.US?.flatrate ?? [];
-	return filterProviders(flatrate);
+	const us = data.results?.US ?? {};
+	const flatrate = us.flatrate ?? [];
+	const rentable = (us.rent?.length ?? 0) > 0 || (us.buy?.length ?? 0) > 0;
+	return { providers: filterProviders(flatrate), rentable };
 }

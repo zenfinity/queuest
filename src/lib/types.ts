@@ -34,6 +34,7 @@ export interface WatchlistItem {
 	poster_path: string | null;
 	overview: string | null;
 	providers: Provider[];
+	rentable?: boolean;                // true if available to rent/buy but not on subscription
 	runtime_minutes: number | null;   // total runtime (all seasons)
 	seasons: SeasonSummary[];          // TV only; empty array for movies / pre-feature items
 	watched_seasons: number[];         // season numbers fully completed
@@ -52,6 +53,7 @@ export interface SearchResult {
 	overview: string;
 	year: string | null;
 	providers: Provider[];
+	rentable: boolean;
 	runtime_minutes: number | null;
 	seasons: SeasonSummary[];
 	release: ReleaseInfo | null;

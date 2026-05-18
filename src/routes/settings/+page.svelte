@@ -120,7 +120,7 @@
 
 			// Write back to IndexedDB one by one
 			for (const r of results) {
-				await patchProviders(r.id, r.providers, r.release);
+				await patchProviders(r.id, r.providers, r.rentable ?? false, r.release);
 				refreshDone++;
 			}
 			refreshSuccess = true;

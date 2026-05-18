@@ -13,6 +13,7 @@ interface RefreshRequest {
 interface RefreshResult {
 	id: number;
 	providers: Provider[];
+	rentable: boolean;
 	release: ReleaseInfo | null;
 }
 
@@ -31,12 +32,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	const results: RefreshResult[] = await Promise.all(
 		batch.map(async ({ id, tmdb_id, media_type }) => {
 			try {
-				const [rawProviders, { networkIds, companyIds, release }] = await Promise.all([
+				const [{ providers: rawProviders, rentable }, { networkIds, companyIds, release }] = await Promise.all([
 					getWatchProviders(tmdb_id, media_type, apiKey),
 					getRuntime(tmdb_id, media_type, apiKey)
 				]);
 				const providers = augmentProviders(rawProviders, networkIds, companyIds);
-				return { id, providers, release: release ?? null };
+				return { id, providers, rentable: providers.length > 0 ? false : rentable, release: release ?? null };
 			} catch {
 				// Return empty rather than failing the whole batch
 				return { id, providers: [], release: null };

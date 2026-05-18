@@ -98,6 +98,7 @@ export async function updateShowProgress(
 export async function patchProviders(
 	id: number,
 	providers: WatchlistItem['providers'],
+	rentable: boolean,
 	release: WatchlistItem['release']
 ): Promise<void> {
 	const db = await open();
@@ -108,6 +109,7 @@ export async function patchProviders(
 		get.onsuccess = () => {
 			const item = get.result as WatchlistItem;
 			item.providers = providers;
+			item.rentable = rentable;
 			item.release = release;
 			const put = store.put(item);
 			put.onsuccess = () => resolve();

@@ -27,6 +27,7 @@
 				poster_path: result.poster_path,
 				overview: result.overview,
 				providers: result.providers,
+				rentable: result.rentable,
 				runtime_minutes: result.runtime_minutes,
 				seasons: result.seasons,
 				watched_seasons: [],
@@ -123,7 +124,9 @@
 								<span class="text-xs text-gray-500">+{result.providers.length - 4}</span>
 							{/if}
 							{#if !result.providers.length}
-								{#if releaseChip(result.release)}
+								{#if result.rentable}
+									<span class="text-xs text-gray-400 dark:text-gray-500">Rent/Buy only</span>
+								{:else if releaseChip(result.release)}
 									<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming</span>
 								{:else}
 									<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming —</span>
