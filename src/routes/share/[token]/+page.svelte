@@ -35,7 +35,11 @@
 					title: item.title,
 					poster_path: item.poster_path,
 					overview: null,
-					providers: item.providers,
+					providers: item.providers.map((p) => ({
+						provider_id: p.provider_id,
+						provider_name: p.provider_name,
+						logo_path: p.logo_path
+					})),
 					rentable: false,
 					runtime_minutes: item.runtime_minutes,
 					seasons: (item.seasons ?? []).map((s) => ({
