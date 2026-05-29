@@ -329,7 +329,7 @@
 	{@const chip = releaseChip(item.release)}
 	{#if item.media_type === 'tv' && (item.seasons?.length || chip)}
 		<div class="flex flex-wrap gap-0.5 pt-0.5">
-			{#each item.seasons ?? [] as season (season.season_number)}
+			{#each (item.seasons ?? []).filter(s => !chip || item.release?.next_season == null || s.season_number < item.release.next_season) as season (season.season_number)}
 				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
 				<button
 					class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
@@ -339,7 +339,7 @@
 					onclick={() => toggleSeason(item, season.season_number)}
 					title="{season.name} · {season.episode_count} eps"
 				>
-					{watched ? '✓ ' : ''}S{season.season_number}
+					{watched ? '✓' : 'S'}{season.season_number}
 				</button>
 			{/each}
 			{#if chip}
