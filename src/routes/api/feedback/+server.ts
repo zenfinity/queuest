@@ -1,11 +1,12 @@
 import { json, error } from '@sveltejs/kit';
-import { GITHUB_TOKEN } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
 const REPO = 'zenfinity/streamq';
 const GITHUB_API = `https://api.github.com/repos/${REPO}/issues`;
 
 export const POST: RequestHandler = async ({ request }) => {
+	const GITHUB_TOKEN = env.GITHUB_TOKEN;
 	if (!GITHUB_TOKEN) {
 		throw error(503, 'Feedback not configured');
 	}
