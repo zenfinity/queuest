@@ -169,6 +169,22 @@
 		} finally { feedbackSending = false; }
 	}
 
+	// ── Reset ─────────────────────────────────────────────────────────────────
+	let resetArmed  = $state(false);
+	let resetting   = $state(false);
+
+	async function doReset() {
+		if (!resetArmed) { resetArmed = true; return; }
+		resetting = true;
+		try {
+			await replaceAll([]);
+			const keys = ['sq:theme','sq:budget','sq:budget:weekly','sq:budget:weeks',
+			               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed'];
+			for (const k of keys) { try { localStorage.removeItem(k); } catch {} }
+			window.location.href = '/';
+		} finally { resetting = false; }
+	}
+
 	// ── Queue identity ────────────────────────────────────────────────────────
 	let myQueueName  = $state('My Queue');
 	let queueColors  = $state<Record<string, string>>({});
@@ -407,6 +423,44 @@
 		{/if}
 		{#if refreshError}
 			<p class="text-xs text-red-500">{refreshError}</p>
+		{/if}
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- Reset -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Danger Zone</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Wipes your entire queue and resets all preferences. The app will restart as if you're a new user.
+			<span class="font-medium text-red-500">This cannot be undone.</span>
+		</p>
+		{#if resetArmed}
+			<div class="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/40 dark:bg-red-950/20">
+				<span class="text-sm text-red-700 dark:text-red-400">Are you sure? All data will be lost.</span>
+				<div class="ml-auto flex gap-2">
+					<button
+						onclick={() => { resetArmed = false; }}
+						class="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-600 ring-1 ring-gray-300 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700"
+					>
+						Cancel
+					</button>
+					<button
+						onclick={doReset}
+						disabled={resetting}
+						class="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-400 disabled:opacity-50"
+					>
+						{resetting ? 'Resetting…' : 'Yes, reset'}
+					</button>
+				</div>
+			</div>
+		{:else}
+			<button
+				onclick={doReset}
+				class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-950/30"
+			>
+				Reset everything
+			</button>
 		{/if}
 	</section>
 

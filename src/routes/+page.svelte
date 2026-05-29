@@ -49,10 +49,17 @@
 	let shareStatus        = $state<'queue' | 'watched' | 'both'>('queue');
 	let shareType          = $state<'all' | 'movie' | 'tv'>('all');
 	let shareProviderNames = $state(new Set<string>());
+	let shareQueueNames    = $state(new Set<string>());
 	let shareCreating      = $state(false);
 	let shareUrl           = $state('');
 	let shareCopied        = $state(false);
 	let shareError         = $state('');
+
+	let allShareQueues = $derived.by(() => {
+		const names = new Set<string>();
+		for (const item of items) { if (item.queue_tag) names.add(item.queue_tag); }
+		return [...names].sort();
+	});
 
 	let shareAllProviders = $derived.by(() => {
 		const map = new Map<string, { provider_id: number; logo_path: string; count: number }>();
@@ -74,6 +81,9 @@
 		if (shareStatus === 'queue') base = base.filter((i) => !i.watched_at);
 		else if (shareStatus === 'watched') base = base.filter((i) => i.watched_at);
 		if (shareType !== 'all') base = base.filter((i) => i.media_type === shareType);
+		if (allShareQueues.length > 0 && shareQueueNames.size < allShareQueues.length) {
+			base = base.filter((i) => !i.queue_tag || shareQueueNames.has(i.queue_tag));
+		}
 		const allChecked = shareProviderNames.size === shareAllProviders.length;
 		return base.filter((i) => {
 			if (!i.providers.length) return allChecked;
@@ -86,6 +96,7 @@
 	function openShare() {
 		shareStatus = 'queue';
 		shareType = 'all';
+		shareQueueNames    = new Set(allShareQueues);
 		shareProviderNames = new Set(shareAllProviders.map((p) => p.name));
 		shareUrl = '';
 		shareCopied = false;
@@ -100,15 +111,23 @@
 		shareUrl = '';
 	}
 
+	function toggleShareQueue(name: string) {
+		const next = new Set(shareQueueNames);
+		if (next.has(name)) next.delete(name); else next.add(name);
+		shareQueueNames = next;
+		shareUrl = '';
+	}
+
 	async function createShareLink() {
 		if (!shareFiltered.length || shareCreating) return;
 		shareCreating = true;
 		shareUrl = '';
 		shareError = '';
 		try {
+			const activeQueues = allShareQueues.filter((q) => shareQueueNames.has(q));
 			const payload: SharePayload = {
 				v: 1,
-				queue_name: getQueueName(),
+				queue_name: activeQueues.length === 1 ? activeQueues[0] : getQueueName(),
 				items: shareFiltered.map((item) => ({
 					tmdb_id: item.tmdb_id,
 					media_type: item.media_type,
@@ -116,7 +135,8 @@
 					poster_path: item.poster_path,
 					providers: item.providers,
 					runtime_minutes: item.runtime_minutes,
-					seasons: (item.seasons ?? []).map((s) => ({ season_number: s.season_number, runtime_minutes: s.runtime_minutes }))
+					seasons: (item.seasons ?? []).map((s) => ({ season_number: s.season_number, runtime_minutes: s.runtime_minutes })),
+					queue_tag: item.queue_tag ?? null
 				}))
 			};
 			const key = await generateShareKey();
@@ -765,6 +785,27 @@
 						{/each}
 					</div>
 				</div>
+
+				<!-- Queue filter -->
+				{#if allShareQueues.length > 1}
+					<div>
+						<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Queues</p>
+						<div class="flex flex-wrap gap-1.5">
+							{#each allShareQueues as q (q)}
+								{@const on = shareQueueNames.has(q)}
+								{@const color = queueColors[q] ?? null}
+								<button
+									onclick={() => toggleShareQueue(q)}
+									class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors
+										{on ? 'bg-orange-50 text-orange-700 ring-orange-300 dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-800' : 'bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700'}"
+								>
+									{#if color}<span class="h-2 w-2 rounded-full shrink-0" style="background:{color}"></span>{/if}
+									{q}
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
 
 				<!-- Provider filter -->
 				{#if shareAllProviders.length > 0}

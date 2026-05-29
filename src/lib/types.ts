@@ -76,6 +76,7 @@ export interface ShareItem {
 	providers: Provider[];
 	runtime_minutes: number | null;
 	seasons: Array<{ season_number: number; runtime_minutes: number }>;
+	queue_tag?: string | null;
 }
 
 export interface SharePayload {
