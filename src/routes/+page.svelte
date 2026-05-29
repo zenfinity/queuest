@@ -332,10 +332,10 @@
 			{#each (item.seasons ?? []).filter(s => !chip || item.release?.next_season == null || s.season_number < item.release.next_season) as season (season.season_number)}
 				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
 				<button
-					class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
+					class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
 						{watched
-							? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
-							: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
+							? 'bg-teal-100 text-teal-700 ring-transparent dark:bg-teal-900/60 dark:text-teal-400'
+							: 'bg-gray-100 text-gray-500 ring-transparent hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
 					onclick={() => toggleSeason(item, season.season_number)}
 					title="{season.name} · {season.episode_count} eps"
 				>
