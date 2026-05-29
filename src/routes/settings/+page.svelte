@@ -118,11 +118,13 @@
 				providers: import('$lib/types').Provider[];
 				rentable?: boolean;
 				release: import('$lib/types').ReleaseInfo | null;
+				seasons?: import('$lib/types').WatchlistItem['seasons'];
+				runtime_minutes?: number | null;
 			}>;
 
 			// Write back to IndexedDB one by one
 			for (const r of results) {
-				await patchProviders(r.id, r.providers, r.rentable ?? false, r.release);
+				await patchProviders(r.id, r.providers, r.rentable ?? false, r.release, r.seasons, r.runtime_minutes);
 				refreshDone++;
 			}
 			refreshSuccess = true;
