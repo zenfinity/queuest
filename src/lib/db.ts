@@ -4,8 +4,11 @@ const DB_NAME = 'streamq';
 const STORE = 'watchlist';
 const VERSION = 1;
 
+let _dbPromise: Promise<IDBDatabase> | null = null;
+
 function open(): Promise<IDBDatabase> {
-	return new Promise((resolve, reject) => {
+	if (_dbPromise) return _dbPromise;
+	_dbPromise = new Promise((resolve, reject) => {
 		const req = indexedDB.open(DB_NAME, VERSION);
 		req.onupgradeneeded = (e) => {
 			const db = (e.target as IDBOpenDBRequest).result;
@@ -15,8 +18,9 @@ function open(): Promise<IDBDatabase> {
 			}
 		};
 		req.onsuccess = () => resolve(req.result);
-		req.onerror = () => reject(req.error);
+		req.onerror = () => { _dbPromise = null; reject(req.error); };
 	});
+	return _dbPromise;
 }
 
 export async function getAll(): Promise<WatchlistItem[]> {
