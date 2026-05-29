@@ -329,7 +329,10 @@
 	{@const chip = releaseChip(item.release)}
 	{#if item.media_type === 'tv' && (item.seasons?.length || chip)}
 		<div class="flex flex-wrap gap-0.5 pt-0.5">
-			{#each (item.seasons ?? []).filter(s => !chip || item.release?.next_season == null || s.season_number < item.release.next_season) as season (season.season_number)}
+			{#each (item.seasons ?? []).filter(s =>
+				s.episode_count > 0 &&
+				(!chip || item.release?.next_season == null || s.season_number < item.release.next_season)
+			) as season (season.season_number)}
 				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
 				<button
 					class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
