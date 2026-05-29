@@ -40,7 +40,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				return { id, providers, rentable: providers.length > 0 ? false : rentable, release: release ?? null };
 			} catch {
 				// Return empty rather than failing the whole batch
-				return { id, providers: [], release: null };
+				return { id, providers: [], rentable: false, release: null };
 			}
 		})
 	);
