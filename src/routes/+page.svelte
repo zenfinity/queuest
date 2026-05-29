@@ -332,10 +332,10 @@
 			{#each (item.seasons ?? []).filter(s => !chip || item.release?.next_season == null || s.season_number < item.release.next_season) as season (season.season_number)}
 				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
 				<button
-					class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
+					class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
 						{watched
-							? 'bg-teal-100 text-teal-700 ring-transparent dark:bg-teal-900/60 dark:text-teal-400'
-							: 'bg-gray-100 text-gray-500 ring-transparent hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
+							? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
+							: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
 					onclick={() => toggleSeason(item, season.season_number)}
 					title="{season.name} · {season.episode_count} eps"
 				>
@@ -344,22 +344,21 @@
 			{/each}
 			{#if chip}
 				{@const isOpen = releasePopupId === item.id}
-				<div class="relative" data-release-popup>
-					<button
-						class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
-							{isOpen
-								? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
-								: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
-						onclick={() => { releasePopupId = isOpen ? null : item.id; }}
-					>
-						{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
-					</button>
+				<button
+					class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
+						{isOpen
+							? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
+							: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
+					onclick={() => { releasePopupId = isOpen ? null : item.id; }}
+					data-release-popup
+				>
+					{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
 					{#if isOpen}
 						<div class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700">
 							{chip}
 						</div>
 					{/if}
-				</div>
+				</button>
 			{/if}
 		</div>
 	{/if}
