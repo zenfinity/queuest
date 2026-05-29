@@ -115,6 +115,7 @@
 			const results = await res.json() as Array<{
 				id: number;
 				providers: import('$lib/types').Provider[];
+				rentable?: boolean;
 				release: import('$lib/types').ReleaseInfo | null;
 			}>;
 

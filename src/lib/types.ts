@@ -66,3 +66,18 @@ export interface Suggestion {
 	runtime_minutes: number;
 	title_count: number;
 }
+
+export interface ShareItem {
+	tmdb_id: number;
+	media_type: 'movie' | 'tv';
+	title: string;
+	poster_path: string | null;
+	providers: Provider[];
+	runtime_minutes: number | null;
+	seasons: Array<{ season_number: number; runtime_minutes: number }>;
+}
+
+export interface SharePayload {
+	v: 1;
+	items: ShareItem[];
+}
