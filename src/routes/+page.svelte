@@ -339,7 +339,7 @@
 					onclick={() => toggleSeason(item, season.season_number)}
 					title="{season.name} · {season.episode_count} eps"
 				>
-					{watched ? '✓ ' : ''}S{season.season_number}
+					{watched ? '✓' : 'S'}{season.season_number}
 				</button>
 			{/each}
 			{#if chip}
