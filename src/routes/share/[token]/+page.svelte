@@ -17,10 +17,12 @@
 	let addedCount = $state(0);
 	let skipCount  = $state(0);
 	let addDone    = $state(false);
+	let addError   = $state('');
 
 	async function addAllToQueue() {
 		if (addingAll) return;
 		addingAll = true;
+		addError = '';
 		const tag = queueName || 'Shared List';
 		getOrAssignColor(tag);
 		let added = 0;
@@ -53,14 +55,16 @@
 				if (err instanceof DOMException && err.name === 'ConstraintError') {
 					dupes++;
 				} else {
-					console.error('Failed to add item:', item.title, err);
+					const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+					console.error('addItem failed for', item.title, err);
+					if (!addError) addError = msg;
 				}
 			}
 		}
 		addedCount = added;
 		skipCount  = dupes;
-		addDone   = true;
-		addingAll = false;
+		addDone    = true;
+		addingAll  = false;
 	}
 
 	const DEFAULT: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
@@ -119,13 +123,19 @@
 			<div class="flex flex-wrap items-center gap-2">
 				{#if pageState === 'ready' && items.length > 0}
 					{#if addDone}
-						<span class="rounded-lg bg-teal-100 px-4 py-2 text-sm font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-400">
-							{#if addedCount > 0}
-								✓ {addedCount} added{skipCount > 0 ? ` · ${skipCount} already in queue` : ''}
-							{:else}
-								✓ Already in your queue
-							{/if}
-						</span>
+						{#if addError && !addedCount && !skipCount}
+							<span class="rounded-lg bg-red-100 px-4 py-2 text-sm font-medium text-red-700 dark:bg-red-900/40 dark:text-red-400" title={addError}>
+								Failed to add — {addError}
+							</span>
+						{:else}
+							<span class="rounded-lg bg-teal-100 px-4 py-2 text-sm font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-400">
+								{#if addedCount > 0}
+									✓ {addedCount} added{skipCount > 0 ? ` · ${skipCount} already in queue` : ''}
+								{:else}
+									✓ Already in your queue
+								{/if}
+							</span>
+						{/if}
 					{:else}
 						<button
 							onclick={addAllToQueue}
