@@ -42,6 +42,7 @@
 	// Toolbar dropdowns
 	let filterOpen = $state(false);
 	let viewOpen   = $state(false);
+	let releasePopupId: number | null = $state(null);
 
 	// ── Share ─────────────────────────────────────────────────────────────────
 	let shareOpen          = $state(false);
@@ -321,12 +322,14 @@
 	const t = e.target as Element;
 	if (activeItem && !t.closest('[data-item]')) { activeItem = null; ganttPopupAnchor = null; }
 	if (!t.closest('[data-dropdown]')) { filterOpen = false; viewOpen = false; }
+	if (!t.closest('[data-release-popup]')) { releasePopupId = null; }
 }} />
 
 {#snippet seasonPicker(item: WatchlistItem)}
-	{#if item.media_type === 'tv' && item.seasons?.length}
+	{@const chip = releaseChip(item.release)}
+	{#if item.media_type === 'tv' && (item.seasons?.length || chip)}
 		<div class="flex flex-wrap gap-0.5 pt-0.5">
-			{#each item.seasons as season (season.season_number)}
+			{#each item.seasons ?? [] as season (season.season_number)}
 				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
 				<button
 					class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
@@ -339,6 +342,25 @@
 					{watched ? '✓ ' : ''}S{season.season_number}
 				</button>
 			{/each}
+			{#if chip}
+				{@const isOpen = releasePopupId === item.id}
+				<div class="relative" data-release-popup>
+					<button
+						class="rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
+							{isOpen
+								? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
+								: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
+						onclick={() => { releasePopupId = isOpen ? null : item.id; }}
+					>
+						{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
+					</button>
+					{#if isOpen}
+						<div class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700">
+							{chip}
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	{/if}
 {/snippet}
@@ -509,7 +531,7 @@
 								{/if}
 							{/if}
 						</div>
-						{#if releaseChip(item.release)}
+						{#if item.media_type === 'movie' && releaseChip(item.release)}
 							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(item.release)}</p>
 						{/if}
 						<div class="mt-auto flex gap-1.5 pt-1">
@@ -593,13 +615,13 @@
 						</span>
 					</div>
 
-					<!-- Row 3: release chip -->
-					{#if releaseChip(item.release)}
+					<!-- Row 3: release chip (movies only; TV shows it in the season chip row) -->
+					{#if item.media_type === 'movie' && releaseChip(item.release)}
 						<p class="ml-11 mt-0.5 text-[10px] leading-snug text-amber-500 dark:text-amber-400">{releaseChip(item.release)}</p>
 					{/if}
 
 					<!-- Row 4: season picker -->
-					{#if item.media_type === 'tv' && item.seasons?.length}
+					{#if item.media_type === 'tv' && (item.seasons?.length || releaseChip(item.release))}
 						<div class="ml-11 mt-1">
 							{@render seasonPicker(item)}
 						</div>
