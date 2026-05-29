@@ -15,6 +15,7 @@
 
 	let addingAll  = $state(false);
 	let addedCount = $state(0);
+	let skipCount  = $state(0);
 	let addDone    = $state(false);
 
 	async function addAllToQueue() {
@@ -22,7 +23,8 @@
 		addingAll = true;
 		const tag = queueName || 'Shared List';
 		getOrAssignColor(tag);
-		let n = 0;
+		let added = 0;
+		let dupes = 0;
 		for (const item of items) {
 			try {
 				await addItem({
@@ -34,7 +36,7 @@
 					providers: item.providers,
 					rentable: false,
 					runtime_minutes: item.runtime_minutes,
-					seasons: item.seasons.map((s) => ({
+					seasons: (item.seasons ?? []).map((s) => ({
 						season_number: s.season_number,
 						episode_count: 0,
 						name: '',
@@ -46,12 +48,17 @@
 					release: null,
 					queue_tag: tag
 				});
-				n++;
-			} catch {
-				// skip duplicates
+				added++;
+			} catch (err) {
+				if (err instanceof DOMException && err.name === 'ConstraintError') {
+					dupes++;
+				} else {
+					console.error('Failed to add item:', item.title, err);
+				}
 			}
 		}
-		addedCount = n;
+		addedCount = added;
+		skipCount  = dupes;
 		addDone   = true;
 		addingAll = false;
 	}
@@ -113,7 +120,11 @@
 				{#if pageState === 'ready' && items.length > 0}
 					{#if addDone}
 						<span class="rounded-lg bg-teal-100 px-4 py-2 text-sm font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-400">
-							✓ {addedCount} added
+							{#if addedCount > 0}
+								✓ {addedCount} added{skipCount > 0 ? ` · ${skipCount} already in queue` : ''}
+							{:else}
+								✓ Already in your queue
+							{/if}
 						</span>
 					{:else}
 						<button
