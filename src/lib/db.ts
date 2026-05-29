@@ -103,7 +103,9 @@ export async function patchProviders(
 	id: number,
 	providers: WatchlistItem['providers'],
 	rentable: boolean,
-	release: WatchlistItem['release']
+	release: WatchlistItem['release'],
+	seasons?: WatchlistItem['seasons'],
+	runtime_minutes?: number | null
 ): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
@@ -115,6 +117,8 @@ export async function patchProviders(
 			item.providers = providers;
 			item.rentable = rentable;
 			item.release = release;
+			if (seasons && seasons.length > 0) item.seasons = seasons;
+			if (runtime_minutes != null) item.runtime_minutes = runtime_minutes;
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
 			put.onerror = () => reject(put.error);
