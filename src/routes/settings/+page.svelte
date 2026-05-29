@@ -4,6 +4,7 @@
 	import { encrypt, decrypt } from '$lib/crypto';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { openWelcome } from '$lib/welcome.svelte';
+	import { getQueueName, setQueueName, getQueueColors, setQueueColor } from '$lib/queue-colors';
 	import type { WatchlistItem } from '$lib/types';
 	import pkg from '../../../package.json';
 
@@ -166,8 +167,19 @@
 		} finally { feedbackSending = false; }
 	}
 
+	// ── Queue identity ────────────────────────────────────────────────────────
+	let myQueueName  = $state('My Queue');
+	let queueColors  = $state<Record<string, string>>({});
+	let importedTags = $state<string[]>([]);
+
+	function saveQueueName() { setQueueName(myQueueName); }
+	function updateImportedColor(tag: string, color: string) {
+		setQueueColor(tag, color);
+		queueColors = { ...queueColors, [tag]: color };
+	}
+
 	// ── Persistence ───────────────────────────────────────────────────────────
-	onMount(() => {
+	onMount(async () => {
 		try {
 			const weekly = localStorage.getItem('sq:budget:weekly');
 			const weeks  = localStorage.getItem('sq:budget:weeks');
@@ -181,6 +193,16 @@
 				hoursPerWeek  = Math.round(legacy / weeksPerMonth);
 			}
 		} catch {}
+
+		myQueueName = getQueueName();
+		queueColors = getQueueColors();
+
+		const items = await getAll();
+		const tags = new Set<string>();
+		for (const item of items) {
+			if (item.queue_tag) tags.add(item.queue_tag);
+		}
+		importedTags = [...tags].sort();
 	});
 
 	$effect(() => {
@@ -210,6 +232,64 @@
 				{#if theme.dark}☀ Light mode{:else}☾ Dark mode{/if}
 			</button>
 		</div>
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- My Queue -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">My Queue</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			This name appears when you share your list with others.
+		</p>
+		<input
+			type="text"
+			placeholder="My Queue"
+			bind:value={myQueueName}
+			oninput={saveQueueName}
+			maxlength="40"
+			class="w-full rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+		/>
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- Imported Queues -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Imported Queues</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Queues shared with you. Edit each color to distinguish them in your main view.
+		</p>
+		{#if importedTags.length === 0}
+			<p class="text-sm text-gray-400 dark:text-gray-600">No shared queues imported yet.</p>
+		{:else}
+			<div class="space-y-2">
+				{#each importedTags as tag (tag)}
+					{@const color = queueColors[tag] ?? '#888888'}
+					<div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
+						<div class="flex items-center gap-2.5 min-w-0">
+							<span
+								class="h-3 w-3 shrink-0 rounded-full"
+								style="background:{color};"
+							></span>
+							<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{tag}</span>
+						</div>
+						<label class="relative ml-3 shrink-0 cursor-pointer" title="Change color">
+							<span
+								class="block h-7 w-7 rounded-lg border border-gray-200 shadow-sm dark:border-gray-700"
+								style="background:{color};"
+							></span>
+							<input
+								type="color"
+								value={color}
+								oninput={(e) => updateImportedColor(tag, (e.currentTarget as HTMLInputElement).value)}
+								class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+							/>
+						</label>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>

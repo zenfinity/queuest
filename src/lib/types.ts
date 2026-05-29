@@ -43,6 +43,7 @@ export interface WatchlistItem {
 	added_at: string;
 	watched_at: string | null;
 	release?: ReleaseInfo | null;
+	queue_tag?: string | null;         // set on items imported from someone else's shared list
 }
 
 export interface SearchResult {
@@ -79,5 +80,6 @@ export interface ShareItem {
 
 export interface SharePayload {
 	v: 1;
+	queue_name?: string;
 	items: ShareItem[];
 }

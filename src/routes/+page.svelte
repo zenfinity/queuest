@@ -7,6 +7,7 @@
 	import { theme } from '$lib/theme.svelte';
 	import { remainingRuntime, releaseChip } from '$lib/progress';
 	import { generateShareKey, encryptWithKey } from '$lib/crypto';
+	import { getQueueName, getQueueColors } from '$lib/queue-colors';
 	import type { SharePayload } from '$lib/types';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
@@ -29,8 +30,9 @@
 	}
 
 	// ── Core state ────────────────────────────────────────────────────────────
-	let items       = $state<WatchlistItem[]>([]);
-	let loaded      = $state(false);
+	let items        = $state<WatchlistItem[]>([]);
+	let loaded       = $state(false);
+	let queueColors  = $state<Record<string, string>>({});
 	let tab         = $state<'queue' | 'watched'>('queue');
 	let busy        = $state(new Set<number>());
 	// Gantt detail popup — fixed-position to escape the overflow:hidden budget zone
@@ -105,6 +107,7 @@
 		try {
 			const payload: SharePayload = {
 				v: 1,
+				queue_name: getQueueName(),
 				items: shareFiltered.map((item) => ({
 					tmdb_id: item.tmdb_id,
 					media_type: item.media_type,
@@ -247,6 +250,7 @@
 		sortBy      = loadPref<SortKey>('sq:sort', 'added');
 		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
 		budgetHours = loadJSON<number>('sq:budget', 40);
+		queueColors = getQueueColors();
 		await reload();
 		loaded = true;
 	});
@@ -458,7 +462,9 @@
 				{@const cardPct = Math.min(100, (effectiveRuntime(item) / (budgetHours * 60)) * 100)}
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
-				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
+				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<div class="relative aspect-[2/3] bg-gray-200 dark:bg-gray-800">
 						{#if item.poster_path}
 							<img src="{TMDB_IMG}/w300{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
@@ -532,7 +538,9 @@
 				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
-				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80">
+				{@const tagColor  = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80"
+					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<!-- Row 1: poster · title · actions -->
 					<div class="flex items-center gap-3">
 						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">

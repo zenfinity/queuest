@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import type { ShareItem, SharePayload } from '$lib/types';
 	import { decryptWithKey } from '$lib/crypto';
+	import { addItem } from '$lib/db';
+	import { getOrAssignColor } from '$lib/queue-colors';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 
 	let { data }: { data: { token: string } } = $props();
@@ -9,6 +11,50 @@
 	type PageState = 'loading' | 'ready' | 'expired' | 'invalid' | 'error';
 	let pageState: PageState = $state('loading');
 	let items: ShareItem[] = $state([]);
+	let queueName = $state('');
+
+	let addingAll  = $state(false);
+	let addedCount = $state(0);
+	let addDone    = $state(false);
+
+	async function addAllToQueue() {
+		if (addingAll) return;
+		addingAll = true;
+		const tag = queueName || 'Shared List';
+		getOrAssignColor(tag);
+		let n = 0;
+		for (const item of items) {
+			try {
+				await addItem({
+					tmdb_id: item.tmdb_id,
+					media_type: item.media_type,
+					title: item.title,
+					poster_path: item.poster_path,
+					overview: null,
+					providers: item.providers,
+					rentable: false,
+					runtime_minutes: item.runtime_minutes,
+					seasons: item.seasons.map((s) => ({
+						season_number: s.season_number,
+						episode_count: 0,
+						name: '',
+						runtime_minutes: s.runtime_minutes
+					})),
+					watched_seasons: [],
+					current_season: null,
+					current_episode: null,
+					release: null,
+					queue_tag: tag
+				});
+				n++;
+			} catch {
+				// skip duplicates
+			}
+		}
+		addedCount = n;
+		addDone   = true;
+		addingAll = false;
+	}
 
 	const DEFAULT: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
 
@@ -39,6 +85,7 @@
 			const json = await decryptWithKey(buf, key);
 			const payload = JSON.parse(json) as SharePayload;
 			items = payload.items ?? [];
+			queueName = payload.queue_name ?? '';
 			pageState = 'ready';
 		} catch {
 			pageState = 'invalid';
@@ -53,19 +100,38 @@
 	<div class="rounded-xl bg-orange-50 p-4 dark:bg-orange-950/30">
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div>
-				<p class="text-sm font-semibold text-orange-700 dark:text-orange-400">Shared watchlist</p>
+				<p class="text-sm font-semibold text-orange-700 dark:text-orange-400">
+					{queueName || 'Shared watchlist'}
+				</p>
 				{#if pageState === 'ready'}
 					<p class="text-xs text-orange-600/70 dark:text-orange-500/60">
 						{items.length} title{items.length === 1 ? '' : 's'} · {hms(totalMins)} total
 					</p>
 				{/if}
 			</div>
-			<a
-				href="/"
-				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-			>
-				Build your own queue →
-			</a>
+			<div class="flex flex-wrap items-center gap-2">
+				{#if pageState === 'ready' && items.length > 0}
+					{#if addDone}
+						<span class="rounded-lg bg-teal-100 px-4 py-2 text-sm font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-400">
+							✓ {addedCount} added
+						</span>
+					{:else}
+						<button
+							onclick={addAllToQueue}
+							disabled={addingAll}
+							class="rounded-lg bg-white px-4 py-2 text-sm font-medium text-orange-600 ring-1 ring-orange-300 transition-colors hover:bg-orange-50 disabled:opacity-50 dark:bg-orange-950/20 dark:text-orange-400 dark:ring-orange-800 dark:hover:bg-orange-950/40"
+						>
+							{addingAll ? 'Adding…' : '+ Add to my queue'}
+						</button>
+					{/if}
+				{/if}
+				<a
+					href="/"
+					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+				>
+					Build your own queue →
+				</a>
+			</div>
 		</div>
 	</div>
 
