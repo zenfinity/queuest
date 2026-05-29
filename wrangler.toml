@@ -3,9 +3,8 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
-# Run: wrangler kv namespace create SHARE_KV
-# Then replace the id values below with the output IDs.
-[[kv_namespaces]]
-binding = "SHARE_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# To enable sharing: create a KV namespace and bind it in the Cloudflare
+# Pages dashboard under Settings → Functions → KV namespace bindings,
+# using variable name SHARE_KV.
+# Local dev: wrangler kv namespace create SHARE_KV --preview
+#   then add a [[kv_namespaces]] block with the returned id/preview_id.
