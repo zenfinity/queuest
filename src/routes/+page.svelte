@@ -180,7 +180,7 @@
 		return [...list].sort((a, b) => {
 			if (sortBy === 'title') return a.title.localeCompare(b.title);
 			if (sortBy === 'runtime') {
-				return (a.runtime_minutes ?? Infinity) - (b.runtime_minutes ?? Infinity);
+				return effectiveRuntime(a) - effectiveRuntime(b);
 			}
 			return b.added_at.localeCompare(a.added_at);
 		});
@@ -484,11 +484,7 @@
 									style="left:{cardPct}%; margin-left:-3px; background:{cardDot};"></div>
 							</div>
 							<span class="shrink-0 text-[10px] tabular-nums text-gray-500">
-								{#if item.runtime_minutes}
-									{formatRuntime(item.runtime_minutes, item.media_type)}
-								{:else}
-									~{hms(DEFAULT_RUNTIME[item.media_type])}
-								{/if}
+								{formatRuntime(effectiveRuntime(item), item.media_type)}
 							</span>
 						</div>
 						{@render seasonPicker(item)}
