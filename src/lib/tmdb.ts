@@ -232,82 +232,86 @@ function tvReleaseInfo(
 // (e.g. "Apple TV Amazon Channel", "Paramount+ Amazon Channel").
 const BUNDLE_NAME_RE = /bundle|with hulu|with disney|with max|\bvia\b|amazon channel/i;
 
-// When BOTH IDs in a pair appear together in the same flatrate list it means
-// JustWatch is attributing the title to the whole bundle rather than the platform
-// that actually hosts it.  Neither standalone logo is accurate, so we collapse
-// the pair into a single honest "X / Y" entry using the first provider's logo.
-//
 // provider_id reference (JustWatch / TMDB):
 //   8   Netflix          15  Hulu           337  Disney+
 //   350 Apple TV+        386 Peacock Premium 531  Paramount+
 //   1899 Max
-const BUNDLE_PAIRS: Array<{ ids: [number, number]; name: string }> = [
-	{ ids: [337, 15], name: 'Disney+ / Hulu' } // Disney Bundle (Disney+, Hulu, ESPN+)
-];
 
 /**
  * Clean a raw flatrate provider list from TMDB/JustWatch:
  *  1. Drop entries whose name contains bundle/add-on wording.
- *  2. Detect cross-contaminated bundle pairs (e.g. Disney+ AND Hulu both present)
- *     and collapse them into a single labelled entry so the user isn't shown a
- *     standalone logo that implies they only need that one subscription.
+ *  2. Deduplicate tier variants (e.g. "Peacock Premium" vs "Peacock Premium Plus").
  *
- * Exported so it can also be applied to providers already stored in IndexedDB.
+ * Disney+/Hulu pair disambiguation is handled upstream in augmentProviders(),
+ * which has network/company context to determine which service is canonical.
  */
 export function filterProviders(providers: Provider[]): Provider[] {
-	// Pass 1 — name-based filter
 	const named = providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name));
-
-	// Pass 2 — pair-based bundle detection
-	const byId = new Map(named.map((p) => [p.provider_id, p]));
-	const drop = new Set<number>();
-	const synthetic: Provider[] = [];
-
-	for (const { ids, name } of BUNDLE_PAIRS) {
-		const [a, b] = ids;
-		if (byId.has(a) && byId.has(b)) {
-			drop.add(a);
-			drop.add(b);
-			// Use the first provider's logo as the visual anchor for the bundle entry
-			synthetic.push({ ...byId.get(a)!, provider_name: name });
-		}
-	}
-
-	const clean = named.filter((p) => !drop.has(p.provider_id));
-	const merged = [...clean, ...synthetic];
 
 	// Deduplicate tier variants: if one name is a prefix of another
 	// (e.g. "Peacock Premium" vs "Peacock Premium Plus"), keep only the base.
-	return merged.filter(
-		(p) => !merged.some((other) => other !== p && p.provider_name.startsWith(other.provider_name + ' '))
+	return named.filter(
+		(p) => !named.some((other) => other !== p && p.provider_name.startsWith(other.provider_name + ' '))
+	);
+}
+
+function dedupTiers(providers: Provider[]): Provider[] {
+	return providers.filter(
+		(p) => !providers.some((other) => other !== p && p.provider_name.startsWith(other.provider_name + ' '))
 	);
 }
 
 /**
- * Apply Disney+ inference on top of the cleaned provider list.
- * If networks or production companies identify the title as Disney+ content,
- * inject the Disney+ provider and remove any erroneous Hulu entry (which
- * appears because Hulu bundle subscribers can access Disney+ content).
+ * Apply network-aware provider filtering on top of raw TMDB/JustWatch flatrate data.
+ *
+ * When Hulu (15) and Disney+ (337) both appear it means JustWatch is surfacing
+ * bundle access — exactly one service is the canonical home.  We resolve it:
+ *   • Disney+ native content (network 2739 or core Disney companies): strip Hulu.
+ *   • Everything else (e.g. FX/Hulu originals like The Bear): strip Disney+.
+ *
+ * Also injects Disney+ for Disney-owned content that is missing from JustWatch
+ * entirely (Disney pulled their catalogue from JustWatch).
  */
 export function augmentProviders(
 	providers: Provider[],
 	networkIds: number[],
 	companyIds: number[]
 ): Provider[] {
-	const filtered = filterProviders(providers);
-
 	const isDisneyPlus =
 		networkIds.includes(DISNEY_PLUS_NETWORK_ID) ||
 		companyIds.some((id) => DISNEY_PLUS_COMPANY_IDS.has(id));
 
-	if (!isDisneyPlus) return filtered;
+	// Strip add-on / bundle-named entries
+	const named = providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name));
+	const byId = new Map(named.map((p) => [p.provider_id, p]));
 
-	// Strip Hulu — it's bundle contamination for Disney+ content
-	const withoutHulu = filtered.filter((p) => p.provider_id !== 15);
+	// When both Hulu and Disney+ appear, exactly one is bundle contamination.
+	// Network/company metadata determines which service actually hosts the content.
+	if (byId.has(337) && byId.has(15)) {
+		if (isDisneyPlus) {
+			// Disney+ native: Hulu appears only because bundle subscribers can
+			// access Disney+ via the Hulu interface. Strip Hulu.
+			const result = named.filter((p) => p.provider_id !== 15);
+			return dedupTiers(
+				result.some((p) => p.provider_id === 337) ? result : [DISNEY_PLUS_PROVIDER, ...result]
+			);
+		} else {
+			// Hulu-native (FX originals, etc.): Disney+ appears only because
+			// Disney bundle subscribers can watch Hulu through the bundle. Strip Disney+.
+			return dedupTiers(named.filter((p) => p.provider_id !== 337));
+		}
+	}
 
-	// Inject Disney+ if not already there
-	const alreadyHasDisney = withoutHulu.some((p) => p.provider_id === 337);
-	return alreadyHasDisney ? withoutHulu : [DISNEY_PLUS_PROVIDER, ...withoutHulu];
+	// Disney+ content absent from JustWatch entirely (Disney removed their catalogue)
+	if (isDisneyPlus) {
+		const without15 = named.filter((p) => p.provider_id !== 15);
+		return dedupTiers(
+			without15.some((p) => p.provider_id === 337) ? without15 : [DISNEY_PLUS_PROVIDER, ...without15]
+		);
+	}
+
+	// No Disney+/Hulu conflict: generic name filter + tier dedup
+	return filterProviders(providers);
 }
 
 export async function getWatchProviders(
@@ -316,12 +320,13 @@ export async function getWatchProviders(
 	apiKey: string
 ): Promise<{ providers: Provider[]; rentable: boolean }> {
 	const res = await fetch(`${BASE}/${mediaType}/${id}/watch/providers?api_key=${apiKey}`);
-	if (!res.ok) return [];
+	if (!res.ok) return { providers: [], rentable: false };
 	const data = (await res.json()) as {
 		results?: { US?: { flatrate?: Provider[]; rent?: Provider[]; buy?: Provider[] } };
 	};
 	const us = data.results?.US ?? {};
 	const flatrate = us.flatrate ?? [];
 	const rentable = (us.rent?.length ?? 0) > 0 || (us.buy?.length ?? 0) > 0;
-	return { providers: filterProviders(flatrate), rentable };
+	// Return raw flatrate — augmentProviders() applies all filtering with network context
+	return { providers: flatrate, rentable };
 }
