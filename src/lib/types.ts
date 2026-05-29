@@ -43,6 +43,7 @@ export interface WatchlistItem {
 	added_at: string;
 	watched_at: string | null;
 	release?: ReleaseInfo | null;
+	queue_tag?: string | null;         // set on items imported from someone else's shared list
 }
 
 export interface SearchResult {
@@ -65,4 +66,20 @@ export interface Suggestion {
 	logo_path: string;
 	runtime_minutes: number;
 	title_count: number;
+}
+
+export interface ShareItem {
+	tmdb_id: number;
+	media_type: 'movie' | 'tv';
+	title: string;
+	poster_path: string | null;
+	providers: Provider[];
+	runtime_minutes: number | null;
+	seasons: Array<{ season_number: number; runtime_minutes: number }>;
+}
+
+export interface SharePayload {
+	v: 1;
+	queue_name?: string;
+	items: ShareItem[];
 }

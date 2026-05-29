@@ -6,6 +6,9 @@
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
 	import { remainingRuntime, releaseChip } from '$lib/progress';
+	import { generateShareKey, encryptWithKey } from '$lib/crypto';
+	import { getQueueName, getQueueColors } from '$lib/queue-colors';
+	import type { SharePayload } from '$lib/types';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
@@ -27,8 +30,9 @@
 	}
 
 	// ── Core state ────────────────────────────────────────────────────────────
-	let items       = $state<WatchlistItem[]>([]);
-	let loaded      = $state(false);
+	let items        = $state<WatchlistItem[]>([]);
+	let loaded       = $state(false);
+	let queueColors  = $state<Record<string, string>>({});
 	let tab         = $state<'queue' | 'watched'>('queue');
 	let busy        = $state(new Set<number>());
 	// Gantt detail popup — fixed-position to escape the overflow:hidden budget zone
@@ -38,6 +42,106 @@
 	// Toolbar dropdowns
 	let filterOpen = $state(false);
 	let viewOpen   = $state(false);
+
+	// ── Share ─────────────────────────────────────────────────────────────────
+	let shareOpen          = $state(false);
+	let shareStatus        = $state<'queue' | 'watched' | 'both'>('queue');
+	let shareType          = $state<'all' | 'movie' | 'tv'>('all');
+	let shareProviderNames = $state(new Set<string>());
+	let shareCreating      = $state(false);
+	let shareUrl           = $state('');
+	let shareCopied        = $state(false);
+	let shareError         = $state('');
+
+	let shareAllProviders = $derived.by(() => {
+		const map = new Map<string, { provider_id: number; logo_path: string; count: number }>();
+		for (const item of items) {
+			for (const p of item.providers) {
+				if (!map.has(p.provider_name)) {
+					map.set(p.provider_name, { provider_id: p.provider_id, logo_path: p.logo_path, count: 0 });
+				}
+				map.get(p.provider_name)!.count++;
+			}
+		}
+		return [...map.entries()]
+			.sort((a, b) => b[1].count - a[1].count)
+			.map(([name, { provider_id, logo_path, count }]) => ({ name, provider_id, logo_path, count }));
+	});
+
+	let shareFiltered = $derived.by(() => {
+		let base = items;
+		if (shareStatus === 'queue') base = base.filter((i) => !i.watched_at);
+		else if (shareStatus === 'watched') base = base.filter((i) => i.watched_at);
+		if (shareType !== 'all') base = base.filter((i) => i.media_type === shareType);
+		const allChecked = shareProviderNames.size === shareAllProviders.length;
+		return base.filter((i) => {
+			if (!i.providers.length) return allChecked;
+			return i.providers.some((p) => shareProviderNames.has(p.provider_name));
+		});
+	});
+
+	let shareTotal = $derived(shareFiltered.reduce((s, i) => s + effectiveRuntime(i), 0));
+
+	function openShare() {
+		shareStatus = 'queue';
+		shareType = 'all';
+		shareProviderNames = new Set(shareAllProviders.map((p) => p.name));
+		shareUrl = '';
+		shareCopied = false;
+		shareError = '';
+		shareOpen = true;
+	}
+
+	function toggleShareProvider(name: string) {
+		const next = new Set(shareProviderNames);
+		if (next.has(name)) next.delete(name); else next.add(name);
+		shareProviderNames = next;
+		shareUrl = '';
+	}
+
+	async function createShareLink() {
+		if (!shareFiltered.length || shareCreating) return;
+		shareCreating = true;
+		shareUrl = '';
+		shareError = '';
+		try {
+			const payload: SharePayload = {
+				v: 1,
+				queue_name: getQueueName(),
+				items: shareFiltered.map((item) => ({
+					tmdb_id: item.tmdb_id,
+					media_type: item.media_type,
+					title: item.title,
+					poster_path: item.poster_path,
+					providers: item.providers,
+					runtime_minutes: item.runtime_minutes,
+					seasons: item.seasons.map((s) => ({ season_number: s.season_number, runtime_minutes: s.runtime_minutes }))
+				}))
+			};
+			const key = await generateShareKey();
+			const blob = await encryptWithKey(JSON.stringify(payload), key);
+			const res = await fetch('/api/share', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/octet-stream' },
+				body: blob
+			});
+			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+			const { token } = (await res.json()) as { token: string };
+			shareUrl = `${window.location.origin}/share/${token}#${key}`;
+		} catch (e) {
+			shareError = e instanceof Error ? e.message : 'Failed to create share link.';
+		} finally {
+			shareCreating = false;
+		}
+	}
+
+	async function copyShareUrl() {
+		try {
+			await navigator.clipboard.writeText(shareUrl);
+			shareCopied = true;
+			setTimeout(() => { shareCopied = false; }, 2000);
+		} catch {}
+	}
 
 	function openGanttPopup(e: MouseEvent, item: WatchlistItem) {
 		e.stopPropagation();
@@ -146,6 +250,7 @@
 		sortBy      = loadPref<SortKey>('sq:sort', 'added');
 		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
 		budgetHours = loadJSON<number>('sq:budget', 40);
+		queueColors = getQueueColors();
 		await reload();
 		loaded = true;
 	});
@@ -312,6 +417,18 @@
 					</div>
 				{/if}
 			</div>
+
+			<!-- Share button -->
+			<button
+				onclick={openShare}
+				class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
+					bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+			>
+				<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0" aria-hidden="true">
+					<path d="M13 4.5a2.5 2.5 0 11.702 1.737L6.97 9.604a2.518 2.518 0 010 .792l6.733 3.367a2.5 2.5 0 11-.671 1.341l-6.733-3.367a2.5 2.5 0 110-3.474l6.733-3.367A2.5 2.5 0 0113 4.5z"/>
+				</svg>
+				<span class="hidden sm:inline">Share</span>
+			</button>
 		{/if}
 	</div>
 
@@ -345,7 +462,9 @@
 				{@const cardPct = Math.min(100, (effectiveRuntime(item) / (budgetHours * 60)) * 100)}
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
-				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
+				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<div class="relative aspect-[2/3] bg-gray-200 dark:bg-gray-800">
 						{#if item.poster_path}
 							<img src="{TMDB_IMG}/w300{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
@@ -419,7 +538,9 @@
 				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
-				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80">
+				{@const tagColor  = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80"
+					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<!-- Row 1: poster · title · actions -->
 					<div class="flex items-center gap-3">
 						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
@@ -582,6 +703,117 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- ── Share modal ────────────────────────────────────────────────────────── -->
+{#if shareOpen}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+		onclick={() => { shareOpen = false; }}
+	>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-900"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<div class="mb-4 flex items-center justify-between">
+				<h2 class="text-base font-semibold text-gray-900 dark:text-white">Share list</h2>
+				<button onclick={() => { shareOpen = false; }} class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Close">✕</button>
+			</div>
+
+			<div class="space-y-4">
+				<!-- Status filter -->
+				<div>
+					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Include</p>
+					<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+						{#each ([['queue','To Watch'],['watched','Watched'],['both','Both']] as const) as [key, label] (key)}
+							<button class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
+								{shareStatus === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => { shareStatus = key; shareUrl = ''; }}>{label}</button>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Type filter -->
+				<div>
+					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Type</p>
+					<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+						{#each ([['all','All'],['movie','Movies'],['tv','TV']] as const) as [key, label] (key)}
+							<button class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
+								{shareType === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => { shareType = key; shareUrl = ''; }}>{label}</button>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Provider filter -->
+				{#if shareAllProviders.length > 0}
+					<div>
+						<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Providers</p>
+						<div class="flex flex-wrap gap-1.5">
+							{#each shareAllProviders as p (p.name)}
+								{@const on = shareProviderNames.has(p.name)}
+								<button
+									onclick={() => toggleShareProvider(p.name)}
+									class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors
+										{on ? 'bg-orange-50 text-orange-700 ring-orange-300 dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-800' : 'bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700'}"
+								>
+									<img src="{TMDB_IMG}/w92{p.logo_path}" alt="" class="h-4 w-4 rounded" />
+									{p.name}
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				<!-- Summary -->
+				<div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
+					<span class="text-xs text-gray-500">
+						{shareFiltered.length} title{shareFiltered.length === 1 ? '' : 's'}
+						{#if shareFiltered.length > 0}· {hms(shareTotal)}{/if}
+					</span>
+					{#if shareFiltered.length === 0}
+						<span class="text-xs text-amber-500">Nothing to share</span>
+					{/if}
+				</div>
+
+				<!-- URL / create button -->
+				{#if shareUrl}
+					<div class="space-y-2">
+						<div class="flex gap-2">
+							<input
+								type="text"
+								readonly
+								value={shareUrl}
+								class="min-w-0 flex-1 rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700 outline-none dark:bg-gray-800 dark:text-gray-300"
+							/>
+							<button
+								onclick={copyShareUrl}
+								class="shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition-colors
+									{shareCopied ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'}"
+							>
+								{shareCopied ? '✓ Copied' : 'Copy'}
+							</button>
+						</div>
+						<p class="text-[10px] text-gray-400 dark:text-gray-600">Link expires in 30 days · server stores only the encrypted blob</p>
+					</div>
+				{:else}
+					<button
+						onclick={createShareLink}
+						disabled={shareFiltered.length === 0 || shareCreating}
+						class="w-full rounded-lg bg-orange-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					>
+						{shareCreating ? 'Creating link…' : 'Create share link'}
+					</button>
+				{/if}
+
+				{#if shareError}
+					<p class="text-xs text-red-500">{shareError}</p>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- ── Gantt detail popup (fixed-position, escapes overflow:hidden) ──────── -->
 {#if activeItem && ganttPopupAnchor}
