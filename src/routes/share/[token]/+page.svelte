@@ -23,11 +23,13 @@
 		if (addingAll) return;
 		addingAll = true;
 		addError = '';
-		const tag = queueName || 'Shared List';
-		getOrAssignColor(tag);
+		const fallbackTag = queueName || 'Shared List';
+		getOrAssignColor(fallbackTag);
 		let added = 0;
 		let dupes = 0;
 		for (const item of items) {
+			const tag = item.queue_tag || fallbackTag;
+			if (tag !== fallbackTag) getOrAssignColor(tag);
 			try {
 				await addItem({
 					tmdb_id: item.tmdb_id,
