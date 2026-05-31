@@ -513,7 +513,7 @@
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+				<div class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<button
 						class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
@@ -594,7 +594,7 @@
 
 	<!-- ── LIST ─────────────────────────────────────────────────────────────── -->
 	{:else if viewMode === 'list'}
-		<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
+		<div class="divide-y divide-gray-200 rounded-xl dark:divide-gray-800/60">
 			{#each flatItems as item (item.id)}
 				{@const rt = effectiveRuntime(item)}
 				{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
@@ -602,7 +602,7 @@
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
 				{@const tagColor  = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80"
+				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 first:rounded-t-xl last:rounded-b-xl"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<!-- Row 1: poster · title · actions -->
 					<div class="flex items-center gap-3">
