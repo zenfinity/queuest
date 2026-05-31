@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @variant dark (&:where(.dark, .dark *));
 
-/* Prevent any overflowing element (popups, absolute panels) from
-   creating a horizontal scrollbar on narrow viewports */
-html, body { overflow-x: hidden; }
+/* iOS Safari requires position:relative on body for overflow-x:hidden to work.
+   Without it, content wider than the viewport still scrolls horizontally. */
+html { overflow-x: hidden; }
+body { overflow-x: hidden; position: relative; max-width: 100%; }
