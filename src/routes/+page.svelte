@@ -43,6 +43,7 @@
 	let filterOpen = $state(false);
 	let viewOpen   = $state(false);
 	let releasePopupId: number | null = $state(null);
+	let libraryPopupId: number | null = $state(null);
 
 	// ── Share ─────────────────────────────────────────────────────────────────
 	let shareOpen          = $state(false);
@@ -343,6 +344,7 @@
 	if (activeItem && !t.closest('[data-item]')) { activeItem = null; ganttPopupAnchor = null; }
 	if (!t.closest('[data-dropdown]')) { filterOpen = false; viewOpen = false; }
 	if (!t.closest('[data-release-popup]')) { releasePopupId = null; }
+	if (!t.closest('[data-library-popup]')) { libraryPopupId = null; }
 }} />
 
 {#snippet seasonPicker(item: WatchlistItem)}
@@ -544,12 +546,24 @@
 							{#if !item.providers.length}
 								{#if item.rentable}
 									<span class="text-xs text-gray-400 dark:text-gray-500">Rent/Buy only</span>
-								{:else if releaseChip(item.release)}
-									<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming</span>
 								{:else}
-									<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming —</span>
-									<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Kanopy</a>
-									<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Hoopla</a>
+									{@const isOpen = libraryPopupId === item.id}
+									<div class="relative" data-library-popup>
+										<button
+											class="text-sm leading-none transition-opacity hover:opacity-60"
+											onclick={() => { libraryPopupId = isOpen ? null : item.id; }}
+											title="Not on streaming services"
+										>🚫</button>
+										{#if isOpen}
+											<div class="absolute top-full left-0 z-20 mt-1 w-max rounded-lg bg-white px-3 py-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-700">
+												<p class="mb-1.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500">Check your library</p>
+												<div class="flex flex-col gap-1">
+													<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400">Kanopy →</a>
+													<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400">Hoopla →</a>
+												</div>
+											</div>
+										{/if}
+									</div>
 								{/if}
 							{/if}
 						</div>
@@ -617,9 +631,24 @@
 							</div>
 						{:else if item.rentable}
 							<span class="shrink-0 text-[9px] text-gray-400 dark:text-gray-500">Rent/Buy only</span>
-						{:else if !releaseChip(item.release)}
-							<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="shrink-0 text-[9px] text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Kanopy</a>
-							<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="shrink-0 text-[9px] text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:text-gray-600 dark:hover:text-gray-400">Hoopla</a>
+						{:else}
+							{@const isOpen = libraryPopupId === item.id}
+							<div class="relative shrink-0" data-library-popup>
+								<button
+									class="text-xs leading-none transition-opacity hover:opacity-60"
+									onclick={() => { libraryPopupId = isOpen ? null : item.id; }}
+									title="Not on streaming services"
+								>🚫</button>
+								{#if isOpen}
+									<div class="absolute top-full left-0 z-20 mt-1 w-max rounded-lg bg-white px-3 py-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-700">
+										<p class="mb-1.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500">Check your library</p>
+										<div class="flex flex-col gap-1">
+											<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400">Kanopy →</a>
+											<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400">Hoopla →</a>
+										</div>
+									</div>
+								{/if}
+							</div>
 						{/if}
 						<div class="relative min-w-0 flex-1">
 							<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
