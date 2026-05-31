@@ -24,14 +24,15 @@ Everything is stored locally in your browser's IndexedDB — no account, no serv
 ## Features
 
 - 🔍 **Search** movies and TV shows (TMDB) with a detail panel showing cast, providers, seasons, and release dates before you add
-- 📺 **Streaming providers** per title (JustWatch / US) — with bundle filtering and Disney+ inference (see below)
+- 📺 **Streaming providers** per title (JustWatch / US) — with bundle filtering and Disney+ inference (see below); Rent/Buy indicator when a title isn't on subscription services; Kanopy and Hoopla library links when it isn't streaming at all
 - 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season/next-episode dates surfaced on every card; mid-season episodes distinguished from season premieres
 - 📊 **Gantt view** — lane-per-provider, bar width = remaining watch time vs. monthly budget; runtime sparklines in Grid and List too
 - 📋 **List & Grid views** with sort (A–Z, runtime, date added, watched)
 - 🎬 **Detail panel** — tap any title for poster lightbox, full overview, cast, genres, provider list, and per-season progress
 - ✅ **Watch tracking** — mark titles done, filter To Watch / Watched; season-level progress (with episode counts) shrinks bar widths automatically
+- 🏷️ **Named queues** — tag items into named queues and assign each a custom color; imported shared lists land in their own color-coded queue automatically
 - 🏆 **Suggest** — providers ranked by total remaining watch time in your queue
-- 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL; filter by provider, type, or queue before sharing; decryption key lives only in the URL fragment
+- 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL; filter by provider, type, or queue before sharing; decryption key lives only in the URL fragment; links expire after 30 days
 - 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto API; restores queue, preferences, view settings, and shared queue colors completely
 - 🌙 **Dark / light mode** — persisted in preferences and backup file
 - ⏱ **Viewing budget** — configurable monthly hours (hrs/week × weeks/month), used to normalise bar widths
