@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		raw.slice(0, 8).map(async (item) => {
 			const id = item.id as number;
 			const mediaType = item.media_type as 'movie' | 'tv';
-			const [{ providers: rawProviders, rentable }, { runtime_minutes, seasons, networkIds, companyIds, release }] = await Promise.all([
+			const [{ providers: rawProviders, rentable }, { runtime_minutes, seasons, networkIds, companyIds, release, backdrop_path, genres, cast, director, creator }] = await Promise.all([
 				getWatchProviders(id, mediaType, apiKey),
 				getRuntime(id, mediaType, apiKey)
 			]);
@@ -32,7 +32,12 @@ export const load: PageServerLoad = async ({ url }) => {
 				rentable: providers.length > 0 ? false : rentable,
 				runtime_minutes,
 				seasons,
-				release
+				release,
+				backdrop_path,
+				genres,
+				cast,
+				director,
+				creator
 			};
 		})
 	);

@@ -211,7 +211,7 @@
 								<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>
 							{/if}
 							{#if !item.providers.length}
-								<span class="text-xs text-gray-400 dark:text-gray-600">Not streaming</span>
+								<span class="text-sm leading-none" title="Not on streaming services">🚫</span>
 							{/if}
 						</div>
 						<p class="text-[10px] tabular-nums text-gray-500">{formatRuntime(itemRuntime(item), item.media_type)}</p>

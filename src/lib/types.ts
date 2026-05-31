@@ -1,3 +1,9 @@
+export interface CastMember {
+	name: string;
+	character: string;
+	profile_path: string | null;
+}
+
 export interface Provider {
 	provider_id: number;
 	provider_name: string;
@@ -44,6 +50,11 @@ export interface WatchlistItem {
 	watched_at: string | null;
 	release?: ReleaseInfo | null;
 	queue_tag?: string | null;         // set on items imported from someone else's shared list
+	backdrop_path?: string | null;
+	genres?: string[];
+	cast?: CastMember[];
+	director?: string | null;          // movie director
+	creator?: string | null;           // TV show creator(s)
 }
 
 export interface SearchResult {
@@ -58,6 +69,11 @@ export interface SearchResult {
 	runtime_minutes: number | null;
 	seasons: SeasonSummary[];
 	release: ReleaseInfo | null;
+	backdrop_path: string | null;
+	genres: string[];
+	cast: CastMember[];
+	director: string | null;
+	creator: string | null;
 }
 
 export interface Suggestion {

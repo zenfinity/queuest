@@ -120,11 +120,16 @@
 				release: import('$lib/types').ReleaseInfo | null;
 				seasons?: import('$lib/types').WatchlistItem['seasons'];
 				runtime_minutes?: number | null;
+				backdrop_path?: string | null;
+				genres?: string[];
+				cast?: import('$lib/types').CastMember[];
+				director?: string | null;
+				creator?: string | null;
 			}>;
 
 			// Write back to IndexedDB one by one
 			for (const r of results) {
-				await patchProviders(r.id, r.providers, r.rentable ?? false, r.release, r.seasons, r.runtime_minutes);
+				await patchProviders(r.id, r.providers, r.rentable ?? false, r.release, r.seasons, r.runtime_minutes, r.backdrop_path, r.genres, r.cast, r.director, r.creator);
 				refreshDone++;
 			}
 			refreshSuccess = true;
@@ -402,10 +407,10 @@
 
 	<!-- Refresh providers -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Streaming Data</h2>
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Refresh Data</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Re-fetches streaming providers and upcoming release dates for every title in your queue.
-			Useful if providers look wrong or a title has been added to a new service.
+			Re-fetches streaming providers, cast, release dates, and season info for every title in your queue.
+			Useful if providers look wrong, a title has moved services, or detail info is missing.
 		</p>
 		<button
 			onclick={doRefresh}
@@ -415,7 +420,7 @@
 			{#if refreshing}
 				Refreshing {refreshDone} / {refreshTotal}…
 			{:else}
-				↻ Refresh provider data
+				↻ Refresh data
 			{/if}
 		</button>
 		{#if refreshSuccess && !refreshing}
