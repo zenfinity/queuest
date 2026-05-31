@@ -66,8 +66,8 @@
 	<title>Queuest — Search</title>
 </svelte:head>
 
-<div class="space-y-8">
-	<h1 class="text-2xl font-bold">Search</h1>
+<div class="space-y-5 xs:space-y-8">
+	<h1 class="text-xl font-bold xs:text-2xl">Search</h1>
 
 	<form action="/search" method="GET" class="flex gap-2">
 		<!-- svelte-ignore a11y_autofocus -->
@@ -179,14 +179,14 @@
 			{/each}
 		</div>
 	{:else if data.query}
-		<div class="py-20 text-center text-gray-500">
-			<p class="text-lg">No results for "{data.query}"</p>
+		<div class="py-12 text-center text-gray-500 xs:py-20">
+			<p class="text-base xs:text-lg">No results for "{data.query}"</p>
 			<p class="mt-1 text-sm">Try a different search term</p>
 		</div>
 	{:else}
-		<div class="py-20 text-center text-gray-400 dark:text-gray-600">
-			<p class="mb-4 text-5xl">🔍</p>
-			<p>Search for movies and TV shows to add to your queue</p>
+		<div class="py-12 text-center text-gray-400 xs:py-20 dark:text-gray-600">
+			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🔍</p>
+			<p class="text-sm xs:text-base">Search for movies and TV shows to add to your queue</p>
 		</div>
 	{/if}
 </div>

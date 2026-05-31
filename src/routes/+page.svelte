@@ -393,7 +393,7 @@
 	{/if}
 {/snippet}
 
-<div class="space-y-6">
+<div class="space-y-4 xs:space-y-6">
 	<!-- Toolbar -->
 	<div class="flex items-center gap-2">
 		<!-- Add Titles -->
@@ -490,16 +490,16 @@
 
 	<!-- Empty -->
 	{:else if activeItems.length === 0}
-		<div class="flex flex-col items-center justify-center py-24 text-center">
+		<div class="flex flex-col items-center justify-center py-12 text-center xs:py-24">
 			{#if tab === 'queue'}
-				<p class="mb-4 text-5xl">🎬</p>
-				<p class="text-lg font-medium text-gray-700 dark:text-gray-300">Your queue is empty</p>
+				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🎬</p>
+				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Your queue is empty</p>
 				<p class="mt-1 text-sm text-gray-500">
 					<a class="text-orange-500 hover:underline" href="/search">Search for movies and shows</a> to get started
 				</p>
 			{:else}
-				<p class="mb-4 text-5xl">✅</p>
-				<p class="text-lg font-medium text-gray-700 dark:text-gray-300">Nothing watched yet</p>
+				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">✅</p>
+				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Nothing watched yet</p>
 				<p class="mt-1 text-sm text-gray-500">Mark titles as watched and they'll appear here</p>
 			{/if}
 		</div>
