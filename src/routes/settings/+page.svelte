@@ -277,14 +277,14 @@
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
-	<!-- Imported Queues -->
+	<!-- Shared Queues -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Imported Queues</h2>
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared Queues</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
 			Queues shared with you. Edit each color to distinguish them in your main view.
 		</p>
 		{#if importedTags.length === 0}
-			<p class="text-sm text-gray-400 dark:text-gray-600">No shared queues imported yet.</p>
+			<p class="text-sm text-gray-400 dark:text-gray-600">No shared queues yet.</p>
 		{:else}
 			<div class="space-y-2">
 				{#each importedTags as tag (tag)}
