@@ -484,7 +484,7 @@
 
 	<!-- Loading -->
 	{#if !loaded}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each { length: 5 } as _, i (i)}<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>{/each}
 		</div>
 
@@ -506,7 +506,7 @@
 
 	<!-- ── GRID ──────────────────────────────────────────────────────────────── -->
 	{:else if viewMode === 'grid'}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each flatItems as item (item.id)}
 				{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
 				{@const cardPct = Math.min(100, (effectiveRuntime(item) / (budgetHours * 60)) * 100)}
@@ -527,7 +527,7 @@
 							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
 						{/if}
 					</button>
-					<div class="flex flex-1 flex-col gap-2 p-3">
+					<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
 						<!-- Runtime sparkline -->
 						<div class="flex items-center gap-2">

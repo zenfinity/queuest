@@ -88,7 +88,7 @@
 	</form>
 
 	{#if data.results.length > 0}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
 			{#each data.results as result (result.id)}
 				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
 					<!-- Poster (clickable) -->
@@ -118,7 +118,7 @@
 					</button>
 
 					<!-- Info -->
-					<div class="flex flex-1 flex-col gap-2 p-3">
+					<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{result.title}</p>
 
 						<!-- Runtime -->

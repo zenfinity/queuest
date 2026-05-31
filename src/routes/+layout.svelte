@@ -21,7 +21,7 @@
 
 <div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
 	<nav class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
-		<div class="mx-auto flex h-14 max-w-5xl items-stretch gap-6 px-4">
+		<div class="mx-auto flex h-14 max-w-5xl items-stretch gap-4 px-3 sm:gap-6 sm:px-4">
 			<a class="flex items-center text-xl font-bold tracking-tight text-gray-900 dark:text-white" href="/">
 				Queue<span class="text-orange-400">st</span>
 			</a>
@@ -59,12 +59,12 @@
 		</div>
 	</nav>
 
-	<main class="mx-auto max-w-5xl px-4 py-8">
+	<main class="mx-auto max-w-5xl px-3 py-6 sm:px-4 sm:py-8">
 		{@render children()}
 	</main>
 
 	<footer class="mt-16 border-t border-gray-200 py-6 dark:border-gray-800">
-		<div class="mx-auto flex max-w-5xl flex-col items-center gap-3 px-4 sm:flex-row sm:justify-between">
+		<div class="mx-auto flex max-w-5xl flex-col items-center gap-3 px-3 sm:flex-row sm:justify-between sm:px-4">
 			<img
 				src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"
 				alt="The Movie Database (TMDB)"
@@ -85,7 +85,7 @@
 	>
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div
-			class="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl dark:bg-gray-900"
+			class="w-full max-w-md rounded-2xl bg-white p-5 sm:p-8 shadow-2xl dark:bg-gray-900"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<!-- Brand -->

@@ -1,2 +1,6 @@
 @import "tailwindcss";
 @variant dark (&:where(.dark, .dark *));
+
+/* Prevent any overflowing element (popups, absolute panels) from
+   creating a horizontal scrollbar on narrow viewports */
+html, body { overflow-x: hidden; }
