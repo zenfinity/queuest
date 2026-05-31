@@ -952,6 +952,7 @@
 							{/each}
 							{#if chip}
 								{@const isOpen = releasePopupId === di.id}
+								{@const nextSeasonData = (di.seasons ?? []).find(s => s.season_number === di.release?.next_season)}
 								<div class="flex items-center gap-2">
 									<button
 										class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
@@ -968,6 +969,9 @@
 											</div>
 										{/if}
 									</button>
+									{#if nextSeasonData?.episode_count}
+										<span class="text-xs text-gray-500 dark:text-gray-400">{nextSeasonData.episode_count} eps</span>
+									{/if}
 									<span class="text-xs text-orange-500 dark:text-orange-400">{chip}</span>
 								</div>
 							{/if}
