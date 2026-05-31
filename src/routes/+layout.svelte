@@ -117,7 +117,7 @@
 					<div>
 						<p class="text-xs font-semibold sm:text-sm">Build your watch queue</p>
 						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
-							Search for movies and shows and add them. Queuest fetches runtime and which services carry each title.
+							Search for movies and shows and add them. Tap any title for cast, providers, seasons, and upcoming release dates.
 						</p>
 					</div>
 				</div>
@@ -126,7 +126,7 @@
 					<div>
 						<p class="text-xs font-semibold sm:text-sm">See your subscription value</p>
 						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
-							The Gantt view groups titles by provider. Bar width = watch time relative to your monthly budget.
+							Grid, List, and Gantt views. The Gantt lane per provider — bar width = watch time vs. your monthly budget.
 						</p>
 					</div>
 				</div>
@@ -135,7 +135,7 @@
 					<div>
 						<p class="text-xs font-semibold sm:text-sm">Your data, your device</p>
 						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
-							Everything lives in your browser — no account needed. Use <span class="font-medium text-gray-700 dark:text-gray-300">Settings → Export</span> to back up.
+							No account needed — everything stays in your browser. <span class="font-medium text-gray-700 dark:text-gray-300">Settings → Export</span> backs up your full queue, preferences, and view settings.
 						</p>
 					</div>
 				</div>

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1] — 2026-05-31
+
+### Bug fixes
+
+- **Episode count for upcoming/current seasons** — the orange chip row in the detail panel now shows episode count (e.g. "8 eps") alongside the release date, consistent with watchable season rows. Only shown when TMDB has the count.
+
+---
+
 ## [0.4.0] — 2026-05-31
 
 ### Detail panel
