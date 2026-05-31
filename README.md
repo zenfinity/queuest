@@ -31,6 +31,7 @@ Everything is stored locally in your browser's IndexedDB — no account, no serv
 - 🎬 **Detail panel** — tap any title for poster lightbox, full overview, cast, genres, provider list, and per-season progress
 - ✅ **Watch tracking** — mark titles done, filter To Watch / Watched; season-level progress (with episode counts) shrinks bar widths automatically
 - 🏆 **Suggest** — providers ranked by total remaining watch time in your queue
+- 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL; filter by provider, type, or queue before sharing; decryption key lives only in the URL fragment
 - 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto API; restores queue, preferences, view settings, and shared queue colors completely
 - 🌙 **Dark / light mode** — persisted in preferences and backup file
 - ⏱ **Viewing budget** — configurable monthly hours (hrs/week × weeks/month), used to normalise bar widths
