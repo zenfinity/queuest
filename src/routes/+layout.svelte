@@ -16,7 +16,19 @@
 		return exact ? page.url.pathname === href : page.url.pathname.startsWith(href);
 	}
 
-	onMount(() => { initTheme(); initWelcome(); });
+	onMount(() => {
+		initTheme();
+		initWelcome();
+		// iOS Safari misreports viewport width during keyboard animation (and after
+		// native pickers dismiss), making sm: breakpoints fire on narrow screens.
+		// Re-stamping the viewport meta on every resize corrects it.
+		function fixViewport() {
+			const vp = document.querySelector<HTMLMetaElement>('meta[name=viewport]');
+			if (vp) vp.content = 'width=device-width, initial-scale=1';
+		}
+		window.addEventListener('resize', fixViewport);
+		return () => window.removeEventListener('resize', fixViewport);
+	});
 </script>
 
 <div class="min-h-screen w-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">

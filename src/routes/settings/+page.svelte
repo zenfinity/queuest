@@ -63,11 +63,6 @@
 	function onFileChange(e: Event) {
 		importFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
 		importError = ''; importDone = false;
-		// iOS Safari sometimes misreports viewport width after the native file
-		// picker dismisses, causing sm: breakpoints to fire on a 375px screen.
-		// Re-stamping the viewport meta forces a correct recalculation.
-		const vp = document.querySelector<HTMLMetaElement>('meta[name=viewport]');
-		if (vp) vp.content = 'width=device-width, initial-scale=1';
 	}
 
 	async function doImport() {
