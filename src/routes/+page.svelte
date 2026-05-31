@@ -926,11 +926,52 @@
 					{/if}
 				</div>
 
-				<!-- Season chips -->
-				{#if di.media_type === 'tv'}
+				<!-- Seasons with episode counts -->
+				{#if di.media_type === 'tv' && (di.seasons?.length || releaseChip(di.release))}
+					{@const chip = releaseChip(di.release)}
 					<div>
 						<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Seasons</p>
-						{@render seasonPicker(di)}
+						<div class="space-y-1">
+							{#each (di.seasons ?? []).filter(s =>
+								s.episode_count > 0 &&
+								(!chip || di.release?.next_season == null || s.season_number < di.release.next_season)
+							) as season (season.season_number)}
+								{@const watched = (di.watched_seasons ?? []).includes(season.season_number)}
+								<div class="flex items-center gap-2">
+									<button
+										class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
+											{watched
+												? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
+												: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
+										onclick={() => toggleSeason(di, season.season_number)}
+									>
+										{watched ? '✓' : 'S'}{season.season_number}
+									</button>
+									<span class="text-xs text-gray-500 dark:text-gray-400">{season.episode_count} eps</span>
+								</div>
+							{/each}
+							{#if chip}
+								{@const isOpen = releasePopupId === di.id}
+								<div class="flex items-center gap-2">
+									<button
+										class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
+											{isOpen
+												? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
+												: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
+										onclick={() => { releasePopupId = isOpen ? null : di.id; }}
+										data-release-popup
+									>
+										{di.release?.next_season != null ? `S${di.release.next_season}` : 'Next'}
+										{#if isOpen}
+											<div class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700">
+												{chip}
+											</div>
+										{/if}
+									</button>
+									<span class="text-xs text-orange-500 dark:text-orange-400">{chip}</span>
+								</div>
+							{/if}
+						</div>
 					</div>
 				{/if}
 			</div>
