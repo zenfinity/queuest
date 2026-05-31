@@ -800,17 +800,12 @@
 		class="fixed bottom-0 inset-x-0 z-50 flex max-h-[90vh] flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-gray-900 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[22rem] sm:max-h-none sm:rounded-t-none sm:rounded-l-2xl"
 		data-detail-panel
 	>
-		<!-- Backdrop header -->
-		<div class="relative h-36 shrink-0 bg-gray-200 dark:bg-gray-800 sm:h-44">
-			{#if di.backdrop_path}
-				<img src="{TMDB_IMG}/w780{di.backdrop_path}" alt="" class="h-full w-full object-cover" />
-			{:else if di.poster_path}
-				<img src="{TMDB_IMG}/w500{di.poster_path}" alt="" class="h-full w-full object-cover opacity-40 blur-sm scale-110" />
-			{/if}
-			<div class="absolute inset-0 bg-gradient-to-t from-white dark:from-gray-900 via-transparent to-transparent"></div>
+		<!-- Title bar -->
+		<div class="shrink-0 flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+			<h2 class="truncate pr-2 text-sm font-semibold text-gray-900 dark:text-white">{di.title}</h2>
 			<button
 				onclick={() => { detailItem = null; overviewExpanded = false; }}
-				class="absolute top-3 right-3 rounded-full bg-black/30 p-1.5 text-white backdrop-blur-sm hover:bg-black/50 transition-colors"
+				class="shrink-0 rounded-full p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
 				aria-label="Close"
 			>
 				<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
@@ -820,17 +815,16 @@
 		<!-- Scrollable content -->
 		<div class="flex-1 overflow-y-auto">
 			<!-- Hero: poster + title/meta -->
-			<div class="flex gap-3 px-4 -mt-14 relative pb-3">
+			<div class="flex gap-3 px-4 pt-4 pb-3">
 				{#if di.poster_path}
 					<img
 						src="{TMDB_IMG}/w185{di.poster_path}"
 						alt={di.title}
-						class="w-16 shrink-0 rounded-lg shadow-lg ring-2 ring-white dark:ring-gray-900 self-start"
+						class="w-20 shrink-0 rounded-lg shadow-md self-start"
 					/>
 				{/if}
-				<div class="min-w-0 pt-16">
-					<h2 class="text-base font-bold leading-tight text-gray-900 dark:text-white">{di.title}</h2>
-					<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+				<div class="min-w-0">
+					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
 						{#if di.added_at}<span>{di.added_at.slice(0,4)}</span>{/if}
 						<span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-800">{di.media_type === 'movie' ? '🎬 Movie' : '📺 TV'}</span>
 						{#if di.director}<span>Dir. {di.director}</span>{/if}
