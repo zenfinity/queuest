@@ -29,7 +29,7 @@
 			// Wrap items + preferences so a restore is complete
 			const payload = {
 				version: 1,
-				prefs: { theme: theme.dark ? 'dark' : 'light', budget: budgetHours },
+				prefs: { theme: theme.dark ? 'dark' : 'light', budget: budgetHours, queueName: getQueueName() },
 				items
 			};
 			const buf = await encrypt(JSON.stringify(payload), exportPassphrase);
@@ -78,6 +78,10 @@
 				if (typeof parsed.prefs?.budget === 'number') {
 					weeksPerMonth = 4;
 					hoursPerWeek = Math.round(parsed.prefs.budget / weeksPerMonth);
+				}
+				if (typeof parsed.prefs?.queueName === 'string') {
+					setQueueName(parsed.prefs.queueName);
+					myQueueName = parsed.prefs.queueName;
 				}
 			}
 
