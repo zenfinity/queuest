@@ -788,6 +788,10 @@
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->
 {#if detailItem}
 	{@const di = detailItem}
+	{@const diHue = resolvedHue(di.providers[0]?.provider_id ?? null, di.providers[0]?.logo_path ?? null)}
+	{@const diPct = Math.min(100, (effectiveRuntime(di) / (budgetHours * 60)) * 100)}
+	{@const diLine = diHue !== null ? `hsl(${diHue} 60% 52%)` : '#374151'}
+	{@const diDot  = diHue !== null ? `hsl(${diHue} 70% 62%)` : '#4b5563'}
 	<!-- Scrim -->
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
@@ -855,13 +859,19 @@
 					</div>
 				{/if}
 
-				<!-- Runtime -->
-				<div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-					<span>{formatRuntime(effectiveRuntime(di), di.media_type)} remaining</span>
-					{#if di.runtime_minutes && di.media_type === 'tv'}
-						<span class="text-gray-300 dark:text-gray-700">·</span>
-						<span>{formatRuntime(di.runtime_minutes, di.media_type)} total</span>
-					{/if}
+				<!-- Runtime lollipop -->
+				<div class="flex items-center gap-2">
+					<div class="relative flex-1">
+						<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
+						<div class="absolute top-0 left-0 h-px transition-all duration-300"
+							style="width:{diPct}%; background:{diLine}; opacity:0.75;"></div>
+						<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
+							style="left:{diPct}%; margin-left:-3px; background:{diDot};"></div>
+					</div>
+					<span class="shrink-0 text-[10px] tabular-nums text-gray-500">
+						{formatRuntime(effectiveRuntime(di), di.media_type)}
+						{#if di.runtime_minutes && di.media_type === 'tv'}<span class="text-gray-400 dark:text-gray-600"> / {formatRuntime(di.runtime_minutes, di.media_type)}</span>{/if}
+					</span>
 				</div>
 
 				<!-- Cast -->
