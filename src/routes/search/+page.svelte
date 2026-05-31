@@ -14,6 +14,7 @@
 	let errors = $state(new Map<number, string>());
 	let detailItem: SearchResult | null = $state(null);
 	let overviewExpanded = $state(false);
+	let posterExpanded = $state(false);
 
 	async function addToQueue(result: SearchResult) {
 		adding = new Set(adding).add(result.id);
@@ -57,8 +58,7 @@
 <svelte:document onclick={(e) => {
 	const t = e.target as HTMLElement;
 	if (!t.closest('[data-detail-panel]') && !t.closest('[data-detail-trigger]')) {
-		detailItem = null;
-		overviewExpanded = false;
+		detailItem = null; overviewExpanded = false; posterExpanded = false;
 	}
 }} />
 
@@ -198,7 +198,7 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-		onclick={() => { detailItem = null; overviewExpanded = false; }}
+		onclick={() => { detailItem = null; overviewExpanded = false; posterExpanded = false; }}
 	></div>
 
 	<!-- Panel: bottom sheet on mobile, right drawer on sm+ -->
@@ -210,7 +210,7 @@
 		<div class="shrink-0 flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800">
 			<h2 class="truncate pr-2 text-sm font-semibold text-gray-900 dark:text-white">{di.title}</h2>
 			<button
-				onclick={() => { detailItem = null; overviewExpanded = false; }}
+				onclick={() => { detailItem = null; overviewExpanded = false; posterExpanded = false; }}
 				class="shrink-0 rounded-full p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
 				aria-label="Close"
 			>
@@ -223,11 +223,13 @@
 			<!-- Hero: poster + meta -->
 			<div class="flex gap-3 px-4 pt-4 pb-3">
 				{#if di.poster_path}
-					<img
-						src="{TMDB_IMG}/w185{di.poster_path}"
-						alt={di.title}
-						class="w-20 shrink-0 rounded-lg shadow-md self-start"
-					/>
+					<button
+						class="w-20 shrink-0 self-start rounded-lg shadow-md overflow-hidden cursor-zoom-in"
+						onclick={() => posterExpanded = true}
+						aria-label="Expand poster"
+					>
+						<img src="{TMDB_IMG}/w185{di.poster_path}" alt={di.title} class="w-full h-full object-cover" />
+					</button>
 				{/if}
 				<div class="min-w-0">
 					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
@@ -345,4 +347,19 @@
 			{/if}
 		</div>
 	</div>
+
+	<!-- Poster lightbox -->
+	{#if posterExpanded && di.poster_path}
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
+			onclick={() => posterExpanded = false}
+		>
+			<img
+				src="{TMDB_IMG}/w500{di.poster_path}"
+				alt={di.title}
+				class="max-h-full max-w-full rounded-xl shadow-2xl"
+			/>
+		</div>
+	{/if}
 {/if}
