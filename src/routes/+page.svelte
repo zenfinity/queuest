@@ -513,7 +513,7 @@
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<button
 						class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"

@@ -19,7 +19,7 @@
 	onMount(() => { initTheme(); initWelcome(); });
 </script>
 
-<div class="min-h-screen w-full overflow-x-hidden bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+<div class="min-h-screen w-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
 	<nav class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
 		<div class="mx-auto flex h-11 max-w-5xl items-stretch gap-3 px-3 sm:h-14 sm:gap-6 sm:px-4">
 			<a class="flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white" href="/">
@@ -59,7 +59,7 @@
 		</div>
 	</nav>
 
-	<main class="mx-auto max-w-5xl overflow-x-hidden px-3 py-4 sm:px-4 sm:py-8">
+	<main class="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-8">
 		{@render children()}
 	</main>
 
