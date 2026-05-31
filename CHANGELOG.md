@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.1] — 2026-05-31
+
+### Bug fixes
+
+- **Episode count for upcoming/current seasons** — the orange chip row in the detail panel now shows episode count (e.g. "8 eps") alongside the release date, consistent with watchable season rows. Only shown when TMDB has the count.
+
+### Docs
+
+- **Welcome modal** — added "Share your queue" as a fourth feature point covering encrypted share links and pre-share filtering.
+- **README** — added previously undocumented features: Rent/Buy indicator, Kanopy/Hoopla library fallback links, named queues with per-queue color coding, and 30-day share link expiration.
+
+---
+
 ## [0.4.0] — 2026-05-31
 
 ### Detail panel

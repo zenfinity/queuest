@@ -9,7 +9,7 @@ StreamQ lets you build a watch queue, see which services carry each title, and e
 ## How it works
 
 ### 1. Build your queue
-Search for movies and TV shows by name. StreamQ pulls metadata from TMDB — poster, runtime, and which streaming services carry the title in the US (via JustWatch data). Add anything you want to watch to your queue.
+Search for movies and TV shows by name. StreamQ pulls metadata from TMDB — poster, runtime, cast, genres, and which streaming services carry the title in the US (via JustWatch data). Tap any result to open a detail panel with the full picture before you add it. Add anything you want to watch to your queue.
 
 ### 2. See your subscription value
 The **Gantt view** groups your queue by provider. Each bar's width represents watch time relative to your monthly viewing budget (configurable in Settings). If a provider's lane fits inside one bar-width, one month is all you need.
@@ -17,22 +17,25 @@ The **Gantt view** groups your queue by provider. Each bar's width represents wa
 The **Suggest** tab ranks providers by total remaining watch time across your unwatched titles — useful for deciding what to subscribe to first. Checking off seasons reduces a show's contribution automatically.
 
 ### 3. Your data, your device
-Everything is stored locally in your browser's IndexedDB — no account, no server, no tracking. Use **Settings → Export** to save a passphrase-encrypted `.streamq` file you can restore on any device. Theme and budget preferences are included in the backup.
+Everything is stored locally in your browser's IndexedDB — no account, no server, no tracking. Use **Settings → Export** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and shared queue colors — a complete restore.
 
 ---
 
 ## Features
 
-- 🔍 **Search** movies and TV shows (TMDB)
-- 📺 **Streaming providers** per title (JustWatch / US) — with bundle filtering and Disney+ inference (see below)
-- 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season premieres surfaced on every card
-- 📊 **Gantt view** — lane-per-provider, bar width = remaining watch time vs. monthly budget
+- 🔍 **Search** movies and TV shows (TMDB) with a detail panel showing cast, providers, seasons, and release dates before you add
+- 📺 **Streaming providers** per title (JustWatch / US) — with bundle filtering and Disney+ inference (see below); Rent/Buy indicator when a title isn't on subscription services; Kanopy and Hoopla library links when it isn't streaming at all
+- 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season/next-episode dates surfaced on every card; mid-season episodes distinguished from season premieres
+- 📊 **Gantt view** — lane-per-provider, bar width = remaining watch time vs. monthly budget; runtime sparklines in Grid and List too
 - 📋 **List & Grid views** with sort (A–Z, runtime, date added, watched)
-- ✅ **Watch tracking** — mark titles done, filter To Watch / Watched; season-level progress shrinks bar widths
+- 🎬 **Detail panel** — tap any title for poster lightbox, full overview, cast, genres, provider list, and per-season progress
+- ✅ **Watch tracking** — mark titles done, filter To Watch / Watched; season-level progress (with episode counts) shrinks bar widths automatically
+- 🏷️ **Named queues** — tag items into named queues and assign each a custom color; imported shared lists land in their own color-coded queue automatically
 - 🏆 **Suggest** — providers ranked by total remaining watch time in your queue
-- 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto API
+- 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL; filter by provider, type, or queue before sharing; decryption key lives only in the URL fragment; links expire after 30 days
+- 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto API; restores queue, preferences, view settings, and shared queue colors completely
 - 🌙 **Dark / light mode** — persisted in preferences and backup file
-- ⏱ **Viewing budget** — configurable monthly hours, used to normalise bar widths
+- ⏱ **Viewing budget** — configurable monthly hours (hrs/week × weeks/month), used to normalise bar widths
 - 🔄 **Refresh provider data** — re-fetches streaming info for every queued title in one click (Settings)
 - 💬 **In-app feedback** — files a GitHub issue directly from Settings
 
