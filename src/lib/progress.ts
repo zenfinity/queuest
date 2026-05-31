@@ -30,6 +30,11 @@ export function releaseChip(r: ReleaseInfo | null | undefined): string | null {
 	if (r.next_season_date) {
 		const label = r.next_season != null ? `S${r.next_season}` : 'Next season';
 		const dateStr = fmtDate(r.next_season_date);
+		if (r.currently_airing) {
+			return isFuture(r.next_season_date)
+				? `${label} new episode ${dateStr}`
+				: `${label} airing now`;
+		}
 		const prefix = isFuture(r.next_season_date) ? 'premieres' : 'premiered';
 		return `${label} ${prefix} ${dateStr}`;
 	}

@@ -29,7 +29,16 @@
 			// Wrap items + preferences so a restore is complete
 			const payload = {
 				version: 1,
-				prefs: { theme: theme.dark ? 'dark' : 'light', budget: budgetHours },
+				prefs: {
+					theme: theme.dark ? 'dark' : 'light',
+					weeklyHours: hoursPerWeek,
+					weeksPerMonth,
+					budget: budgetHours, // kept for backwards compat
+					queueName: getQueueName(),
+					queueColors: getQueueColors(),
+					sort: localStorage.getItem('sq:sort') ?? 'added',
+					view: localStorage.getItem('sq:view') ?? 'grid',
+				},
 				items
 			};
 			const buf = await encrypt(JSON.stringify(payload), exportPassphrase);
@@ -75,10 +84,29 @@
 					localStorage.setItem('sq:theme', parsed.prefs.theme);
 					document.documentElement.classList.toggle('dark', dark);
 				}
-				if (typeof parsed.prefs?.budget === 'number') {
+				// Budget — prefer the explicit breakdown; fall back to dividing the total
+				if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
+					hoursPerWeek  = parsed.prefs.weeklyHours;
+					weeksPerMonth = parsed.prefs.weeksPerMonth;
+				} else if (typeof parsed.prefs?.budget === 'number') {
 					weeksPerMonth = 4;
-					hoursPerWeek = Math.round(parsed.prefs.budget / weeksPerMonth);
+					hoursPerWeek  = Math.round(parsed.prefs.budget / 4);
 				}
+				localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
+				localStorage.setItem('sq:budget:weeks',  JSON.stringify(weeksPerMonth));
+				localStorage.setItem('sq:budget', JSON.stringify(hoursPerWeek * weeksPerMonth));
+
+				if (typeof parsed.prefs?.queueName === 'string') {
+					setQueueName(parsed.prefs.queueName);
+					myQueueName = parsed.prefs.queueName;
+				}
+				if (parsed.prefs?.queueColors && typeof parsed.prefs.queueColors === 'object') {
+					for (const [tag, color] of Object.entries(parsed.prefs.queueColors)) {
+						if (typeof color === 'string') setQueueColor(tag, color);
+					}
+				}
+				if (typeof parsed.prefs?.sort === 'string') localStorage.setItem('sq:sort', parsed.prefs.sort);
+				if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
 			}
 
 			await replaceAll(items);
@@ -240,8 +268,8 @@
 
 <svelte:head><title>Queuest — Settings</title></svelte:head>
 
-<div class="mx-auto max-w-md space-y-10">
-	<h1 class="text-2xl font-bold">Settings</h1>
+<div class="mx-auto max-w-md space-y-6 xs:space-y-10">
+	<h1 class="text-xl font-bold xs:text-2xl">Settings</h1>
 
 	<!-- Appearance -->
 	<section class="space-y-3">
@@ -277,14 +305,14 @@
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
-	<!-- Imported Queues -->
+	<!-- Shared Queues -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Imported Queues</h2>
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared Queues</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
 			Queues shared with you. Edit each color to distinguish them in your main view.
 		</p>
 		{#if importedTags.length === 0}
-			<p class="text-sm text-gray-400 dark:text-gray-600">No shared queues imported yet.</p>
+			<p class="text-sm text-gray-400 dark:text-gray-600">No shared queues yet.</p>
 		{:else}
 			<div class="space-y-2">
 				{#each importedTags as tag (tag)}

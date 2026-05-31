@@ -1,2 +1,13 @@
 @import "tailwindcss";
 @variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --breakpoint-xs: 375px;
+}
+
+/* overflow-x:clip is a true hard clip (no scroll container created), unlike
+   overflow-x:hidden which iOS Safari can still pan into. max-width:100vw ensures
+   the root elements never exceed the viewport, which is the root cause of the
+   horizontal scroll issue on iPhone mini. */
+html { overflow-x: clip; max-width: 100vw; }
+body { overflow-x: clip; position: relative; max-width: 100vw; }

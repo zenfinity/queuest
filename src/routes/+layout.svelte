@@ -16,21 +16,33 @@
 		return exact ? page.url.pathname === href : page.url.pathname.startsWith(href);
 	}
 
-	onMount(() => { initTheme(); initWelcome(); });
+	onMount(() => {
+		initTheme();
+		initWelcome();
+		// iOS Safari misreports viewport width during keyboard animation (and after
+		// native pickers dismiss), making sm: breakpoints fire on narrow screens.
+		// Re-stamping the viewport meta on every resize corrects it.
+		function fixViewport() {
+			const vp = document.querySelector<HTMLMetaElement>('meta[name=viewport]');
+			if (vp) vp.content = 'width=device-width, initial-scale=1';
+		}
+		window.addEventListener('resize', fixViewport);
+		return () => window.removeEventListener('resize', fixViewport);
+	});
 </script>
 
-<div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+<div class="min-h-screen w-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
 	<nav class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
-		<div class="mx-auto flex h-14 max-w-5xl items-stretch gap-6 px-4">
-			<a class="flex items-center text-xl font-bold tracking-tight text-gray-900 dark:text-white" href="/">
+		<div class="mx-auto flex h-11 max-w-5xl items-stretch gap-3 px-3 sm:h-14 sm:gap-6 sm:px-4">
+			<a class="flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white" href="/">
 				Queue<span class="text-orange-400">st</span>
 			</a>
 
-			<div class="flex gap-5">
+			<div class="flex gap-4 sm:gap-5">
 				{#each navLinks as link (link.href)}
 					{@const active = isActive(link.href, link.exact)}
 					<a
-						class="flex items-center border-b-2 text-sm transition-colors
+						class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
 							{active
 								? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
 								: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
@@ -44,7 +56,7 @@
 			<div class="flex-1"></div>
 
 			<a
-				class="flex items-center border-b-2 text-sm transition-colors
+				class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
 					{isActive('/settings', false)
 						? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
 						: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
@@ -59,18 +71,18 @@
 		</div>
 	</nav>
 
-	<main class="mx-auto max-w-5xl px-4 py-8">
+	<main class="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-8">
 		{@render children()}
 	</main>
 
-	<footer class="mt-16 border-t border-gray-200 py-6 dark:border-gray-800">
-		<div class="mx-auto flex max-w-5xl flex-col items-center gap-3 px-4 sm:flex-row sm:justify-between">
+	<footer class="mt-8 border-t border-gray-200 py-4 sm:mt-16 sm:py-6 dark:border-gray-800">
+		<div class="mx-auto flex max-w-5xl flex-col items-center gap-2 px-3 sm:flex-row sm:justify-between sm:px-4">
 			<img
 				src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"
 				alt="The Movie Database (TMDB)"
-				class="h-4 opacity-70"
+				class="h-3.5 opacity-70 sm:h-4"
 			/>
-			<p class="text-center text-xs text-gray-500 sm:text-right">
+			<p class="text-center text-[10px] text-gray-500 sm:text-right sm:text-xs">
 				This website uses TMDB and the TMDB APIs but is not endorsed or approved by TMDB.
 			</p>
 		</div>
@@ -85,45 +97,45 @@
 	>
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div
-			class="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl dark:bg-gray-900"
+			class="w-full max-w-md rounded-2xl bg-white p-4 sm:p-8 shadow-2xl dark:bg-gray-900"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<!-- Brand -->
-			<div class="mb-7 text-center">
-				<p class="text-2xl font-bold tracking-tight">
+			<div class="mb-4 text-center sm:mb-7">
+				<p class="text-xl font-bold tracking-tight sm:text-2xl">
 					Queue<span class="text-orange-400">st</span>
 				</p>
-				<p class="mt-2 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+				<p class="mt-1.5 text-xs leading-relaxed text-gray-500 sm:mt-2 sm:text-sm dark:text-gray-400">
 					Figure out how long you actually need a streaming subscription — before paying for another month.
 				</p>
 			</div>
 
 			<!-- Three points -->
-			<div class="mb-8 space-y-5">
-				<div class="flex gap-4">
-					<span class="mt-0.5 text-xl leading-none">🔍</span>
+			<div class="mb-4 space-y-3 sm:mb-8 sm:space-y-5">
+				<div class="flex gap-3 sm:gap-4">
+					<span class="mt-0.5 text-lg leading-none sm:text-xl">🔍</span>
 					<div>
-						<p class="text-sm font-semibold">Build your watch queue</p>
-						<p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+						<p class="text-xs font-semibold sm:text-sm">Build your watch queue</p>
+						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
 							Search for movies and shows and add them. Queuest fetches runtime and which services carry each title.
 						</p>
 					</div>
 				</div>
-				<div class="flex gap-4">
-					<span class="mt-0.5 text-xl leading-none">≋</span>
+				<div class="flex gap-3 sm:gap-4">
+					<span class="mt-0.5 text-lg leading-none sm:text-xl">≋</span>
 					<div>
-						<p class="text-sm font-semibold">See your subscription value</p>
-						<p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-							The Gantt view groups titles by provider. Bar width = watch time relative to your monthly budget. If a provider's lane fits in a month, one month is all you need.
+						<p class="text-xs font-semibold sm:text-sm">See your subscription value</p>
+						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
+							The Gantt view groups titles by provider. Bar width = watch time relative to your monthly budget.
 						</p>
 					</div>
 				</div>
-				<div class="flex gap-4">
-					<span class="mt-0.5 text-xl leading-none">🔒</span>
+				<div class="flex gap-3 sm:gap-4">
+					<span class="mt-0.5 text-lg leading-none sm:text-xl">🔒</span>
 					<div>
-						<p class="text-sm font-semibold">Your data, your device</p>
-						<p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-							Everything lives in your browser — no account needed. Use <span class="font-medium text-gray-700 dark:text-gray-300">Settings → Export</span> to save an encrypted <code class="text-orange-500">.queuest</code> file you can restore on any device.
+						<p class="text-xs font-semibold sm:text-sm">Your data, your device</p>
+						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
+							Everything lives in your browser — no account needed. Use <span class="font-medium text-gray-700 dark:text-gray-300">Settings → Export</span> to back up.
 						</p>
 					</div>
 				</div>
@@ -131,7 +143,7 @@
 
 			<button
 				onclick={closeWelcome}
-				class="w-full rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-400"
+				class="w-full rounded-xl bg-orange-500 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-orange-400 sm:py-3 sm:text-sm"
 			>
 				Get started →
 			</button>

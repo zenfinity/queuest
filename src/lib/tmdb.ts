@@ -117,7 +117,7 @@ export async function getRuntime(
 	const data = (await res.json()) as {
 		number_of_episodes?: number;
 		episode_run_time?: number[];
-		last_episode_to_air?: { runtime?: number };
+		last_episode_to_air?: { runtime?: number; season_number?: number };
 		seasons?: Array<{ season_number: number; episode_count: number; name: string }>;
 		networks?: Array<{ id: number }>;
 		status?: string;
@@ -147,7 +147,7 @@ export async function getRuntime(
 	const totalEps = data.number_of_episodes ?? 0;
 	const runtime_minutes = totalEps && avgRuntime ? Math.round(totalEps * avgRuntime) : null;
 	const networkIds = (data.networks ?? []).map((n) => n.id);
-	const release = tvReleaseInfo(data.status, data.next_episode_to_air);
+	const release = tvReleaseInfo(data.status, data.next_episode_to_air, data.last_episode_to_air?.season_number);
 	const cast = (data.credits?.cast ?? []).slice(0, 8).map((c) => ({ name: c.name, character: c.character, profile_path: c.profile_path ?? null }));
 	const creator = (data.created_by ?? []).map((c) => c.name).join(', ') || null;
 
@@ -240,15 +240,22 @@ function movieReleaseInfo(
 
 function tvReleaseInfo(
 	status: string | undefined,
-	nextEpisode: { air_date?: string; season_number?: number } | null | undefined
+	nextEpisode: { air_date?: string; season_number?: number } | null | undefined,
+	lastEpisodeSeason: number | undefined
 ): import('./types').ReleaseInfo | null {
 	if (!status) return null;
 
 	if (nextEpisode?.air_date) {
+		// If the last aired episode is in the same season, this show is mid-season
+		const currentlyAiring =
+			lastEpisodeSeason != null &&
+			nextEpisode.season_number != null &&
+			lastEpisodeSeason === nextEpisode.season_number;
 		return {
 			status,
 			next_season: nextEpisode.season_number ?? null,
-			next_season_date: nextEpisode.air_date
+			next_season_date: nextEpisode.air_date,
+			currently_airing: currentlyAiring || undefined
 		};
 	}
 

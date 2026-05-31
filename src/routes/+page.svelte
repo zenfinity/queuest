@@ -393,7 +393,7 @@
 	{/if}
 {/snippet}
 
-<div class="space-y-6">
+<div class="space-y-4 xs:space-y-6">
 	<!-- Toolbar -->
 	<div class="flex items-center gap-2">
 		<!-- Add Titles -->
@@ -484,36 +484,36 @@
 
 	<!-- Loading -->
 	{#if !loaded}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each { length: 5 } as _, i (i)}<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>{/each}
 		</div>
 
 	<!-- Empty -->
 	{:else if activeItems.length === 0}
-		<div class="flex flex-col items-center justify-center py-24 text-center">
+		<div class="flex flex-col items-center justify-center py-12 text-center xs:py-24">
 			{#if tab === 'queue'}
-				<p class="mb-4 text-5xl">🎬</p>
-				<p class="text-lg font-medium text-gray-700 dark:text-gray-300">Your queue is empty</p>
+				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🎬</p>
+				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Your queue is empty</p>
 				<p class="mt-1 text-sm text-gray-500">
 					<a class="text-orange-500 hover:underline" href="/search">Search for movies and shows</a> to get started
 				</p>
 			{:else}
-				<p class="mb-4 text-5xl">✅</p>
-				<p class="text-lg font-medium text-gray-700 dark:text-gray-300">Nothing watched yet</p>
+				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">✅</p>
+				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Nothing watched yet</p>
 				<p class="mt-1 text-sm text-gray-500">Mark titles as watched and they'll appear here</p>
 			{/if}
 		</div>
 
 	<!-- ── GRID ──────────────────────────────────────────────────────────────── -->
 	{:else if viewMode === 'grid'}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each flatItems as item (item.id)}
 				{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
 				{@const cardPct = Math.min(100, (effectiveRuntime(item) / (budgetHours * 60)) * 100)}
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<button
 						class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
@@ -527,7 +527,7 @@
 							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
 						{/if}
 					</button>
-					<div class="flex flex-1 flex-col gap-2 p-3">
+					<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
 						<!-- Runtime sparkline -->
 						<div class="flex items-center gap-2">
@@ -926,11 +926,52 @@
 					{/if}
 				</div>
 
-				<!-- Season chips -->
-				{#if di.media_type === 'tv'}
+				<!-- Seasons with episode counts -->
+				{#if di.media_type === 'tv' && (di.seasons?.length || releaseChip(di.release))}
+					{@const chip = releaseChip(di.release)}
 					<div>
 						<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Seasons</p>
-						{@render seasonPicker(di)}
+						<div class="space-y-1">
+							{#each (di.seasons ?? []).filter(s =>
+								s.episode_count > 0 &&
+								(!chip || di.release?.next_season == null || s.season_number < di.release.next_season)
+							) as season (season.season_number)}
+								{@const watched = (di.watched_seasons ?? []).includes(season.season_number)}
+								<div class="flex items-center gap-2">
+									<button
+										class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
+											{watched
+												? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
+												: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
+										onclick={() => toggleSeason(di, season.season_number)}
+									>
+										{watched ? '✓' : 'S'}{season.season_number}
+									</button>
+									<span class="text-xs text-gray-500 dark:text-gray-400">{season.episode_count} eps</span>
+								</div>
+							{/each}
+							{#if chip}
+								{@const isOpen = releasePopupId === di.id}
+								<div class="flex items-center gap-2">
+									<button
+										class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
+											{isOpen
+												? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
+												: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
+										onclick={() => { releasePopupId = isOpen ? null : di.id; }}
+										data-release-popup
+									>
+										{di.release?.next_season != null ? `S${di.release.next_season}` : 'Next'}
+										{#if isOpen}
+											<div class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700">
+												{chip}
+											</div>
+										{/if}
+									</button>
+									<span class="text-xs text-orange-500 dark:text-orange-400">{chip}</span>
+								</div>
+							{/if}
+						</div>
 					</div>
 				{/if}
 			</div>
@@ -958,7 +999,7 @@
 	{#if posterExpanded && di.poster_path}
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div
-			class="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
+			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
 			onclick={() => posterExpanded = false}
 		>
 			<img

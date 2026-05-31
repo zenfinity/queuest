@@ -66,8 +66,8 @@
 	<title>Queuest — Search</title>
 </svelte:head>
 
-<div class="space-y-8">
-	<h1 class="text-2xl font-bold">Search</h1>
+<div class="space-y-5 xs:space-y-8">
+	<h1 class="text-xl font-bold xs:text-2xl">Search</h1>
 
 	<form action="/search" method="GET" class="flex gap-2">
 		<!-- svelte-ignore a11y_autofocus -->
@@ -88,7 +88,7 @@
 	</form>
 
 	{#if data.results.length > 0}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
 			{#each data.results as result (result.id)}
 				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
 					<!-- Poster (clickable) -->
@@ -118,7 +118,7 @@
 					</button>
 
 					<!-- Info -->
-					<div class="flex flex-1 flex-col gap-2 p-3">
+					<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{result.title}</p>
 
 						<!-- Runtime -->
@@ -179,14 +179,14 @@
 			{/each}
 		</div>
 	{:else if data.query}
-		<div class="py-20 text-center text-gray-500">
-			<p class="text-lg">No results for "{data.query}"</p>
+		<div class="py-12 text-center text-gray-500 xs:py-20">
+			<p class="text-base xs:text-lg">No results for "{data.query}"</p>
 			<p class="mt-1 text-sm">Try a different search term</p>
 		</div>
 	{:else}
-		<div class="py-20 text-center text-gray-400 dark:text-gray-600">
-			<p class="mb-4 text-5xl">🔍</p>
-			<p>Search for movies and TV shows to add to your queue</p>
+		<div class="py-12 text-center text-gray-400 xs:py-20 dark:text-gray-600">
+			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🔍</p>
+			<p class="text-sm xs:text-base">Search for movies and TV shows to add to your queue</p>
 		</div>
 	{/if}
 </div>
@@ -352,7 +352,7 @@
 	{#if posterExpanded && di.poster_path}
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div
-			class="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
+			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
 			onclick={() => posterExpanded = false}
 		>
 			<img

@@ -26,8 +26,10 @@ export interface ReleaseInfo {
 	streaming_estimate?: string | null;
 	/** For TV: upcoming season number */
 	next_season?: number | null;
-	/** For TV: upcoming season premiere date (ISO string) */
+	/** For TV: upcoming season premiere date OR next episode air date (ISO string) */
 	next_season_date?: string | null;
+	/** True when next_season_date is a mid-season episode (not the season premiere) */
+	currently_airing?: boolean;
 	/** TMDB status string, e.g. "Post Production", "Returning Series", "Ended" */
 	status?: string | null;
 }
