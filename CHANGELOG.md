@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.4.0] — 2026-05-31
+
+### Detail panel
+
+- **Detail panel on search page** — tapping a poster in search now opens the same detail panel as the queue page, with an "Add to Queue" footer instead of watched/remove actions.
+- **Compact title bar** — replaced the tall blurred backdrop header with a slim title bar + close button, recovering significant vertical space on mobile.
+- **Runtime lollipop in detail panel** — the same provider-colored sparkline shown in grid/list cards now appears in the detail panel's runtime row.
+- **Tap-to-expand poster lightbox** — tapping the poster in the detail panel zooms it to a full-screen overlay (`w500` resolution); tap anywhere to close.
+- **Episode count per season** — the seasons section in the detail panel now shows episode count alongside each season chip (e.g. "S1 · 8 eps").
+
+### Release chip fixes
+
+- **Mid-season vs. premiere distinction** — shows actively releasing new episodes (where `last_episode_to_air` and `next_episode_to_air` share the same season number) now show "S1 new episode Jun 5" or "S1 airing now" instead of "S1 premieres". (#28)
+
+### Mobile sizing
+
+- **xs breakpoint (375px)** — added a custom Tailwind breakpoint at 375px for a proper three-tier responsive system: base / `xs:` iPhone mini+ / `sm:` tablet+. (#28)
+- **`overflow-x: clip` replaces `overflow-x: hidden`** — `hidden` creates a scroll container that iOS Safari can still pan into; `clip` is a true hard clip with no scroll container. Combined with `max-width: 100vw` on `html`/`body`. (#28)
+- **Viewport meta reset on resize** — iOS Safari misreports viewport width during keyboard and file-picker animations, causing `sm:` breakpoints to fire on narrow screens. A global resize listener re-stamps the viewport meta to correct it. (#28)
+- **Tighter nav and spacing** — nav height, logo/link text, main padding, footer, and empty-state sizes all reduce at the base tier and expand at `xs:`/`sm:`. (#28)
+
+### Export / Import
+
+- **Complete state capture** — export now includes `weeklyHours`, `weeksPerMonth`, `queueColors`, `sort`, and `view` preferences in addition to theme and queue name. A fresh import is now a full restore. (#28)
+- **Queue name restored on import** — was missing from the export payload. (#28)
+- **"Shared Queues" rename** — the section formerly called "Imported Queues" in Settings is renamed to avoid confusion with the file import feature. (#28)
+
+---
+
 ## [0.3.0] — 2026-05-29
 
 ### Sharing
