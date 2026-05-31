@@ -29,7 +29,16 @@
 			// Wrap items + preferences so a restore is complete
 			const payload = {
 				version: 1,
-				prefs: { theme: theme.dark ? 'dark' : 'light', budget: budgetHours, queueName: getQueueName() },
+				prefs: {
+					theme: theme.dark ? 'dark' : 'light',
+					weeklyHours: hoursPerWeek,
+					weeksPerMonth,
+					budget: budgetHours, // kept for backwards compat
+					queueName: getQueueName(),
+					queueColors: getQueueColors(),
+					sort: localStorage.getItem('sq:sort') ?? 'added',
+					view: localStorage.getItem('sq:view') ?? 'grid',
+				},
 				items
 			};
 			const buf = await encrypt(JSON.stringify(payload), exportPassphrase);
@@ -75,14 +84,29 @@
 					localStorage.setItem('sq:theme', parsed.prefs.theme);
 					document.documentElement.classList.toggle('dark', dark);
 				}
-				if (typeof parsed.prefs?.budget === 'number') {
+				// Budget — prefer the explicit breakdown; fall back to dividing the total
+				if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
+					hoursPerWeek  = parsed.prefs.weeklyHours;
+					weeksPerMonth = parsed.prefs.weeksPerMonth;
+				} else if (typeof parsed.prefs?.budget === 'number') {
 					weeksPerMonth = 4;
-					hoursPerWeek = Math.round(parsed.prefs.budget / weeksPerMonth);
+					hoursPerWeek  = Math.round(parsed.prefs.budget / 4);
 				}
+				localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
+				localStorage.setItem('sq:budget:weeks',  JSON.stringify(weeksPerMonth));
+				localStorage.setItem('sq:budget', JSON.stringify(hoursPerWeek * weeksPerMonth));
+
 				if (typeof parsed.prefs?.queueName === 'string') {
 					setQueueName(parsed.prefs.queueName);
 					myQueueName = parsed.prefs.queueName;
 				}
+				if (parsed.prefs?.queueColors && typeof parsed.prefs.queueColors === 'object') {
+					for (const [tag, color] of Object.entries(parsed.prefs.queueColors)) {
+						if (typeof color === 'string') setQueueColor(tag, color);
+					}
+				}
+				if (typeof parsed.prefs?.sort === 'string') localStorage.setItem('sq:sort', parsed.prefs.sort);
+				if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
 			}
 
 			await replaceAll(items);
