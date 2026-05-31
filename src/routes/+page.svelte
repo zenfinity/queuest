@@ -545,7 +545,7 @@
 							{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
 							{#if !item.providers.length}
 								{#if item.rentable}
-									<span class="text-xs text-gray-400 dark:text-gray-500">Rent/Buy only</span>
+									<span class="text-sm leading-none" title="Rent/Buy only">💲</span>
 								{:else}
 									{@const isOpen = libraryPopupId === item.id}
 									<div class="relative" data-library-popup>
@@ -630,7 +630,7 @@
 								{/if}
 							</div>
 						{:else if item.rentable}
-							<span class="shrink-0 text-[9px] text-gray-400 dark:text-gray-500">Rent/Buy only</span>
+							<span class="shrink-0 text-xs leading-none" title="Rent/Buy only">💲</span>
 						{:else}
 							{@const isOpen = libraryPopupId === item.id}
 							<div class="relative shrink-0" data-library-popup>
