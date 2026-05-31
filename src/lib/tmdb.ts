@@ -58,6 +58,11 @@ interface RuntimeResult {
 	/** Production company IDs from the TMDB response (movies; empty for TV) */
 	companyIds: number[];
 	release: import('./types').ReleaseInfo | null;
+	backdrop_path: string | null;
+	genres: string[];
+	cast: import('./types').CastMember[];
+	director: string | null;
+	creator: string | null;
 }
 
 export async function getRuntime(
@@ -65,16 +70,18 @@ export async function getRuntime(
 	mediaType: 'movie' | 'tv',
 	apiKey: string
 ): Promise<RuntimeResult> {
-	// Movies: append release_dates so we get digital date in one call
-	const qs = mediaType === 'movie' ? '&append_to_response=release_dates' : '';
+	// Movies: append release_dates + credits in one call; TV: just credits
+	const qs = mediaType === 'movie' ? '&append_to_response=release_dates,credits' : '&append_to_response=credits';
 	const res = await fetch(`${BASE}/${mediaType}/${id}?api_key=${apiKey}&language=en-US${qs}`);
-	if (!res.ok) return { runtime_minutes: null, seasons: [], networkIds: [], companyIds: [], release: null };
+	if (!res.ok) return { runtime_minutes: null, seasons: [], networkIds: [], companyIds: [], release: null, backdrop_path: null, genres: [], cast: [], director: null, creator: null };
 
 	if (mediaType === 'movie') {
 		const data = (await res.json()) as {
 			runtime?: number;
 			status?: string;
 			release_date?: string;
+			backdrop_path?: string | null;
+			genres?: Array<{ id: number; name: string }>;
 			production_companies?: Array<{ id: number }>;
 			release_dates?: {
 				results?: Array<{
@@ -82,17 +89,28 @@ export async function getRuntime(
 					release_dates: Array<{ type: number; release_date: string }>;
 				}>;
 			};
+			credits?: {
+				cast?: Array<{ name: string; character: string; profile_path?: string | null; order: number }>;
+				crew?: Array<{ name: string; job: string }>;
+			};
 		};
 
 		const companyIds = (data.production_companies ?? []).map((c) => c.id);
 		const release = movieReleaseInfo(data.status, data.release_date, data.release_dates?.results, companyIds);
+		const cast = (data.credits?.cast ?? []).slice(0, 8).map((c) => ({ name: c.name, character: c.character, profile_path: c.profile_path ?? null }));
+		const director = data.credits?.crew?.find((c) => c.job === 'Director')?.name ?? null;
 
 		return {
 			runtime_minutes: data.runtime ?? null,
 			seasons: [],
 			networkIds: [],
 			companyIds,
-			release
+			release,
+			backdrop_path: data.backdrop_path ?? null,
+			genres: (data.genres ?? []).map((g) => g.name),
+			cast,
+			director,
+			creator: null
 		};
 	}
 
@@ -104,6 +122,12 @@ export async function getRuntime(
 		networks?: Array<{ id: number }>;
 		status?: string;
 		next_episode_to_air?: { air_date?: string; season_number?: number } | null;
+		backdrop_path?: string | null;
+		genres?: Array<{ id: number; name: string }>;
+		created_by?: Array<{ name: string }>;
+		credits?: {
+			cast?: Array<{ name: string; character: string; profile_path?: string | null; order: number }>;
+		};
 	};
 
 	const avgRuntime = data.episode_run_time?.length
@@ -124,8 +148,17 @@ export async function getRuntime(
 	const runtime_minutes = totalEps && avgRuntime ? Math.round(totalEps * avgRuntime) : null;
 	const networkIds = (data.networks ?? []).map((n) => n.id);
 	const release = tvReleaseInfo(data.status, data.next_episode_to_air);
+	const cast = (data.credits?.cast ?? []).slice(0, 8).map((c) => ({ name: c.name, character: c.character, profile_path: c.profile_path ?? null }));
+	const creator = (data.created_by ?? []).map((c) => c.name).join(', ') || null;
 
-	return { runtime_minutes, seasons, networkIds, companyIds: [], release };
+	return {
+		runtime_minutes, seasons, networkIds, companyIds: [], release,
+		backdrop_path: data.backdrop_path ?? null,
+		genres: (data.genres ?? []).map((g) => g.name),
+		cast,
+		director: null,
+		creator
+	};
 }
 
 // ── Release info helpers ──────────────────────────────────────────────────────

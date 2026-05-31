@@ -44,6 +44,8 @@
 	let viewOpen   = $state(false);
 	let releasePopupId: number | null = $state(null);
 	let libraryPopupId: number | null = $state(null);
+	let detailItem: WatchlistItem | null = $state(null);
+	let overviewExpanded = $state(false);
 
 	// ── Share ─────────────────────────────────────────────────────────────────
 	let shareOpen          = $state(false);
@@ -345,6 +347,7 @@
 	if (!t.closest('[data-dropdown]')) { filterOpen = false; viewOpen = false; }
 	if (!t.closest('[data-release-popup]')) { releasePopupId = null; }
 	if (!t.closest('[data-library-popup]')) { libraryPopupId = null; }
+	if (!t.closest('[data-detail-panel]') && !t.closest('[data-detail-trigger]')) { detailItem = null; overviewExpanded = false; }
 }} />
 
 {#snippet seasonPicker(item: WatchlistItem)}
@@ -511,13 +514,18 @@
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 				<div class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
-					<div class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800">
+					<button
+						class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
+						onclick={() => { detailItem = item; overviewExpanded = false; }}
+						data-detail-trigger
+						aria-label="View details for {item.title}"
+					>
 						{#if item.poster_path}
 							<img src="{TMDB_IMG}/w300{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
 						{:else}
 							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
 						{/if}
-					</div>
+					</button>
 					<div class="flex flex-1 flex-col gap-2 p-3">
 						<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
 						<!-- Runtime sparkline -->
@@ -604,7 +612,11 @@
 								<div class="flex h-full w-full items-center justify-center text-sm text-gray-400 dark:text-gray-600">🎬</div>
 							{/if}
 						</div>
-						<p class="min-w-0 flex-1 text-sm font-medium leading-tight">{item.title}</p>
+						<button
+							class="min-w-0 flex-1 text-left text-sm font-medium leading-tight hover:text-orange-500 transition-colors"
+							onclick={() => { detailItem = item; overviewExpanded = false; }}
+							data-detail-trigger
+						>{item.title}</button>
 						<div class="flex shrink-0 gap-1">
 							<button class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
@@ -772,6 +784,169 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- ── Detail panel ───────────────────────────────────────────────────────── -->
+{#if detailItem}
+	{@const di = detailItem}
+	<!-- Scrim -->
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+		onclick={() => { detailItem = null; overviewExpanded = false; }}
+	></div>
+
+	<!-- Panel: bottom sheet on mobile, right drawer on sm+ -->
+	<div
+		class="fixed bottom-0 inset-x-0 z-50 flex max-h-[90vh] flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-gray-900 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[22rem] sm:max-h-none sm:rounded-t-none sm:rounded-l-2xl"
+		data-detail-panel
+	>
+		<!-- Backdrop header -->
+		<div class="relative h-36 shrink-0 bg-gray-200 dark:bg-gray-800 sm:h-44">
+			{#if di.backdrop_path}
+				<img src="{TMDB_IMG}/w780{di.backdrop_path}" alt="" class="h-full w-full object-cover" />
+			{:else if di.poster_path}
+				<img src="{TMDB_IMG}/w500{di.poster_path}" alt="" class="h-full w-full object-cover opacity-40 blur-sm scale-110" />
+			{/if}
+			<div class="absolute inset-0 bg-gradient-to-t from-white dark:from-gray-900 via-transparent to-transparent"></div>
+			<button
+				onclick={() => { detailItem = null; overviewExpanded = false; }}
+				class="absolute top-3 right-3 rounded-full bg-black/30 p-1.5 text-white backdrop-blur-sm hover:bg-black/50 transition-colors"
+				aria-label="Close"
+			>
+				<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+			</button>
+		</div>
+
+		<!-- Scrollable content -->
+		<div class="flex-1 overflow-y-auto">
+			<!-- Hero: poster + title/meta -->
+			<div class="flex gap-3 px-4 -mt-14 relative pb-3">
+				{#if di.poster_path}
+					<img
+						src="{TMDB_IMG}/w185{di.poster_path}"
+						alt={di.title}
+						class="w-16 shrink-0 rounded-lg shadow-lg ring-2 ring-white dark:ring-gray-900 self-start"
+					/>
+				{/if}
+				<div class="min-w-0 pt-16">
+					<h2 class="text-base font-bold leading-tight text-gray-900 dark:text-white">{di.title}</h2>
+					<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+						{#if di.added_at}<span>{di.added_at.slice(0,4)}</span>{/if}
+						<span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-800">{di.media_type === 'movie' ? '🎬 Movie' : '📺 TV'}</span>
+						{#if di.director}<span>Dir. {di.director}</span>{/if}
+						{#if di.creator}<span>Created by {di.creator}</span>{/if}
+					</div>
+					{#if di.genres?.length}
+						<div class="mt-1.5 flex flex-wrap gap-1">
+							{#each di.genres as g (g)}
+								<span class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{g}</span>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
+
+			<div class="space-y-4 px-4 pb-4">
+				<!-- Overview -->
+				{#if di.overview}
+					<div>
+						<p class="text-xs leading-relaxed text-gray-600 dark:text-gray-400
+							{overviewExpanded ? '' : 'line-clamp-4'}">{di.overview}</p>
+						{#if di.overview.length > 200}
+							<button
+								onclick={() => { overviewExpanded = !overviewExpanded; }}
+								class="mt-1 text-[10px] font-medium text-orange-500 hover:text-orange-400"
+							>{overviewExpanded ? 'Less' : 'More'}</button>
+						{/if}
+					</div>
+				{/if}
+
+				<!-- Runtime -->
+				<div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+					<span>{formatRuntime(effectiveRuntime(di), di.media_type)} remaining</span>
+					{#if di.runtime_minutes && di.media_type === 'tv'}
+						<span class="text-gray-300 dark:text-gray-700">·</span>
+						<span>{formatRuntime(di.runtime_minutes, di.media_type)} total</span>
+					{/if}
+				</div>
+
+				<!-- Cast -->
+				{#if di.cast?.length}
+					<div>
+						<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Cast</p>
+						<div class="flex gap-2 overflow-x-auto pb-1">
+							{#each di.cast as c (c.name)}
+								<div class="flex shrink-0 flex-col items-center gap-1 w-14">
+									<div class="h-12 w-12 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+										{#if c.profile_path}
+											<img src="{TMDB_IMG}/w185{c.profile_path}" alt={c.name} class="h-full w-full object-cover" />
+										{:else}
+											<div class="flex h-full w-full items-center justify-center text-lg text-gray-400">👤</div>
+										{/if}
+									</div>
+									<p class="text-center text-[9px] font-medium leading-tight text-gray-700 dark:text-gray-300 line-clamp-2">{c.name}</p>
+									<p class="text-center text-[9px] leading-tight text-gray-400 dark:text-gray-600 line-clamp-1">{c.character}</p>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{:else if !di.cast}
+					<p class="text-[10px] text-gray-400 dark:text-gray-600">Run <strong>Settings → Refresh Data</strong> to load cast info.</p>
+				{/if}
+
+				<!-- Where to watch -->
+				<div>
+					<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Where to watch</p>
+					{#if di.providers.length}
+						<div class="flex flex-wrap gap-2">
+							{#each di.providers as p (p.provider_id)}
+								<div class="flex items-center gap-1.5">
+									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} class="h-6 w-6 rounded-lg" />
+									<span class="text-xs text-gray-600 dark:text-gray-400">{p.provider_name}</span>
+								</div>
+							{/each}
+						</div>
+					{:else if di.rentable}
+						<p class="text-xs text-gray-500">💲 Available to rent or buy</p>
+					{:else}
+						<div class="space-y-1">
+							<p class="text-xs text-gray-500">🚫 Not on streaming services</p>
+							<div class="flex gap-3">
+								<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(di.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-orange-500 hover:text-orange-400">Kanopy →</a>
+								<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(di.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-orange-500 hover:text-orange-400">Hoopla →</a>
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Season chips -->
+				{#if di.media_type === 'tv'}
+					<div>
+						<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Seasons</p>
+						{@render seasonPicker(di)}
+					</div>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Sticky footer actions -->
+		<div class="shrink-0 border-t border-gray-100 px-4 py-3 dark:border-gray-800 flex gap-2">
+			<button
+				class="flex-1 rounded-lg py-2 text-sm font-medium transition-colors
+					{di.watched_at
+						? 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-400 dark:hover:bg-teal-900/60'
+						: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+				disabled={busy.has(di.id)}
+				onclick={async () => { await toggle(di); detailItem = items.find(i => i.id === di.id) ?? null; }}
+			>{di.watched_at ? '↩ Unwatch' : '✓ Watched'}</button>
+			<button
+				class="rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
+				disabled={busy.has(di.id)}
+				onclick={async () => { await remove(di); detailItem = null; }}
+			>✕ Remove</button>
+		</div>
+	</div>
+{/if}
 
 <!-- ── Share modal ────────────────────────────────────────────────────────── -->
 {#if shareOpen}

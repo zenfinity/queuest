@@ -33,7 +33,12 @@
 				watched_seasons: [],
 				current_season: null,
 				current_episode: null,
-				release: result.release
+				release: result.release,
+				backdrop_path: result.backdrop_path,
+				genres: result.genres,
+				cast: result.cast,
+				director: result.director,
+				creator: result.creator
 			});
 			added = new Set(added).add(result.id);
 		} catch (e) {

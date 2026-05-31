@@ -105,7 +105,12 @@ export async function patchProviders(
 	rentable: boolean,
 	release: WatchlistItem['release'],
 	seasons?: WatchlistItem['seasons'],
-	runtime_minutes?: number | null
+	runtime_minutes?: number | null,
+	backdrop_path?: string | null,
+	genres?: string[],
+	cast?: WatchlistItem['cast'],
+	director?: string | null,
+	creator?: string | null
 ): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
@@ -119,6 +124,11 @@ export async function patchProviders(
 			item.release = release;
 			if (seasons && seasons.length > 0) item.seasons = seasons;
 			if (runtime_minutes != null) item.runtime_minutes = runtime_minutes;
+			if (backdrop_path !== undefined) item.backdrop_path = backdrop_path;
+			if (genres !== undefined) item.genres = genres;
+			if (cast !== undefined) item.cast = cast;
+			if (director !== undefined) item.director = director;
+			if (creator !== undefined) item.creator = creator;
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
 			put.onerror = () => reject(put.error);
