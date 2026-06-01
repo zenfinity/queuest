@@ -113,7 +113,7 @@
 			<!-- Three points -->
 			<div class="mb-4 space-y-3 sm:mb-8 sm:space-y-5">
 				<div class="flex gap-3 sm:gap-4">
-					<span class="mt-0.5 text-lg leading-none sm:text-xl">🔍</span>
+					<span class="mt-0.5 w-5 shrink-0 text-center text-lg leading-none sm:text-xl">🔍</span>
 					<div>
 						<p class="text-xs font-semibold sm:text-sm">Build your watch queue</p>
 						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
@@ -122,7 +122,7 @@
 					</div>
 				</div>
 				<div class="flex gap-3 sm:gap-4">
-					<span class="mt-0.5 text-lg leading-none sm:text-xl">≋</span>
+					<span class="mt-0.5 w-5 shrink-0 text-center text-lg leading-none sm:text-xl">≋</span>
 					<div>
 						<p class="text-xs font-semibold sm:text-sm">See your subscription value</p>
 						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
@@ -131,7 +131,7 @@
 					</div>
 				</div>
 				<div class="flex gap-3 sm:gap-4">
-					<span class="mt-0.5 text-lg leading-none sm:text-xl">🔗</span>
+					<span class="mt-0.5 w-5 shrink-0 text-center text-lg leading-none sm:text-xl">🔗</span>
 					<div>
 						<p class="text-xs font-semibold sm:text-sm">Share your queue</p>
 						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
@@ -140,7 +140,7 @@
 					</div>
 				</div>
 				<div class="flex gap-3 sm:gap-4">
-					<span class="mt-0.5 text-lg leading-none sm:text-xl">🔒</span>
+					<span class="mt-0.5 w-5 shrink-0 text-center text-lg leading-none sm:text-xl">🔒</span>
 					<div>
 						<p class="text-xs font-semibold sm:text-sm">Your data, your device</p>
 						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
