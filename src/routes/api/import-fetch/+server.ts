@@ -8,15 +8,15 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 	let res: Response;
 	try {
-		res = await fetch(url);
-	} catch {
-		return new Response('Could not reach that URL', { status: 502 });
+		res = await fetch(url, {
+			headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Queuest/1.0)' }
+		});
+	} catch (e) {
+		return new Response(`Could not reach URL: ${e instanceof Error ? e.message : String(e)}`, { status: 502 });
 	}
-	if (!res.ok) return new Response(
-		res.status === 403 || res.status === 401
-			? 'Link has expired — go back to IMDb and generate a fresh export link.'
-			: `URL returned ${res.status} ${res.statusText}`,
-		{ status: 502 }
-	);
+	if (!res.ok) {
+		const body = await res.text().catch(() => '');
+		return new Response(`HTTP ${res.status}: ${body.slice(0, 300) || res.statusText}`, { status: 502 });
+	}
 	return text(await res.text());
 };

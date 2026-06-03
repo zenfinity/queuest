@@ -157,6 +157,14 @@
 		csvError = ''; csvDoneOnce = false;
 		csvUrlLoading = true;
 		try {
+			// Try direct browser fetch first — S3 presigned URLs are usually CORS-open
+			try {
+				const direct = await fetch(csvUrl.trim());
+				if (direct.ok) { applyCsvText(await direct.text()); return; }
+			} catch {
+				// CORS blocked or network error — fall through to server proxy
+			}
+
 			const res = await fetch('/api/import-fetch', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
