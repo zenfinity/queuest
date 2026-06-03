@@ -14,7 +14,7 @@
 	let textRows        = $derived(parseTextList(textInput));
 
 	let importing       = $state(false);
-	let importSource    = $state<'csv' | 'text' | 'criterion' | null>(null);
+	let importSource    = $state<'csv' | 'text' | null>(null);
 	let importTotal     = $state(0);
 	let importDone      = $state(0);
 	let importAdded     = $state(0);
@@ -51,28 +51,12 @@
 		reader.readAsText(file);
 	}
 
-	function isCriterionUrl(url: string) {
-		return url.includes('criterion.com/');
-	}
-
 	async function fetchCsvUrl() {
 		if (!csvUrl.trim() || csvUrlLoading) return;
 		csvRows = []; csvFormat = ''; importError = '';
 		textInput = '';
 		csvUrlLoading = true;
 		try {
-			if (isCriterionUrl(csvUrl.trim())) {
-				const res = await fetch('/api/import-criterion', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ url: csvUrl.trim() })
-				});
-				if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-				csvRows = await res.json() as ImportRow[];
-				csvFormat = 'Criterion';
-				return;
-			}
-			// CSV / presigned URL path
 			try {
 				const direct = await fetch(csvUrl.trim());
 				if (direct.ok) { applyCsvText(await direct.text()); return; }
@@ -95,7 +79,7 @@
 
 	const BATCH = 20;
 
-	async function doImport(rows: ImportRow[], source: 'csv' | 'text' | 'criterion') {
+	async function doImport(rows: ImportRow[], source: 'csv' | 'text') {
 		if (!rows.length || importing) return;
 		importing = true; importSource = source; importTotal = rows.length; importDone = 0;
 		importAdded = 0; missedTitles = []; importError = ''; importDoneOnce = false;
@@ -158,15 +142,6 @@
 		</section>
 
 		<section class="space-y-3">
-			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Criterion Closet</h2>
-			<p class="text-sm text-gray-600 dark:text-gray-400">
-				Paste the <span class="font-medium text-gray-800 dark:text-gray-200">Shop these picks</span> link from any
-				<a href="https://www.youtube.com/@criterioncollection" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">Criterion Closet</a>
-				video description — it's a <code class="text-orange-500">criterion.com/shop/collection/…</code> URL.
-			</p>
-		</section>
-
-		<section class="space-y-3">
 			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">IMDb</h2>
 			<p class="text-sm text-gray-600 dark:text-gray-400">
 				Go to your
@@ -193,7 +168,7 @@
 			<div class="flex gap-2">
 				<input
 					type="url"
-					placeholder="https://… (IMDb export link or Criterion collection)"
+					placeholder="https://… (IMDb export link)"
 					bind:value={csvUrl}
 					onkeydown={(e) => e.key === 'Enter' && fetchCsvUrl()}
 					class="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
@@ -214,11 +189,11 @@
 			{/if}
 
 			<button
-				onclick={() => doImport(csvRows, importSource === 'criterion' ? 'criterion' : 'csv')}
+				onclick={() => doImport(csvRows, 'csv')}
 				disabled={!csvRows.length || importing}
 				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
 			>
-				{#if importing && (importSource === 'csv' || importSource === 'criterion')}
+				{#if importing && importSource === 'csv'}
 					Matching {importDone} / {importTotal}…
 				{:else}
 					Add to Queue
