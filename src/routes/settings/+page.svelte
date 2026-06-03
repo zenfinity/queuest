@@ -128,23 +128,47 @@
 	let csvMissed    = $state(0);
 	let csvError     = $state('');
 	let csvDoneOnce  = $state(false);
+	let csvUrl       = $state('');
+	let csvUrlLoading = $state(false);
+
+	function applyCsvText(text: string) {
+		const { rows, format } = parseImportCSV(text);
+		if (format === 'unknown') {
+			csvError = 'Unrecognised format. Expected a Letterboxd or IMDb watchlist CSV.';
+			return;
+		}
+		csvRows = rows;
+		csvFormat = format === 'letterboxd' ? 'Letterboxd' : 'IMDb';
+	}
 
 	function onCsvFileChange(e: Event) {
 		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissed = 0; csvDone = 0;
-		csvError = ''; csvDoneOnce = false;
+		csvError = ''; csvDoneOnce = false; csvUrl = '';
 		const file = (e.currentTarget as HTMLInputElement).files?.[0];
 		if (!file) return;
 		const reader = new FileReader();
-		reader.onload = () => {
-			const { rows, format } = parseImportCSV(reader.result as string);
-			if (format === 'unknown') {
-				csvError = 'Unrecognised format. Upload a Letterboxd or IMDb watchlist CSV.';
-				return;
-			}
-			csvRows = rows;
-			csvFormat = format === 'letterboxd' ? 'Letterboxd' : 'IMDb';
-		};
+		reader.onload = () => applyCsvText(reader.result as string);
 		reader.readAsText(file);
+	}
+
+	async function fetchCsvUrl() {
+		if (!csvUrl.trim() || csvUrlLoading) return;
+		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissed = 0; csvDone = 0;
+		csvError = ''; csvDoneOnce = false;
+		csvUrlLoading = true;
+		try {
+			const res = await fetch('/api/import-fetch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ url: csvUrl.trim() })
+			});
+			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+			applyCsvText(await res.text());
+		} catch (e) {
+			csvError = e instanceof Error ? e.message : 'Failed to fetch URL.';
+		} finally {
+			csvUrlLoading = false;
+		}
 	}
 
 	const CSV_BATCH = 20;
@@ -554,6 +578,27 @@
 			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
 			onchange={onCsvFileChange}
 		/>
+		<div class="flex items-center gap-2">
+			<div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
+			<span class="text-xs text-gray-400">or paste a link</span>
+			<div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
+		</div>
+		<div class="flex gap-2">
+			<input
+				type="url"
+				placeholder="https://… (IMDb export link)"
+				bind:value={csvUrl}
+				onkeydown={(e) => e.key === 'Enter' && fetchCsvUrl()}
+				class="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+			/>
+			<button
+				onclick={fetchCsvUrl}
+				disabled={!csvUrl.trim() || csvUrlLoading}
+				class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+			>
+				{csvUrlLoading ? 'Fetching…' : 'Fetch'}
+			</button>
+		</div>
 		{#if csvFormat && csvRows.length}
 			<p class="text-sm text-gray-600 dark:text-gray-400">
 				Found <span class="font-medium text-gray-900 dark:text-white">{csvRows.length}</span> title{csvRows.length === 1 ? '' : 's'} from {csvFormat}.
