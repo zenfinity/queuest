@@ -1,35 +1,40 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { addItem } from '$lib/db';
-	import { parseImportCSV } from '$lib/import';
+	import { parseImportCSV, parseTextList } from '$lib/import';
 	import type { ImportRow } from '$lib/import';
 	import type { WatchlistItem } from '$lib/types';
 
 	let csvRows         = $state<ImportRow[]>([]);
 	let csvFormat       = $state('');
-	let csvImporting    = $state(false);
-	let csvTotal        = $state(0);
-	let csvDone         = $state(0);
-	let csvAdded        = $state(0);
-	let csvMissedTitles = $state<string[]>([]);
-	let csvError        = $state('');
-	let csvDoneOnce     = $state(false);
 	let csvUrl          = $state('');
 	let csvUrlLoading   = $state(false);
 
+	let textInput       = $state('');
+	let textRows        = $derived(parseTextList(textInput));
+
+	let importing       = $state(false);
+	let importSource    = $state<'csv' | 'text' | null>(null);
+	let importTotal     = $state(0);
+	let importDone      = $state(0);
+	let importAdded     = $state(0);
+	let missedTitles    = $state<string[]>([]);
+	let importError     = $state('');
+	let importDoneOnce  = $state(false);
+
 	function saveMissed() {
-		try { localStorage.setItem('sq:import-missed', JSON.stringify(csvMissedTitles)); } catch {}
+		try { localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles)); } catch {}
 	}
 
 	function clearMissedTitles() {
-		csvMissedTitles = [];
+		missedTitles = [];
 		try { localStorage.removeItem('sq:import-missed'); } catch {}
 	}
 
 	function applyCsvText(text: string) {
 		const { rows, format } = parseImportCSV(text);
 		if (format === 'unknown') {
-			csvError = 'Unrecognised format. Expected a Letterboxd or IMDb watchlist CSV.';
+			importError = 'Unrecognised format. Expected a Letterboxd or IMDb watchlist CSV.';
 			return;
 		}
 		csvRows = rows;
@@ -37,8 +42,8 @@
 	}
 
 	function onCsvFileChange(e: Event) {
-		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissedTitles = []; csvDone = 0;
-		csvError = ''; csvDoneOnce = false; csvUrl = '';
+		csvRows = []; csvFormat = ''; importError = '';
+		textInput = '';
 		const file = (e.currentTarget as HTMLInputElement).files?.[0];
 		if (!file) return;
 		const reader = new FileReader();
@@ -48,8 +53,8 @@
 
 	async function fetchCsvUrl() {
 		if (!csvUrl.trim() || csvUrlLoading) return;
-		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissedTitles = []; csvDone = 0;
-		csvError = ''; csvDoneOnce = false;
+		csvRows = []; csvFormat = ''; importError = '';
+		textInput = '';
 		csvUrlLoading = true;
 		try {
 			try {
@@ -66,21 +71,21 @@
 			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
 			applyCsvText(await res.text());
 		} catch (e) {
-			csvError = e instanceof Error ? e.message : 'Failed to fetch URL.';
+			importError = e instanceof Error ? e.message : 'Failed to fetch URL.';
 		} finally {
 			csvUrlLoading = false;
 		}
 	}
 
-	const CSV_BATCH = 20;
+	const BATCH = 20;
 
-	async function doImportCsv() {
-		if (!csvRows.length || csvImporting) return;
-		csvImporting = true; csvTotal = csvRows.length; csvDone = 0;
-		csvAdded = 0; csvMissedTitles = []; csvError = ''; csvDoneOnce = false;
+	async function doImport(rows: ImportRow[], source: 'csv' | 'text') {
+		if (!rows.length || importing) return;
+		importing = true; importSource = source; importTotal = rows.length; importDone = 0;
+		importAdded = 0; missedTitles = []; importError = ''; importDoneOnce = false;
 		try {
-			for (let i = 0; i < csvRows.length; i += CSV_BATCH) {
-				const batch = csvRows.slice(i, i + CSV_BATCH);
+			for (let i = 0; i < rows.length; i += BATCH) {
+				const batch = rows.slice(i, i + BATCH);
 				const res = await fetch('/api/import-search', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
@@ -95,27 +100,27 @@
 					if (result) {
 						try {
 							await addItem(result);
-							csvAdded++;
+							importAdded++;
 						} catch (e) {
 							if (!(e instanceof DOMException && e.name === 'ConstraintError')) throw e;
 						}
 					} else {
-						csvMissedTitles = [...csvMissedTitles, title];
+						missedTitles = [...missedTitles, title];
 					}
-					csvDone++;
+					importDone++;
 				}
 			}
-			csvDoneOnce = true;
+			importDoneOnce = true;
 			saveMissed();
 		} catch (e) {
-			csvError = e instanceof Error ? e.message : 'Import failed.';
+			importError = e instanceof Error ? e.message : 'Import failed.';
 		} finally {
-			csvImporting = false;
+			importing = false;
 		}
 	}
 
 	onMount(() => {
-		try { csvMissedTitles = JSON.parse(localStorage.getItem('sq:import-missed') ?? '[]'); } catch {}
+		try { missedTitles = JSON.parse(localStorage.getItem('sq:import-missed') ?? '[]'); } catch {}
 	});
 </script>
 
@@ -124,13 +129,11 @@
 <div class="mx-auto max-w-md space-y-8">
 	<h1 class="text-xl font-bold xs:text-2xl">Import</h1>
 
-	<!-- Source cards -->
 	<div class="space-y-6">
-		<!-- Letterboxd -->
+
+		<!-- Letterboxd / IMDb instructions -->
 		<section class="space-y-3">
-			<div class="flex items-center gap-2">
-				<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Letterboxd</h2>
-			</div>
+			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Letterboxd</h2>
 			<p class="text-sm text-gray-600 dark:text-gray-400">
 				Go to
 				<a href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">Settings → Export your data</a>
@@ -149,7 +152,7 @@
 
 		<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
-		<!-- Input -->
+		<!-- CSV / URL input -->
 		<section class="space-y-3">
 			<input
 				type="file"
@@ -179,10 +182,6 @@
 				</button>
 			</div>
 
-			{#if csvError}
-				<p class="text-xs text-red-500">{csvError}</p>
-			{/if}
-
 			{#if csvFormat && csvRows.length}
 				<p class="text-sm text-gray-600 dark:text-gray-400">
 					Found <span class="font-medium text-gray-900 dark:text-white">{csvRows.length}</span> title{csvRows.length === 1 ? '' : 's'} from {csvFormat}.
@@ -190,31 +189,69 @@
 			{/if}
 
 			<button
-				onclick={doImportCsv}
-				disabled={!csvRows.length || csvImporting}
+				onclick={() => doImport(csvRows, 'csv')}
+				disabled={!csvRows.length || importing}
 				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
 			>
-				{#if csvImporting}
-					Matching {csvDone} / {csvTotal}…
+				{#if importing && importSource === 'csv'}
+					Matching {importDone} / {importTotal}…
 				{:else}
 					Add to Queue
 				{/if}
 			</button>
-
-			{#if csvDoneOnce && !csvImporting}
-				<p class="text-xs text-teal-600 dark:text-teal-400">
-					✓ Added {csvAdded} title{csvAdded === 1 ? '' : 's'}.{csvMissedTitles.length > 0 ? ` ${csvMissedTitles.length} not found on TMDB.` : ''}
-				</p>
-			{/if}
 		</section>
 
+		<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+		<!-- Freeform text list -->
+		<section class="space-y-3">
+			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Paste a list</h2>
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				One title per line — from Notes, Keep, or anywhere. Bullets, numbers, and years are stripped automatically.
+			</p>
+			<textarea
+				bind:value={textInput}
+				placeholder={"The Bear\n- Severance (2022)\n1. Andor\n• Slow Horses"}
+				rows="6"
+				class="w-full rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+			></textarea>
+
+			{#if textRows.length > 0}
+				<p class="text-sm text-gray-600 dark:text-gray-400">
+					<span class="font-medium text-gray-900 dark:text-white">{textRows.length}</span> title{textRows.length === 1 ? '' : 's'} detected.
+				</p>
+			{/if}
+
+			<button
+				onclick={() => doImport(textRows, 'text')}
+				disabled={!textRows.length || importing}
+				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+			>
+				{#if importing && importSource === 'text'}
+					Matching {importDone} / {importTotal}…
+				{:else}
+					Add to Queue
+				{/if}
+			</button>
+		</section>
+
+		{#if importError}
+			<p class="text-xs text-red-500">{importError}</p>
+		{/if}
+
+		{#if importDoneOnce && !importing}
+			<p class="text-xs text-teal-600 dark:text-teal-400">
+				✓ Added {importAdded} title{importAdded === 1 ? '' : 's'}.{missedTitles.length > 0 ? ` ${missedTitles.length} not found on TMDB.` : ''}
+			</p>
+		{/if}
+
 		<!-- Missed titles -->
-		{#if csvMissedTitles.length > 0 && !csvImporting}
+		{#if missedTitles.length > 0 && !importing}
 			<div class="border-t border-gray-200 dark:border-gray-800"></div>
 			<section class="space-y-2">
 				<div class="flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
-						Not Found ({csvMissedTitles.length})
+						Not Found ({missedTitles.length})
 					</h2>
 					<button
 						onclick={clearMissedTitles}
@@ -223,7 +260,7 @@
 				</div>
 				<p class="text-xs text-gray-500 dark:text-gray-400">Search for these manually and add them to your queue.</p>
 				<ul class="space-y-1">
-					{#each csvMissedTitles as title (title)}
+					{#each missedTitles as title (title)}
 						<li class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800/60">
 							<span class="truncate text-sm text-gray-700 dark:text-gray-300">{title}</span>
 							<a
@@ -235,5 +272,6 @@
 				</ul>
 			</section>
 		{/if}
+
 	</div>
 </div>

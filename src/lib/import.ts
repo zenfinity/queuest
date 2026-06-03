@@ -86,6 +86,29 @@ export function parseImdbCSV(text: string): ImportRow[] {
 		});
 }
 
+// Strips list decorators (bullets, numbers, dashes) and extracts optional trailing year.
+// Input: one title per line, e.g. "- The Bear (2022)" or "1. Severance"
+export function parseTextList(text: string): ImportRow[] {
+	return text
+		.split(/\r?\n/)
+		.map((line) => {
+			// Strip leading list decorators: "1.", "1)", "-", "*", "•", ">"
+			let s = line.replace(/^\s*(?:\d+[.)]\s*|[-*•>]\s*)/, '').trim();
+			if (!s) return null;
+
+			// Extract trailing year: "(2023)", "[2023]", "2023" at end
+			let year: string | null = null;
+			const yearMatch = s.match(/[\[(]?(\d{4})[\])]?\s*$/);
+			if (yearMatch && parseInt(yearMatch[1]) >= 1900 && parseInt(yearMatch[1]) <= 2100) {
+				year = yearMatch[1];
+				s = s.slice(0, yearMatch.index).trim().replace(/[,;:-]+$/, '').trim();
+			}
+			if (!s) return null;
+			return { title: s, year, mediaTypeHint: 'auto' as const };
+		})
+		.filter((r): r is ImportRow => r !== null);
+}
+
 export function parseImportCSV(text: string): { rows: ImportRow[]; format: ImportFormat } {
 	const allRows = parseCSV(text);
 	if (allRows.length < 2) return { rows: [], format: 'unknown' };
