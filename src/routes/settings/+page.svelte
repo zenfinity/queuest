@@ -654,7 +654,7 @@
 
 		<div class="flex items-center justify-between">
 			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-				Queue<span class="text-orange-400">st</span>
+				Queu<span class="text-orange-400">est</span>
 			</span>
 			<span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
 				v{VERSION}

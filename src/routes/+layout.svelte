@@ -35,7 +35,7 @@
 	<nav class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
 		<div class="mx-auto flex h-11 max-w-5xl items-stretch gap-3 px-3 sm:h-14 sm:gap-6 sm:px-4">
 			<a class="flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white" href="/">
-				Queue<span class="text-orange-400">st</span>
+				Queu<span class="text-orange-400">est</span>
 			</a>
 
 			<div class="flex gap-4 sm:gap-5">
@@ -103,7 +103,7 @@
 			<!-- Brand -->
 			<div class="mb-4 text-center sm:mb-7">
 				<p class="text-xl font-bold tracking-tight sm:text-2xl">
-					Queue<span class="text-orange-400">st</span>
+					Queu<span class="text-orange-400">est</span>
 				</p>
 				<p class="mt-1.5 text-xs leading-relaxed text-gray-500 sm:mt-2 sm:text-sm dark:text-gray-400">
 					Figure out how long you actually need a streaming subscription — before paying for another month.
