@@ -119,17 +119,17 @@
 	}
 
 	// ── CSV Import (Letterboxd / IMDb) ────────────────────────────────────────
-	let csvRows      = $state<ImportRow[]>([]);
-	let csvFormat    = $state('');
-	let csvImporting = $state(false);
-	let csvTotal     = $state(0);
-	let csvDone      = $state(0);
-	let csvAdded     = $state(0);
-	let csvMissed    = $state(0);
-	let csvError     = $state('');
-	let csvDoneOnce  = $state(false);
-	let csvUrl       = $state('');
-	let csvUrlLoading = $state(false);
+	let csvRows         = $state<ImportRow[]>([]);
+	let csvFormat       = $state('');
+	let csvImporting    = $state(false);
+	let csvTotal        = $state(0);
+	let csvDone         = $state(0);
+	let csvAdded        = $state(0);
+	let csvMissedTitles = $state<string[]>([]);
+	let csvError        = $state('');
+	let csvDoneOnce     = $state(false);
+	let csvUrl          = $state('');
+	let csvUrlLoading   = $state(false);
 
 	function applyCsvText(text: string) {
 		const { rows, format } = parseImportCSV(text);
@@ -142,7 +142,7 @@
 	}
 
 	function onCsvFileChange(e: Event) {
-		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissed = 0; csvDone = 0;
+		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissedTitles = []; csvDone = 0;
 		csvError = ''; csvDoneOnce = false; csvUrl = '';
 		const file = (e.currentTarget as HTMLInputElement).files?.[0];
 		if (!file) return;
@@ -153,7 +153,7 @@
 
 	async function fetchCsvUrl() {
 		if (!csvUrl.trim() || csvUrlLoading) return;
-		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissed = 0; csvDone = 0;
+		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissedTitles = []; csvDone = 0;
 		csvError = ''; csvDoneOnce = false;
 		csvUrlLoading = true;
 		try {
@@ -184,7 +184,7 @@
 	async function doImportCsv() {
 		if (!csvRows.length || csvImporting) return;
 		csvImporting = true; csvTotal = csvRows.length; csvDone = 0;
-		csvAdded = 0; csvMissed = 0; csvError = ''; csvDoneOnce = false;
+		csvAdded = 0; csvMissedTitles = []; csvError = ''; csvDoneOnce = false;
 		try {
 			for (let i = 0; i < csvRows.length; i += CSV_BATCH) {
 				const batch = csvRows.slice(i, i + CSV_BATCH);
@@ -198,7 +198,7 @@
 					title: string;
 					result: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> | null;
 				}>;
-				for (const { result } of matched) {
+				for (const { title, result } of matched) {
 					if (result) {
 						try {
 							await addItem(result);
@@ -207,7 +207,7 @@
 							if (!(e instanceof DOMException && e.name === 'ConstraintError')) throw e;
 						}
 					} else {
-						csvMissed++;
+						csvMissedTitles = [...csvMissedTitles, title];
 					}
 					csvDone++;
 				}
@@ -628,8 +628,26 @@
 		</button>
 		{#if csvDoneOnce && !csvImporting}
 			<p class="text-xs text-teal-600 dark:text-teal-400">
-				✓ Added {csvAdded} title{csvAdded === 1 ? '' : 's'}.{csvMissed > 0 ? ` ${csvMissed} not found on TMDB.` : ''}
+				✓ Added {csvAdded} title{csvAdded === 1 ? '' : 's'}.{csvMissedTitles.length > 0 ? ` ${csvMissedTitles.length} not found on TMDB.` : ''}
 			</p>
+			{#if csvMissedTitles.length > 0}
+				<details class="group">
+					<summary class="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+						Show {csvMissedTitles.length} unmatched title{csvMissedTitles.length === 1 ? '' : 's'} ▸
+					</summary>
+					<ul class="mt-2 space-y-1">
+						{#each csvMissedTitles as title (title)}
+							<li class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-800/60">
+								<span class="truncate text-xs text-gray-700 dark:text-gray-300">{title}</span>
+								<a
+									href="/search?q={encodeURIComponent(title)}"
+									class="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-400"
+								>Search →</a>
+							</li>
+						{/each}
+					</ul>
+				</details>
+			{/if}
 		{/if}
 	</section>
 

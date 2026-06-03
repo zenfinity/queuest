@@ -68,6 +68,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	return json(results);
 };
 
+function stripArticle(s: string): string {
+	return s.replace(/^(the|a|an)\s+/i, '').trim();
+}
+
 function pickBestMatch(
 	results: Record<string, unknown>[],
 	title: string,
@@ -79,17 +83,38 @@ function pickBestMatch(
 		: results.filter((r) => r.media_type === hint);
 	const pool = candidates.length ? candidates : results;
 
-	const q = title.toLowerCase();
+	const q = title.toLowerCase().trim();
+	const qStripped = stripArticle(q);
+	const yearN = year ? parseInt(year) : null;
 
-	if (year) {
-		const exact = pool.find((r) => {
-			const t = ((r.title ?? r.name) as string ?? '').toLowerCase();
-			const y = ((r.release_date ?? r.first_air_date) as string ?? '').slice(0, 4);
-			return t === q && y === year;
-		});
-		if (exact) return exact;
+	function rTitle(r: Record<string, unknown>): string {
+		return ((r.title ?? r.name) as string ?? '').toLowerCase().trim();
+	}
+	function rYear(r: Record<string, unknown>): number | null {
+		const y = parseInt(((r.release_date ?? r.first_air_date) as string ?? '').slice(0, 4));
+		return isNaN(y) ? null : y;
 	}
 
-	const titleMatch = pool.find((r) => ((r.title ?? r.name) as string ?? '').toLowerCase() === q);
-	return titleMatch ?? pool[0] ?? null;
+	// Try progressively looser match criteria
+	const matchers: Array<(r: Record<string, unknown>) => boolean> = [
+		// Exact title + exact year
+		(r) => rTitle(r) === q && yearN !== null && rYear(r) === yearN,
+		// Exact title + year ±1
+		(r) => rTitle(r) === q && yearN !== null && rYear(r) !== null && Math.abs(rYear(r)! - yearN) <= 1,
+		// Exact title, any year
+		(r) => rTitle(r) === q,
+		// Article-stripped title + exact year
+		(r) => stripArticle(rTitle(r)) === qStripped && yearN !== null && rYear(r) === yearN,
+		// Article-stripped title + year ±1
+		(r) => stripArticle(rTitle(r)) === qStripped && yearN !== null && rYear(r) !== null && Math.abs(rYear(r)! - yearN) <= 1,
+		// Article-stripped title, any year
+		(r) => stripArticle(rTitle(r)) === qStripped,
+	];
+
+	for (const match of matchers) {
+		const found = pool.find(match);
+		if (found) return found;
+	}
+
+	return pool[0] ?? null;
 }
