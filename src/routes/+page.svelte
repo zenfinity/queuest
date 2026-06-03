@@ -5,7 +5,7 @@
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
-	import { remainingRuntime, releaseChip } from '$lib/progress';
+	import { remainingRuntime, releaseChip, cancelCandidates } from '$lib/progress';
 	import { generateShareKey, encryptWithKey } from '$lib/crypto';
 	import { getQueueName, getQueueColors } from '$lib/queue-colors';
 	import type { SharePayload } from '$lib/types';
@@ -196,6 +196,21 @@
 		return providerId !== null ? providerHue(providerId) : null;
 	}
 
+	// ── Cancellation alerts ───────────────────────────────────────────────────
+	let dismissedAlerts = $state<Record<string, string>>({});
+
+	function dismissAlert(providerId: number) {
+		const updated = { ...dismissedAlerts, [String(providerId)]: new Date().toISOString().slice(0, 10) };
+		dismissedAlerts = updated;
+		try { localStorage.setItem('sq:dismiss-cancel', JSON.stringify(updated)); } catch {}
+	}
+
+	let cancelAlert = $derived.by(() => {
+		if (!loaded) return null;
+		const candidates = cancelCandidates(queued, budgetHours, dismissedAlerts);
+		return candidates[0] ?? null;
+	});
+
 	// ── Derived lists ─────────────────────────────────────────────────────────
 	let queued      = $derived(items.filter((i) => !i.watched_at));
 	let watched     = $derived(items.filter((i) => i.watched_at));
@@ -276,6 +291,7 @@
 		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
 		budgetHours = loadJSON<number>('sq:budget', 40);
 		queueColors = getQueueColors();
+		try { dismissedAlerts = JSON.parse(localStorage.getItem('sq:dismiss-cancel') ?? '{}'); } catch {}
 		await reload();
 		loaded = true;
 	});
@@ -394,6 +410,30 @@
 {/snippet}
 
 <div class="space-y-4 xs:space-y-6">
+	<!-- Cancellation alert -->
+	{#if cancelAlert}
+		{@const a = cancelAlert}
+		<div class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-700/40 dark:bg-amber-950/20">
+			<img
+				src="{TMDB_IMG}/w45{a.logo}"
+				alt={a.name}
+				class="mt-0.5 h-6 w-6 shrink-0 rounded object-contain"
+			/>
+			<p class="min-w-0 flex-1 text-sm text-amber-800 dark:text-amber-300">
+				<span class="font-semibold">{a.name}</span> — {formatRuntime(a.totalMins, 'tv')} left in your queue. You could finish it this month and pause your subscription.
+			</p>
+			<button
+				onclick={() => dismissAlert(a.providerId)}
+				aria-label="Dismiss"
+				class="shrink-0 text-amber-400 transition-colors hover:text-amber-600 dark:hover:text-amber-200"
+			>
+				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+				</svg>
+			</button>
+		</div>
+	{/if}
+
 	<!-- Toolbar -->
 	<div class="flex items-center gap-2">
 		<!-- Add Titles -->

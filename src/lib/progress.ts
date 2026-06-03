@@ -104,6 +104,46 @@ export function remainingRuntime(item: WatchlistItem): number {
 	return Math.round(remaining);
 }
 
+export interface CancelCandidate {
+	providerId: number;
+	name: string;
+	logo: string;
+	totalMins: number;
+}
+
+/**
+ * Returns providers whose unwatched queue fits within the monthly budget,
+ * sorted by ascending remaining time. Used to surface "consider pausing"
+ * alerts. A candidate dismissed within the last 30 days is excluded.
+ */
+export function cancelCandidates(
+	unwatched: WatchlistItem[],
+	budgetHours: number,
+	dismissed: Record<string, string>
+): CancelCandidate[] {
+	const budgetMins = budgetHours * 60;
+	if (budgetMins <= 0) return [];
+
+	const map = new Map<number, CancelCandidate>();
+	for (const item of unwatched) {
+		if (!item.providers.length) continue;
+		const p = item.providers[0];
+		if (!map.has(p.provider_id)) {
+			map.set(p.provider_id, { providerId: p.provider_id, name: p.provider_name, logo: p.logo_path, totalMins: 0 });
+		}
+		map.get(p.provider_id)!.totalMins += remainingRuntime(item);
+	}
+
+	const now = Date.now();
+	return [...map.values()]
+		.filter(({ providerId, totalMins }) => {
+			if (totalMins <= 0 || totalMins > budgetMins) return false;
+			const d = dismissed[String(providerId)];
+			return !d || (now - new Date(d).getTime()) / 86400000 > 30;
+		})
+		.sort((a, b) => a.totalMins - b.totalMins);
+}
+
 /**
  * Returns a compact progress label for TV shows, e.g. "S1–S3 done · S4 E2"
  * Returns null for movies or items with no progress recorded.
