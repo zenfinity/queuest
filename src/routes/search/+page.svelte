@@ -45,8 +45,12 @@
 			});
 			added = new Set(added).add(result.id);
 		} catch (e) {
-			const msg = e instanceof Error ? e.message : 'Already in queue';
-			errors = new Map(errors).set(result.id, msg);
+			if (e instanceof DOMException && e.name === 'ConstraintError') {
+				added = new Set(added).add(result.id);
+			} else {
+				const msg = e instanceof Error ? e.message : 'Failed to add';
+				errors = new Map(errors).set(result.id, msg);
+			}
 		} finally {
 			const nextAdding = new Set(adding);
 			nextAdding.delete(result.id);
