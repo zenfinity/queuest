@@ -86,17 +86,45 @@ export function parseImdbCSV(text: string): ImportRow[] {
 		});
 }
 
-// Strips list decorators (bullets, numbers, dashes) and extracts optional trailing year.
-// Input: one title per line, e.g. "- The Bear (2022)" or "1. Severance"
+// Strips list decorators, Obsidian markdown syntax, emoji, and non-year parentheticals,
+// then extracts an optional trailing year. Handles plain lists, Obsidian checkboxes,
+// wiki links, and completion dates (e.g. "- [x] Licorice Pizza ✅ 2024-02-01").
 export function parseTextList(text: string): ImportRow[] {
 	return text
 		.split(/\r?\n/)
 		.map((line) => {
-			// Strip leading list decorators: "1.", "1)", "-", "*", "•", ">"
-			let s = line.replace(/^\s*(?:\d+[.)]\s*|[-*•>]\s*)/, '').trim();
+			// Strip leading whitespace/tabs (indented sub-items treated same as top-level)
+			let s = line.replace(/^[\t ]+/, '');
+
+			// Strip leading list decorator: "- ", "* ", "1. ", "1) ", "• ", "> "
+			s = s.replace(/^(?:\d+[.)]\s*|[-*•>]\s*)/, '');
+
+			// Strip Obsidian checkbox: "[ ] " or "[x] " (any case)
+			s = s.replace(/^\[[ xX]\]\s*/, '');
+
+			// Strip Obsidian wiki links: [[...]]
+			s = s.replace(/\[\[.*?\]\]/g, '');
+
+			// Strip ISO completion dates: 2024-02-01
+			s = s.replace(/\d{4}-\d{2}-\d{2}/g, '');
+
+			// Strip emoji (Extended_Pictographic covers arrows, checkmarks, flags, etc.)
+			s = s.replace(/\p{Extended_Pictographic}️?/gu, '');
+			// Strip stray variation selectors and combining enclosing keycap
+			s = s.replace(/[︀-️⃣]/g, '');
+
+			// Strip parentheticals that are NOT a bare 4-digit year — e.g. "(Slater)",
+			// "(Patrick H Willems vid on Zach Snyder)". Keeps "(2022)".
+			s = s.replace(/\((?!\s*\d{4}\s*\))[^)]*\)/g, '');
+			// Strip empty parens left behind after wiki-link removal
+			s = s.replace(/\(\s*\)/g, '');
+
+			// Collapse whitespace
+			s = s.replace(/\s+/g, ' ').trim();
+
 			if (!s) return null;
 
-			// Extract trailing year: "(2023)", "[2023]", "2023" at end
+			// Extract trailing year: "(2023)", "[2023]", or bare "2023" at end
 			let year: string | null = null;
 			const yearMatch = s.match(/[\[(]?(\d{4})[\])]?\s*$/);
 			if (yearMatch && parseInt(yearMatch[1]) >= 1900 && parseInt(yearMatch[1]) <= 2100) {
