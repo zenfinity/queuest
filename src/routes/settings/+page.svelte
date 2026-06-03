@@ -131,6 +131,15 @@
 	let csvUrl          = $state('');
 	let csvUrlLoading   = $state(false);
 
+	function clearMissedTitles() {
+		csvMissedTitles = [];
+		try { localStorage.removeItem('sq:import-missed'); } catch {}
+	}
+
+	$effect(() => {
+		try { localStorage.setItem('sq:import-missed', JSON.stringify(csvMissedTitles)); } catch {}
+	});
+
 	function applyCsvText(text: string) {
 		const { rows, format } = parseImportCSV(text);
 		if (format === 'unknown') {
@@ -316,7 +325,7 @@
 		try {
 			await replaceAll([]);
 			const keys = ['sq:theme','sq:budget','sq:budget:weekly','sq:budget:weeks',
-			               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed'];
+			               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed','sq:import-missed'];
 			for (const k of keys) { try { localStorage.removeItem(k); } catch {} }
 			window.location.href = '/';
 		} finally { resetting = false; }
@@ -358,6 +367,7 @@
 		} catch {}
 
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
+		try { csvMissedTitles = JSON.parse(localStorage.getItem('sq:import-missed') ?? '[]'); } catch {}
 		myQueueName = getQueueName();
 		queueColors = getQueueColors();
 
@@ -630,24 +640,28 @@
 			<p class="text-xs text-teal-600 dark:text-teal-400">
 				✓ Added {csvAdded} title{csvAdded === 1 ? '' : 's'}.{csvMissedTitles.length > 0 ? ` ${csvMissedTitles.length} not found on TMDB.` : ''}
 			</p>
-			{#if csvMissedTitles.length > 0}
-				<details class="group">
-					<summary class="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-						Show {csvMissedTitles.length} unmatched title{csvMissedTitles.length === 1 ? '' : 's'} ▸
-					</summary>
-					<ul class="mt-2 space-y-1">
-						{#each csvMissedTitles as title (title)}
-							<li class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-800/60">
-								<span class="truncate text-xs text-gray-700 dark:text-gray-300">{title}</span>
-								<a
-									href="/search?q={encodeURIComponent(title)}"
-									class="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-400"
-								>Search →</a>
-							</li>
-						{/each}
-					</ul>
-				</details>
-			{/if}
+		{/if}
+		{#if csvMissedTitles.length > 0 && !csvImporting}
+			<details class="group">
+				<summary class="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+					{csvMissedTitles.length} unmatched title{csvMissedTitles.length === 1 ? '' : 's'} ▸
+				</summary>
+				<ul class="mt-2 space-y-1">
+					{#each csvMissedTitles as title (title)}
+						<li class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-800/60">
+							<span class="truncate text-xs text-gray-700 dark:text-gray-300">{title}</span>
+							<a
+								href="/search?q={encodeURIComponent(title)}"
+								class="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-400"
+							>Search →</a>
+						</li>
+					{/each}
+				</ul>
+				<button
+					onclick={clearMissedTitles}
+					class="mt-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+				>Clear list</button>
+			</details>
 		{/if}
 	</section>
 
