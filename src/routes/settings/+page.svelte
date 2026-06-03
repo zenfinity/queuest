@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getAll, replaceAll, patchProviders } from '$lib/db';
+	import { getAll, replaceAll, patchProviders, addItem } from '$lib/db';
 	import { encrypt, decrypt } from '$lib/crypto';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { openWelcome } from '$lib/welcome.svelte';
 	import { getQueueName, setQueueName, getQueueColors, setQueueColor } from '$lib/queue-colors';
+	import { parseImportCSV } from '$lib/import';
+	import type { ImportRow } from '$lib/import';
 	import type { WatchlistItem } from '$lib/types';
 	import pkg from '../../../package.json';
 
@@ -114,6 +116,76 @@
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Import failed.';
 		} finally { importing = false; }
+	}
+
+	// ── CSV Import (Letterboxd / IMDb) ────────────────────────────────────────
+	let csvRows      = $state<ImportRow[]>([]);
+	let csvFormat    = $state('');
+	let csvImporting = $state(false);
+	let csvTotal     = $state(0);
+	let csvDone      = $state(0);
+	let csvAdded     = $state(0);
+	let csvMissed    = $state(0);
+	let csvError     = $state('');
+	let csvDoneOnce  = $state(false);
+
+	function onCsvFileChange(e: Event) {
+		csvRows = []; csvFormat = ''; csvAdded = 0; csvMissed = 0; csvDone = 0;
+		csvError = ''; csvDoneOnce = false;
+		const file = (e.currentTarget as HTMLInputElement).files?.[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = () => {
+			const { rows, format } = parseImportCSV(reader.result as string);
+			if (format === 'unknown') {
+				csvError = 'Unrecognised format. Upload a Letterboxd or IMDb watchlist CSV.';
+				return;
+			}
+			csvRows = rows;
+			csvFormat = format === 'letterboxd' ? 'Letterboxd' : 'IMDb';
+		};
+		reader.readAsText(file);
+	}
+
+	const CSV_BATCH = 20;
+
+	async function doImportCsv() {
+		if (!csvRows.length || csvImporting) return;
+		csvImporting = true; csvTotal = csvRows.length; csvDone = 0;
+		csvAdded = 0; csvMissed = 0; csvError = ''; csvDoneOnce = false;
+		try {
+			for (let i = 0; i < csvRows.length; i += CSV_BATCH) {
+				const batch = csvRows.slice(i, i + CSV_BATCH);
+				const res = await fetch('/api/import-search', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(batch)
+				});
+				if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+				const matched = await res.json() as Array<{
+					title: string;
+					result: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> | null;
+				}>;
+				for (const { result } of matched) {
+					if (result) {
+						try {
+							await addItem(result);
+							csvAdded++;
+						} catch (e) {
+							if (!(e instanceof DOMException && e.name === 'ConstraintError')) throw e;
+						}
+					} else {
+						csvMissed++;
+					}
+					csvDone++;
+				}
+			}
+			csvDoneOnce = true;
+		} catch (e) {
+			csvError = e instanceof Error ? e.message : 'Import failed.';
+		} finally {
+			csvImporting = false;
+		}
 	}
 
 	// ── Refresh providers ─────────────────────────────────────────────────────
@@ -429,6 +501,50 @@
 		</div>
 		{#if importError}<p class="text-xs text-red-500">{importError}</p>{/if}
 		{#if importDone}<p class="text-xs text-teal-600 dark:text-teal-400">✓ Queue restored successfully.</p>{/if}
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- Import from CSV -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Import from Letterboxd or IMDb</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Upload a <code class="text-orange-500">.csv</code> export from
+			<a href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">Letterboxd</a>
+			(Settings → Export your data → <em>watchlist.csv</em>) or
+			<a href="https://www.imdb.com/list/watchlist" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">IMDb</a>
+			(Watchlist → ··· → Export). Titles are matched to TMDB and added to your queue — your existing items are not removed.
+		</p>
+		<input
+			type="file"
+			accept=".csv"
+			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
+			onchange={onCsvFileChange}
+		/>
+		{#if csvFormat && csvRows.length}
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				Found <span class="font-medium text-gray-900 dark:text-white">{csvRows.length}</span> title{csvRows.length === 1 ? '' : 's'} from {csvFormat}.
+			</p>
+		{/if}
+		{#if csvError}
+			<p class="text-xs text-red-500">{csvError}</p>
+		{/if}
+		<button
+			onclick={doImportCsv}
+			disabled={!csvRows.length || csvImporting}
+			class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+		>
+			{#if csvImporting}
+				Matching {csvDone} / {csvTotal}…
+			{:else}
+				Add to Queue
+			{/if}
+		</button>
+		{#if csvDoneOnce && !csvImporting}
+			<p class="text-xs text-teal-600 dark:text-teal-400">
+				✓ Added {csvAdded} title{csvAdded === 1 ? '' : 's'}.{csvMissed > 0 ? ` ${csvMissed} not found on TMDB.` : ''}
+			</p>
+		{/if}
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
