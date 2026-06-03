@@ -17,14 +17,14 @@
 	let csvUrl          = $state('');
 	let csvUrlLoading   = $state(false);
 
+	function saveMissed() {
+		try { localStorage.setItem('sq:import-missed', JSON.stringify(csvMissedTitles)); } catch {}
+	}
+
 	function clearMissedTitles() {
 		csvMissedTitles = [];
 		try { localStorage.removeItem('sq:import-missed'); } catch {}
 	}
-
-	$effect(() => {
-		try { localStorage.setItem('sq:import-missed', JSON.stringify(csvMissedTitles)); } catch {}
-	});
 
 	function applyCsvText(text: string) {
 		const { rows, format } = parseImportCSV(text);
@@ -106,6 +106,7 @@
 				}
 			}
 			csvDoneOnce = true;
+			saveMissed();
 		} catch (e) {
 			csvError = e instanceof Error ? e.message : 'Import failed.';
 		} finally {
