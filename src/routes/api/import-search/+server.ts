@@ -5,7 +5,7 @@ import { env } from '$env/dynamic/private';
 import type { WatchlistItem } from '$lib/types';
 
 const BATCH_LIMIT = 30;
-const CONCURRENCY = 5; // max simultaneous TMDB searches (each uses ~3 API calls)
+const CONCURRENCY = 3; // max simultaneous TMDB searches (each uses ~3 API calls)
 
 // Worker-pool: runs fn over items with at most `limit` in-flight at once
 async function pooled<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {

@@ -77,7 +77,7 @@
 		}
 	}
 
-	const BATCH = 20;
+	const BATCH = 10;
 
 	async function doImport(rows: ImportRow[], source: 'csv' | 'text') {
 		if (!rows.length || importing) return;

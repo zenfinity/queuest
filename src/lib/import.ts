@@ -99,8 +99,11 @@ export function parseTextList(text: string): ImportRow[] {
 			// Strip leading list decorator: "- ", "* ", "1. ", "1) ", "• ", "> "
 			s = s.replace(/^(?:\d+[.)]\s*|[-*•>]\s*)/, '');
 
-			// Strip Obsidian checkbox: "[ ] " or "[x] " (any case)
-			s = s.replace(/^\[[ xX]\]\s*/, '');
+			// Skip completed Obsidian checkboxes: "[x]" means already watched
+			if (/^\[[xX]\]/.test(s)) return null;
+
+			// Strip open checkbox marker: "[ ] "
+			s = s.replace(/^\[ \]\s*/, '');
 
 			// Strip Obsidian wiki links: [[...]]
 			s = s.replace(/\[\[.*?\]\]/g, '');
