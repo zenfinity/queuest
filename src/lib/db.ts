@@ -38,8 +38,10 @@ export async function addItem(
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
+		// JSON round-trip strips Svelte 5 reactive Proxies — structuredClone cannot clone them
+		const plain = JSON.parse(JSON.stringify(item)) as typeof item;
 		const full: Omit<WatchlistItem, 'id'> = {
-			...item,
+			...plain,
 			added_at: new Date().toISOString(),
 			watched_at: null
 		};
