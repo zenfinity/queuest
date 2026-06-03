@@ -197,7 +197,8 @@
 	}
 
 	// ── Cancellation alerts ───────────────────────────────────────────────────
-	let dismissedAlerts = $state<Record<string, string>>({});
+	let cancelAlertsEnabled = $state(false);
+	let dismissedAlerts     = $state<Record<string, string>>({});
 
 	function dismissAlert(providerId: number) {
 		const updated = { ...dismissedAlerts, [String(providerId)]: new Date().toISOString().slice(0, 10) };
@@ -206,7 +207,7 @@
 	}
 
 	let cancelAlert = $derived.by(() => {
-		if (!loaded) return null;
+		if (!loaded || !cancelAlertsEnabled) return null;
 		const candidates = cancelCandidates(queued, budgetHours, dismissedAlerts);
 		return candidates[0] ?? null;
 	});
@@ -291,6 +292,7 @@
 		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
 		budgetHours = loadJSON<number>('sq:budget', 40);
 		queueColors = getQueueColors();
+		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		try { dismissedAlerts = JSON.parse(localStorage.getItem('sq:dismiss-cancel') ?? '{}'); } catch {}
 		await reload();
 		loaded = true;

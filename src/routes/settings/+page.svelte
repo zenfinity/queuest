@@ -290,6 +290,14 @@
 		} finally { resetting = false; }
 	}
 
+	// ── Cancel alerts opt-in ─────────────────────────────────────────────────
+	let cancelAlertsEnabled = $state(false);
+
+	function toggleCancelAlerts() {
+		cancelAlertsEnabled = !cancelAlertsEnabled;
+		try { localStorage.setItem('sq:cancel-alerts', cancelAlertsEnabled ? 'true' : 'false'); } catch {}
+	}
+
 	// ── Queue identity ────────────────────────────────────────────────────────
 	let myQueueName  = $state('My Queue');
 	let queueColors  = $state<Record<string, string>>({});
@@ -317,6 +325,7 @@
 			}
 		} catch {}
 
+		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		myQueueName = getQueueName();
 		queueColors = getQueueColors();
 
@@ -437,6 +446,30 @@
 			/>
 			<span class="text-gray-600 dark:text-gray-400">weeks =</span>
 			<span class="font-semibold text-gray-900 dark:text-white">{budgetHours} hrs/month</span>
+		</div>
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- Cancel alerts -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Cancellation Alerts</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			When enabled, a banner appears on your queue when you've nearly cleared a streaming service — a nudge to consider pausing your subscription.
+		</p>
+		<div class="flex items-center justify-between">
+			<span class="text-sm text-gray-600 dark:text-gray-400">Show cancellation alerts</span>
+			<button
+				role="switch"
+				aria-checked={cancelAlertsEnabled}
+				onclick={toggleCancelAlerts}
+				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors
+					{cancelAlertsEnabled ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}"
+			>
+				<span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
+					{cancelAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}">
+				</span>
+			</button>
 		</div>
 	</section>
 
