@@ -5,6 +5,20 @@ import { env } from '$env/dynamic/private';
 import type { WatchlistItem } from '$lib/types';
 
 const BATCH_LIMIT = 30;
+const CONCURRENCY = 5; // max simultaneous TMDB searches (each uses ~3 API calls)
+
+// Worker-pool: runs fn over items with at most `limit` in-flight at once
+async function pooled<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+	const out: R[] = new Array(items.length);
+	let next = 0;
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+		while (next < items.length) {
+			const i = next++;
+			out[i] = await fn(items[i]);
+		}
+	}));
+	return out;
+}
 
 export const POST: RequestHandler = async ({ request }) => {
 	const apiKey = env.TMDB_API_KEY ?? '';
@@ -18,8 +32,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return new Response('Bad request', { status: 400 });
 	}
 
-	const results = await Promise.all(
-		body.map(async ({ title, year, mediaTypeHint }) => {
+	const results = await pooled(body, CONCURRENCY, async ({ title, year, mediaTypeHint }) => {
 			try {
 				const raw = await searchMulti(title, apiKey);
 				if (!raw.length) return { title, result: null };
@@ -62,8 +75,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			} catch {
 				return { title, result: null };
 			}
-		})
-	);
+	});
 
 	return json(results);
 };
