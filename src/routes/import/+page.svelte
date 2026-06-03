@@ -102,7 +102,11 @@
 							await addItem(result);
 							importAdded++;
 						} catch (e) {
-							if (!(e instanceof DOMException && e.name === 'ConstraintError')) throw e;
+							if (e instanceof DOMException && e.name === 'ConstraintError') {
+								importAdded++; // already in queue — counts as success
+							} else {
+								throw e;
+							}
 						}
 					} else {
 						missedTitles = [...missedTitles, title];
