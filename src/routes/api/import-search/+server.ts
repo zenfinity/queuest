@@ -128,14 +128,5 @@ function pickBestMatch(
 		if (found) return found;
 	}
 
-	// Last resort: use top result only if >50% of the query's significant words
-	// appear in its title. Prevents "Paris I love you" silently matching
-	// "Paris, je t'aime" (only "paris" overlaps → 1/2 = 50%, not > 50%).
-	if (pool[0]) {
-		const qWords = q.split(/\W+/).filter(w => w.length >= 4);
-		if (qWords.length === 0) return pool[0]; // all short words — trust the result
-		const topWords = new Set(rTitle(pool[0]).split(/\W+/));
-		if (qWords.filter(w => topWords.has(w)).length / qWords.length > 0.5) return pool[0];
-	}
 	return null;
 }
