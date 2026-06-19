@@ -1,10 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { addItem } from '$lib/db';
+	import { addItem, replaceAll, setServices } from '$lib/db';
 	import { parseImportCSV, parseTextList } from '$lib/import';
+	import { decrypt } from '$lib/crypto';
+	import { theme } from '$lib/theme.svelte';
+	import { setQueueName, setQueueColor } from '$lib/queue-colors';
 	import type { ImportRow } from '$lib/import';
-	import type { WatchlistItem } from '$lib/types';
+	import type { WatchlistItem, Provider } from '$lib/types';
 
+	// ── CSV import (Letterboxd / IMDb) ────────────────────────────────────────
 	let csvRows         = $state<ImportRow[]>([]);
 	let csvFormat       = $state('');
 	let csvUrl          = $state('');
@@ -123,6 +127,64 @@
 		}
 	}
 
+	// ── Backup restore (.queuest) ─────────────────────────────────────────────
+	let restoreFile       = $state<File | null>(null);
+	let restorePassphrase = $state('');
+	let restoring         = $state(false);
+	let restoreError      = $state('');
+	let restoreDone       = $state(false);
+
+	function onRestoreFileChange(e: Event) {
+		restoreFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
+		restoreError = ''; restoreDone = false;
+	}
+
+	async function doRestore() {
+		if (!restoreFile || !restorePassphrase) return;
+		restoring = true; restoreError = ''; restoreDone = false;
+		try {
+			const parsed = JSON.parse(await decrypt(await restoreFile.arrayBuffer(), restorePassphrase));
+
+			let items: WatchlistItem[];
+			if (Array.isArray(parsed)) {
+				items = parsed;
+			} else {
+				items = parsed.items ?? [];
+				if (parsed.prefs?.theme) {
+					const dark = parsed.prefs.theme === 'dark';
+					theme.dark = dark;
+					localStorage.setItem('sq:theme', parsed.prefs.theme);
+					document.documentElement.classList.toggle('dark', dark);
+				}
+				if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
+					localStorage.setItem('sq:budget:weekly', JSON.stringify(parsed.prefs.weeklyHours));
+					localStorage.setItem('sq:budget:weeks',  JSON.stringify(parsed.prefs.weeksPerMonth));
+					localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth));
+				} else if (typeof parsed.prefs?.budget === 'number') {
+					localStorage.setItem('sq:budget:weekly', JSON.stringify(Math.round(parsed.prefs.budget / 4)));
+					localStorage.setItem('sq:budget:weeks',  '4');
+					localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.budget));
+				}
+				if (typeof parsed.prefs?.queueName === 'string') setQueueName(parsed.prefs.queueName);
+				if (parsed.prefs?.queueColors && typeof parsed.prefs.queueColors === 'object') {
+					for (const [tag, color] of Object.entries(parsed.prefs.queueColors)) {
+						if (typeof color === 'string') setQueueColor(tag, color);
+					}
+				}
+				if (typeof parsed.prefs?.sort === 'string') localStorage.setItem('sq:sort', parsed.prefs.sort);
+				if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
+			}
+
+			await Promise.all([
+				replaceAll(items),
+				setServices(Array.isArray(parsed.services) ? parsed.services : [])
+			]);
+			restoreFile = null; restorePassphrase = ''; restoreDone = true;
+		} catch (e) {
+			restoreError = e instanceof Error ? e.message : 'Import failed.';
+		} finally { restoring = false; }
+	}
+
 	onMount(() => {
 		try { missedTitles = JSON.parse(localStorage.getItem('sq:import-missed') ?? '[]'); } catch {}
 	});
@@ -141,7 +203,7 @@
 			<p class="text-sm text-gray-600 dark:text-gray-400">
 				Go to
 				<a href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">Settings → Export your data</a>
-				and upload <code class="text-orange-500">watchlist.csv</code>.
+				and upload the <code class="text-orange-500">watchlist.csv</code> file below.
 			</p>
 		</section>
 
@@ -158,6 +220,7 @@
 
 		<!-- CSV / URL input -->
 		<section class="space-y-3">
+			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Upload CSV</h2>
 			<input
 				type="file"
 				accept=".csv"
@@ -276,6 +339,40 @@
 				</ul>
 			</section>
 		{/if}
+
+		<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+		<!-- Restore backup -->
+		<section class="space-y-3">
+			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Restore backup</h2>
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				Restore from a <code class="text-orange-500">.queuest</code> file. Theme and budget preferences are restored too.
+				<span class="font-medium text-red-500">This replaces your current queue.</span>
+			</p>
+			<input
+				type="file" accept=".queuest"
+				class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
+				onchange={onRestoreFileChange}
+			/>
+			<div class="flex gap-2">
+				<input
+					type="password"
+					placeholder="Passphrase"
+					bind:value={restorePassphrase}
+					class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					onkeydown={(e) => e.key === 'Enter' && doRestore()}
+				/>
+				<button
+					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					disabled={!restoreFile || !restorePassphrase || restoring}
+					onclick={doRestore}
+				>
+					{restoring ? 'Decrypting…' : 'Import'}
+				</button>
+			</div>
+			{#if restoreError}<p class="text-xs text-red-500">{restoreError}</p>{/if}
+			{#if restoreDone}<p class="text-xs text-teal-600 dark:text-teal-400">✓ Queue restored successfully.</p>{/if}
+		</section>
 
 	</div>
 </div>

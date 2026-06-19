@@ -137,7 +137,7 @@ export function parseTextList(text: string): ImportRow[] {
 			if (!s) return null;
 			return { title: s, year, mediaTypeHint: 'auto' as const };
 		})
-		.filter((r): r is ImportRow => r !== null);
+		.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 export function parseImportCSV(text: string): { rows: ImportRow[]; format: ImportFormat } {
