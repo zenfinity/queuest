@@ -50,11 +50,10 @@
 	{:else}
 		<div class="flex flex-wrap gap-3">
 			{#each queueProviders as provider (provider.provider_id)}
-				{@const subscribed = subscribedIds.has(provider.provider_id)}
 				<button
 					onclick={() => handleToggle(provider)}
 					class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors
-						{subscribed
+						{subscribedIds.has(provider.provider_id)
 							? 'bg-white ring-2 ring-green-500 dark:bg-gray-900'
 							: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
 				>
@@ -63,7 +62,7 @@
 						alt=""
 						class="h-6 w-6 rounded-md object-cover"
 					/>
-					<span class="{subscribed ? 'text-gray-900 dark:text-white' : ''}">{provider.provider_name}</span>
+					<span class="{subscribedIds.has(provider.provider_id) ? 'text-gray-900 dark:text-white' : ''}">{provider.provider_name}</span>
 				</button>
 			{/each}
 		</div>
