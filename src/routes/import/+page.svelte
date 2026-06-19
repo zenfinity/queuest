@@ -175,10 +175,9 @@
 				if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
 			}
 
-			await Promise.all([
-				replaceAll(items),
-				setServices(Array.isArray(parsed.services) ? parsed.services : [])
-			]);
+			const ops: Promise<void>[] = [replaceAll(items)];
+			if (Array.isArray(parsed.services)) ops.push(setServices(parsed.services));
+			await Promise.all(ops);
 			restoreFile = null; restorePassphrase = ''; restoreDone = true;
 		} catch (e) {
 			restoreError = e instanceof Error ? e.message : 'Import failed.';
