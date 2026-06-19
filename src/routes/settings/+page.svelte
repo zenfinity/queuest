@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getAll, replaceAll, patchProviders } from '$lib/db';
+	import { getAll, replaceAll, patchProviders, getServices, setServices, toggleService } from '$lib/db';
 	import { encrypt, decrypt } from '$lib/crypto';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { openWelcome } from '$lib/welcome.svelte';
 	import { getQueueName, setQueueName, getQueueColors, setQueueColor } from '$lib/queue-colors';
-	import type { WatchlistItem } from '$lib/types';
+	import { TMDB_IMG } from '$lib/tmdb';
+	import type { WatchlistItem, Provider } from '$lib/types';
 	import pkg from '../../../package.json';
 
 	const VERSION = pkg.version;
@@ -25,7 +26,7 @@
 		if (!exportPassphrase) return;
 		exporting = true; exportDone = false;
 		try {
-			const items = await getAll();
+			const [items, services] = await Promise.all([getAll(), getServices()]);
 			// Wrap items + preferences so a restore is complete
 			const payload = {
 				version: 1,
@@ -39,7 +40,8 @@
 					sort: localStorage.getItem('sq:sort') ?? 'added',
 					view: localStorage.getItem('sq:view') ?? 'grid',
 				},
-				items
+				items,
+				services
 			};
 			const buf = await encrypt(JSON.stringify(payload), exportPassphrase);
 			const url = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
@@ -109,7 +111,13 @@
 				if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
 			}
 
-			await replaceAll(items);
+			await Promise.all([
+				replaceAll(items),
+				setServices(Array.isArray(parsed.services) ? parsed.services : [])
+			]);
+			if (Array.isArray(parsed.services)) {
+				subscribedIds = new Set((parsed.services as Provider[]).map((s) => s.provider_id));
+			}
 			importFile = null; importPassphrase = ''; importDone = true;
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Import failed.';
@@ -210,7 +218,8 @@
 		if (!resetArmed) { resetArmed = true; return; }
 		resetting = true;
 		try {
-			await replaceAll([]);
+			await Promise.all([replaceAll([]), setServices([])]);
+			subscribedIds = new Set(); queueProviders = [];
 			const keys = ['sq:theme','sq:budget','sq:budget:weekly','sq:budget:weeks',
 			               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed','sq:import-missed'];
 			for (const k of keys) { try { localStorage.removeItem(k); } catch {} }
@@ -224,6 +233,18 @@
 	function toggleCancelAlerts() {
 		cancelAlertsEnabled = !cancelAlertsEnabled;
 		try { localStorage.setItem('sq:cancel-alerts', cancelAlertsEnabled ? 'true' : 'false'); } catch {}
+	}
+
+	// ── Streaming services ────────────────────────────────────────────────────
+	let subscribedIds  = $state(new Set<number>());
+	let queueProviders = $state<Provider[]>([]);
+
+	function handleToggleService(provider: Provider) {
+		const next = new Set(subscribedIds);
+		if (next.has(provider.provider_id)) next.delete(provider.provider_id);
+		else next.add(provider.provider_id);
+		subscribedIds = next;
+		toggleService(provider); // optimistic — IDB write in background
 	}
 
 	// ── Queue identity ────────────────────────────────────────────────────────
@@ -257,11 +278,20 @@
 		myQueueName = getQueueName();
 		queueColors = getQueueColors();
 
-		const items = await getAll();
+		const [items, services] = await Promise.all([getAll(), getServices()]);
+		subscribedIds = new Set(services.map((s) => s.provider_id));
+
+		const providerMap = new Map<number, Provider>();
 		const tags = new Set<string>();
 		for (const item of items) {
+			for (const p of item.providers) {
+				if (!providerMap.has(p.provider_id)) providerMap.set(p.provider_id, p);
+			}
 			if (item.queue_tag) tags.add(item.queue_tag);
 		}
+		queueProviders = [...providerMap.values()].sort((a, b) =>
+			a.provider_name.localeCompare(b.provider_name)
+		);
 		importedTags = [...tags].sort();
 	});
 
@@ -310,6 +340,39 @@
 			maxlength="40"
 			class="w-full rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 		/>
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- Streaming Services -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Streaming Services</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Mark which services you subscribe to. Queuest uses this to surface relevant suggestions.
+		</p>
+		{#if queueProviders.length === 0}
+			<p class="text-sm text-gray-400 dark:text-gray-600">Add titles to your queue to see available services here.</p>
+		{:else}
+			<div class="flex flex-wrap gap-2">
+				{#each queueProviders as provider (provider.provider_id)}
+					{@const subscribed = subscribedIds.has(provider.provider_id)}
+					<button
+						onclick={() => handleToggleService(provider)}
+						class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors
+							{subscribed
+								? 'bg-orange-100 text-orange-700 ring-1 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500/60'
+								: 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
+					>
+						<img
+							src="{TMDB_IMG}/original{provider.logo_path}"
+							alt=""
+							class="h-5 w-5 rounded object-cover"
+						/>
+						{provider.provider_name}
+					</button>
+				{/each}
+			</div>
+		{/if}
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>

@@ -1,8 +1,9 @@
-import type { WatchlistItem } from './types';
+import type { WatchlistItem, Provider } from './types';
 
 const DB_NAME = 'streamq';
 const STORE = 'watchlist';
-const VERSION = 1;
+const SERVICES_STORE = 'services';
+const VERSION = 2;
 
 let _dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -15,6 +16,9 @@ function open(): Promise<IDBDatabase> {
 			if (!db.objectStoreNames.contains(STORE)) {
 				const store = db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
 				store.createIndex('tmdb_media', ['tmdb_id', 'media_type'], { unique: true });
+			}
+			if (!db.objectStoreNames.contains(SERVICES_STORE)) {
+				db.createObjectStore(SERVICES_STORE, { keyPath: 'provider_id' });
 			}
 		};
 		req.onsuccess = () => resolve(req.result);
@@ -147,6 +151,47 @@ export async function replaceAll(items: WatchlistItem[]): Promise<void> {
 		store.clear();
 		for (const item of items) store.put(item);
 		tx.oncomplete = () => resolve();
+		tx.onerror = () => reject(tx.error);
+	});
+}
+
+export async function getServices(): Promise<Provider[]> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db.transaction(SERVICES_STORE).objectStore(SERVICES_STORE).getAll();
+		req.onsuccess = () => resolve(req.result as Provider[]);
+		req.onerror = () => reject(req.error);
+	});
+}
+
+export async function setServices(services: Provider[]): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(SERVICES_STORE, 'readwrite');
+		const store = tx.objectStore(SERVICES_STORE);
+		store.clear();
+		for (const s of services) store.put(s);
+		tx.oncomplete = () => resolve();
+		tx.onerror = () => reject(tx.error);
+	});
+}
+
+export async function toggleService(service: Provider): Promise<boolean> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(SERVICES_STORE, 'readwrite');
+		const store = tx.objectStore(SERVICES_STORE);
+		const getReq = store.get(service.provider_id);
+		getReq.onsuccess = () => {
+			if (getReq.result) {
+				store.delete(service.provider_id);
+				tx.oncomplete = () => resolve(false);
+			} else {
+				store.put(service);
+				tx.oncomplete = () => resolve(true);
+			}
+		};
+		getReq.onerror = () => reject(getReq.error);
 		tx.onerror = () => reject(tx.error);
 	});
 }
