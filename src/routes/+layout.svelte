@@ -8,8 +8,9 @@
 	let { children } = $props();
 
 	const navLinks = [
-		{ href: '/',        label: 'My Queue', exact: true },
-		{ href: '/suggest', label: 'Suggest',  exact: false },
+		{ href: '/',          label: 'My Queue',  exact: true },
+		{ href: '/services',  label: 'Services',  exact: false },
+		{ href: '/suggest',   label: 'Suggest',   exact: false },
 	];
 
 	function isActive(href: string, exact: boolean) {
