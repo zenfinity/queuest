@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { flip } from 'svelte/animate';
 	import type { WatchlistItem } from '$lib/types';
 	import { getAll, removeItem, setWatched, updateShowProgress } from '$lib/db';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
@@ -563,7 +564,8 @@
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+				<div animate:flip={{ duration: 250 }}
+					class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<button
 						class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
@@ -652,7 +654,8 @@
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
 				{@const tagColor  = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80"
+				<div animate:flip={{ duration: 250 }}
+					class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<!-- Row 1: poster · title · actions -->
 					<div class="flex items-center gap-3">
@@ -790,7 +793,7 @@
 								{@const posterW = Math.round(BAR_H * 2 / 3)}
 
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div class="relative shrink-0" style="flex: 0 0 {pct}%; min-width: 18px;" data-item>
+								<div animate:flip={{ duration: 250 }} class="relative shrink-0" style="flex: 0 0 {pct}%; min-width: 18px;" data-item>
 									<button
 										class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive ? 'ring-2 ring-white/50 brightness-125' : 'hover:brightness-110'}"
 										style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace('1px solid ', '')};"
