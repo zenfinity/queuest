@@ -7,13 +7,25 @@
 	let subscribedIds  = $state(new Set<number>());
 	let queueProviders = $state<Provider[]>([]);
 	let loaded         = $state(false);
+	let toggleError    = $state('');
 
-	function handleToggle(provider: Provider) {
+	async function handleToggle(provider: Provider) {
+		const wasSubscribed = subscribedIds.has(provider.provider_id);
 		const next = new Set(subscribedIds);
-		if (next.has(provider.provider_id)) next.delete(provider.provider_id);
+		if (wasSubscribed) next.delete(provider.provider_id);
 		else next.add(provider.provider_id);
 		subscribedIds = next;
-		toggleService(provider); // optimistic — IDB write in background
+		toggleError = '';
+		try {
+			await toggleService(provider);
+		} catch (e) {
+			// revert optimistic update
+			const reverted = new Set(subscribedIds);
+			if (wasSubscribed) reverted.add(provider.provider_id);
+			else reverted.delete(provider.provider_id);
+			subscribedIds = reverted;
+			toggleError = e instanceof Error ? e.message : 'Could not save. Check browser storage settings.';
+		}
 	}
 
 	onMount(async () => {
@@ -69,5 +81,8 @@
 		<p class="text-xs text-gray-400 dark:text-gray-500">
 			{subscribedIds.size} service{subscribedIds.size === 1 ? '' : 's'} selected
 		</p>
+		{#if toggleError}
+			<p class="text-xs text-red-500">{toggleError}</p>
+		{/if}
 	{/if}
 </div>
