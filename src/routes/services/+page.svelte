@@ -1,35 +1,35 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getAll, getServices, toggleService } from '$lib/db';
+	import { services, setSubscribedIds } from '$lib/services.svelte';
 	import { TMDB_IMG } from '$lib/tmdb';
 	import type { Provider } from '$lib/types';
 
-	let subscribedIds  = $state(new Set<number>());
 	let queueProviders = $state<Provider[]>([]);
 	let loaded         = $state(false);
 	let toggleError    = $state('');
 
 	async function handleToggle(provider: Provider) {
 		const id = provider.provider_id;
-		const wasSubscribed = subscribedIds.has(id);
+		const wasSubscribed = services.ids.has(id);
 		toggleError = '';
 		if (wasSubscribed) {
-			const next = new Set(subscribedIds);
+			const next = new Set(services.ids);
 			next.delete(id);
-			subscribedIds = next;
+			setSubscribedIds(next);
 		} else {
-			subscribedIds = new Set([...subscribedIds, id]);
+			setSubscribedIds(new Set([...services.ids, id]));
 		}
 		try {
 			await toggleService(provider);
 		} catch (e) {
 			// revert optimistic update
 			if (wasSubscribed) {
-				subscribedIds = new Set([...subscribedIds, id]);
+				setSubscribedIds(new Set([...services.ids, id]));
 			} else {
-				const next = new Set(subscribedIds);
+				const next = new Set(services.ids);
 				next.delete(id);
-				subscribedIds = next;
+				setSubscribedIds(next);
 			}
 			toggleError = e instanceof Error ? e.message : 'Could not save. Check browser storage settings.';
 		}
@@ -37,7 +37,7 @@
 
 	onMount(async () => {
 		const [items, services] = await Promise.all([getAll(), getServices()]);
-		subscribedIds = new Set(services.map(s => s.provider_id));
+		setSubscribedIds(new Set(services.map(s => s.provider_id)));
 
 		const providerMap = new Map<number, Provider>();
 		for (const item of items) {
@@ -71,9 +71,9 @@
 			{#each queueProviders as provider (provider.provider_id)}
 				<button
 					onclick={() => handleToggle(provider)}
-					style:box-shadow={subscribedIds.has(provider.provider_id) ? '0 0 0 2px oklch(72.3% 0.219 149.579), 0 0 8px oklch(72.3% 0.219 149.579 / 0.35)' : 'none'}
+					style:box-shadow={services.ids.has(provider.provider_id) ? '0 0 0 2px oklch(72.3% 0.219 149.579), 0 0 8px oklch(72.3% 0.219 149.579 / 0.35)' : 'none'}
 					class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors
-						{subscribedIds.has(provider.provider_id)
+						{services.ids.has(provider.provider_id)
 							? 'bg-white dark:bg-gray-900'
 							: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
 				>
@@ -82,12 +82,12 @@
 						alt=""
 						class="h-6 w-6 rounded-md object-cover"
 					/>
-					<span class="{subscribedIds.has(provider.provider_id) ? 'text-gray-900 dark:text-white' : ''}">{provider.provider_name}</span>
+					<span class="{services.ids.has(provider.provider_id) ? 'text-gray-900 dark:text-white' : ''}">{provider.provider_name}</span>
 				</button>
 			{/each}
 		</div>
 		<p class="text-xs text-gray-400 dark:text-gray-500">
-			{subscribedIds.size} service{subscribedIds.size === 1 ? '' : 's'} selected
+			{services.ids.size} service{services.ids.size === 1 ? '' : 's'} selected
 		</p>
 		{#if toggleError}
 			<p class="text-xs text-red-500">{toggleError}</p>

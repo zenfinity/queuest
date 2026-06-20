@@ -10,6 +10,7 @@
 	import { generateShareKey, encryptWithKey } from '$lib/crypto';
 	import { getQueueName, getQueueColors } from '$lib/queue-colors';
 	import type { SharePayload } from '$lib/types';
+	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
@@ -101,8 +102,13 @@
 	function openShare() {
 		shareStatus = 'queue';
 		shareType = 'all';
-		shareQueueNames    = new Set(allShareQueues);
-		shareProviderNames = new Set(shareAllProviders.map((p) => p.name));
+		shareQueueNames = new Set(allShareQueues);
+		const subscribedProviderNames = services.ids.size > 0
+			? new Set(shareAllProviders.filter(p => services.ids.has(p.provider_id)).map(p => p.name))
+			: new Set<string>();
+		shareProviderNames = subscribedProviderNames.size > 0
+			? subscribedProviderNames
+			: new Set(shareAllProviders.map(p => p.name));
 		shareUrl = '';
 		shareCopied = false;
 		shareError = '';
@@ -281,7 +287,10 @@
 		return out;
 	});
 
-	let lanes = $derived(rawLanes);
+	let lanes = $derived.by(() => {
+		if (services.ids.size === 0) return rawLanes;
+		return rawLanes.filter(l => l.providerId === null || services.ids.has(l.providerId));
+	});
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	async function reload() {
@@ -295,7 +304,7 @@
 		queueColors = getQueueColors();
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		try { dismissedAlerts = JSON.parse(localStorage.getItem('sq:dismiss-cancel') ?? '{}'); } catch {}
-		await reload();
+		await Promise.all([reload(), ensureSubscribedLoaded()]);
 		loaded = true;
 	});
 
