@@ -42,8 +42,9 @@
 	let ganttPopupAnchor = $state<{ x: number; y: number } | null>(null);
 
 	// Toolbar dropdowns
-	let filterOpen = $state(false);
-	let viewOpen   = $state(false);
+	let filterOpen        = $state(false);
+	let viewOpen          = $state(false);
+	let filterSubscribed  = $state(false);
 	let releasePopupId: number | null = $state(null);
 	let libraryPopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
@@ -225,7 +226,7 @@
 	let activeItems = $derived(tab === 'queue' ? queued : watched);
 
 	let visibleItems = $derived.by(() => {
-		if (services.ids.size === 0) return activeItems;
+		if (!filterSubscribed || services.ids.size === 0) return activeItems;
 		return activeItems.filter(item =>
 			item.providers.length === 0 ||
 			item.providers.some(p => services.ids.has(p.provider_id))
@@ -499,6 +500,19 @@
 									onclick={() => (sortBy = key)}>{label}</button>
 							{/each}
 						</div>
+						<!-- Subscribed filter -->
+						{#if services.ids.size > 0}
+							<button
+								onclick={() => (filterSubscribed = !filterSubscribed)}
+								class="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors
+									{filterSubscribed
+										? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400'
+										: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
+							>
+								<span class="h-2 w-2 rounded-full {filterSubscribed ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}"></span>
+								Subscribed only
+							</button>
+						{/if}
 					</div>
 				{/if}
 			</div>
