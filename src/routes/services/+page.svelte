@@ -71,7 +71,8 @@
 			{#each queueProviders as provider (provider.provider_id)}
 				<button
 					onclick={() => handleToggle(provider)}
-					style:box-shadow={services.ids.has(provider.provider_id) ? '0 0 0 2px oklch(72.3% 0.219 149.579), 0 0 8px oklch(72.3% 0.219 149.579 / 0.35)' : 'none'}
+					style:outline={services.ids.has(provider.provider_id) ? '2px solid #22c55e' : 'none'}
+					style:outline-offset="2px"
 					class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors
 						{services.ids.has(provider.provider_id)
 							? 'bg-white dark:bg-gray-900'
