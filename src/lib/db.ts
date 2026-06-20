@@ -177,17 +177,19 @@ export async function setServices(services: Provider[]): Promise<void> {
 }
 
 export async function toggleService(service: Provider): Promise<boolean> {
+	const id = service.provider_id;
+	const plain: Provider = { provider_id: id, provider_name: service.provider_name, logo_path: service.logo_path };
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(SERVICES_STORE, 'readwrite');
 		const store = tx.objectStore(SERVICES_STORE);
-		const getReq = store.get(service.provider_id);
+		const getReq = store.get(id);
 		getReq.onsuccess = () => {
 			if (getReq.result) {
-				store.delete(service.provider_id);
+				store.delete(id);
 				tx.oncomplete = () => resolve(false);
 			} else {
-				store.put(service);
+				store.put(plain);
 				tx.oncomplete = () => resolve(true);
 			}
 		};
