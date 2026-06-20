@@ -224,6 +224,14 @@
 	let watched     = $derived(items.filter((i) => i.watched_at));
 	let activeItems = $derived(tab === 'queue' ? queued : watched);
 
+	let visibleItems = $derived.by(() => {
+		if (services.ids.size === 0) return activeItems;
+		return activeItems.filter(item =>
+			item.providers.length === 0 ||
+			item.providers.some(p => services.ids.has(p.provider_id))
+		);
+	});
+
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
 		return [...list].sort((a, b) => {
 			if (sortBy === 'title') return a.title.localeCompare(b.title);
@@ -234,7 +242,7 @@
 		});
 	}
 
-	let flatItems = $derived(sorted(activeItems));
+	let flatItems = $derived(sorted(visibleItems));
 
 	type Lane = {
 		key: string;
@@ -248,7 +256,7 @@
 
 	let rawLanes = $derived.by((): Lane[] => {
 		const budgetMins = budgetHours * 60;
-		const list = sorted(activeItems);
+		const list = sorted(visibleItems);
 		const map  = new Map<string, Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }>();
 		const noProvider: WatchlistItem[] = [];
 
@@ -287,10 +295,7 @@
 		return out;
 	});
 
-	let lanes = $derived.by(() => {
-		if (services.ids.size === 0) return rawLanes;
-		return rawLanes.filter(l => l.providerId === null || services.ids.has(l.providerId));
-	});
+	let lanes = $derived(rawLanes);
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	async function reload() {
