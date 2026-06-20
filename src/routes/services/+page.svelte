@@ -1,31 +1,35 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { getAll, getServices, toggleService } from '$lib/db';
 	import { TMDB_IMG } from '$lib/tmdb';
 	import type { Provider } from '$lib/types';
 
-	let subscribedIds = new SvelteSet<number>();
+	let subscribedIds  = $state(new Set<number>());
 	let queueProviders = $state<Provider[]>([]);
 	let loaded         = $state(false);
 	let toggleError    = $state('');
 
 	async function handleToggle(provider: Provider) {
-		const wasSubscribed = subscribedIds.has(provider.provider_id);
+		const id = provider.provider_id;
+		const wasSubscribed = subscribedIds.has(id);
 		toggleError = '';
 		if (wasSubscribed) {
-			subscribedIds.delete(provider.provider_id);
+			const next = new Set(subscribedIds);
+			next.delete(id);
+			subscribedIds = next;
 		} else {
-			subscribedIds.add(provider.provider_id);
+			subscribedIds = new Set([...subscribedIds, id]);
 		}
 		try {
 			await toggleService(provider);
 		} catch (e) {
 			// revert optimistic update
 			if (wasSubscribed) {
-				subscribedIds.add(provider.provider_id);
+				subscribedIds = new Set([...subscribedIds, id]);
 			} else {
-				subscribedIds.delete(provider.provider_id);
+				const next = new Set(subscribedIds);
+				next.delete(id);
+				subscribedIds = next;
 			}
 			toggleError = e instanceof Error ? e.message : 'Could not save. Check browser storage settings.';
 		}
@@ -33,8 +37,7 @@
 
 	onMount(async () => {
 		const [items, services] = await Promise.all([getAll(), getServices()]);
-		subscribedIds.clear();
-		for (const s of services) subscribedIds.add(s.provider_id);
+		subscribedIds = new Set(services.map(s => s.provider_id));
 
 		const providerMap = new Map<number, Provider>();
 		for (const item of items) {
