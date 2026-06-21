@@ -3,12 +3,11 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { initTheme } from '$lib/theme.svelte';
-	import { welcomeState, initWelcome, closeWelcome } from '$lib/welcome.svelte';
 
 	let { children } = $props();
 
 	const navLinks = [
-		{ href: '/',          label: 'My Queue',  exact: true },
+		{ href: '/app',       label: 'My Queue',  exact: true },
 		{ href: '/services',  label: 'Services',  exact: false },
 		{ href: '/suggest',   label: 'Suggest',   exact: false },
 	];
@@ -19,7 +18,6 @@
 
 	onMount(() => {
 		initTheme();
-		initWelcome();
 		// iOS Safari misreports viewport width during keyboard animation (and after
 		// native pickers dismiss), making sm: breakpoints fire on narrow screens.
 		// Re-stamping the viewport meta on every resize corrects it.
@@ -89,75 +87,4 @@
 		</div>
 	</footer>
 
-	<!-- ── Welcome modal ─────────────────────────────────────────────────── -->
-{#if welcomeState.show}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-		onclick={closeWelcome}
-	>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div
-			class="w-full max-w-md rounded-2xl bg-white p-4 sm:p-8 shadow-2xl dark:bg-gray-900"
-			onclick={(e) => e.stopPropagation()}
-		>
-			<!-- Brand -->
-			<div class="mb-4 text-center sm:mb-7">
-				<p class="text-xl font-bold tracking-tight sm:text-2xl">
-					Queu<span class="text-orange-400">est</span>
-				</p>
-				<p class="mt-1.5 text-xs leading-relaxed text-gray-500 sm:mt-2 sm:text-sm dark:text-gray-400">
-					Figure out how long you actually need a streaming subscription — before paying for another month.
-				</p>
-			</div>
-
-			<!-- Three points -->
-			<div class="mb-4 space-y-3 sm:mb-8 sm:space-y-5">
-				<div class="flex gap-3 sm:gap-4">
-					<span class="mt-0.5 text-lg leading-none sm:text-xl">🔍</span>
-					<div>
-						<p class="text-xs font-semibold sm:text-sm">Build your watch queue</p>
-						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
-							Search for movies and shows and add them. Tap any title for cast, providers, seasons, and upcoming release dates.
-						</p>
-					</div>
-				</div>
-				<div class="flex gap-3 sm:gap-4">
-					<span class="mt-0.5 text-lg leading-none sm:text-xl">≋</span>
-					<div>
-						<p class="text-xs font-semibold sm:text-sm">See your subscription value</p>
-						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
-							Grid, List, and Gantt views. The Gantt lane per provider — bar width = watch time vs. your monthly budget.
-						</p>
-					</div>
-				</div>
-				<div class="flex gap-3 sm:gap-4">
-					<span class="mt-0.5 text-lg leading-none sm:text-xl">🔗</span>
-					<div>
-						<p class="text-xs font-semibold sm:text-sm">Share your queue</p>
-						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
-							Send an encrypted link to share your list with anyone — filter by provider, type, or queue before sharing.
-						</p>
-					</div>
-				</div>
-				<div class="flex gap-3 sm:gap-4">
-					<span class="mt-0.5 text-lg leading-none sm:text-xl">🔒</span>
-					<div>
-						<p class="text-xs font-semibold sm:text-sm">Your data, your device</p>
-						<p class="mt-0.5 text-[11px] leading-relaxed text-gray-500 sm:text-xs dark:text-gray-400">
-							No account needed — everything stays in your browser. <span class="font-medium text-gray-700 dark:text-gray-300">Settings → Export</span> backs up your full queue, preferences, and view settings.
-						</p>
-					</div>
-				</div>
-			</div>
-
-			<button
-				onclick={closeWelcome}
-				class="w-full rounded-xl bg-orange-500 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-orange-400 sm:py-3 sm:text-sm"
-			>
-				Get started →
-			</button>
-		</div>
-	</div>
-{/if}
 </div>

@@ -153,7 +153,7 @@
 					{/if}
 				{/if}
 				<a
-					href="/"
+					href="/app"
 					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
 				>
 					Build your own queue →
