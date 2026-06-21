@@ -508,22 +508,20 @@
 							{/each}
 						</div>
 						<!-- Subscribed filter -->
-						{#if services.ids.size > 0}
-							<button
-								onclick={() => (serviceFilter = serviceFilter === 'subscribed' ? 'all' : 'subscribed')}
-								class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
-									{serviceFilter === 'subscribed'
-										? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400'
-										: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-							>Subscribed only</button>
-							<button
-								onclick={() => (serviceFilter = serviceFilter === 'not-subscribed' ? 'all' : 'not-subscribed')}
-								class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
-									{serviceFilter === 'not-subscribed'
-										? 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
-										: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-							>Not Subscribed</button>
-						{/if}
+						<button
+							onclick={() => (serviceFilter = serviceFilter === 'subscribed' ? 'all' : 'subscribed')}
+							class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
+								{serviceFilter === 'subscribed'
+									? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400'
+									: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
+						>Subscribed only</button>
+						<button
+							onclick={() => (serviceFilter = serviceFilter === 'not-subscribed' ? 'all' : 'not-subscribed')}
+							class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
+								{serviceFilter === 'not-subscribed'
+									? 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
+									: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
+						>Not Subscribed</button>
 					</div>
 				{/if}
 			</div>
