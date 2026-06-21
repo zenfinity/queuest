@@ -17,6 +17,8 @@
 		return exact ? page.url.pathname === href : page.url.pathname.startsWith(href);
 	}
 
+	let isLanding = $derived(page.url.pathname === '/');
+
 	onMount(() => {
 		initTheme();
 		// iOS Safari misreports viewport width during keyboard animation (and after
@@ -38,23 +40,26 @@
 				Queu<span class="text-orange-400">est</span>
 			</a>
 
-			<div class="flex gap-4 sm:gap-5">
-				{#each navLinks as link (link.href)}
-					{@const active = isActive(link.href, link.exact)}
-					<a
-						class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
-							{active
-								? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
-								: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-						href={link.href}
-					>
-						{link.label}
-					</a>
-				{/each}
-			</div>
+			{#if !isLanding}
+				<div class="flex gap-4 sm:gap-5">
+					{#each navLinks as link (link.href)}
+						{@const active = isActive(link.href, link.exact)}
+						<a
+							class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
+								{active
+									? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
+									: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+							href={link.href}
+						>
+							{link.label}
+						</a>
+					{/each}
+				</div>
+			{/if}
 
 			<div class="flex-1"></div>
 
+			{#if !isLanding}
 			<a
 				class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
 					{isActive('/settings', false)
@@ -68,6 +73,7 @@
 				</svg>
 				<span class="hidden sm:inline">Settings</span>
 			</a>
+			{/if}
 		</div>
 	</nav>
 
