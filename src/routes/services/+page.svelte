@@ -9,6 +9,9 @@
 	let loaded         = $state(false);
 	let toggleError    = $state('');
 
+	// Explicit local derived so Svelte tracks services.ids changes within this component
+	let subscribedIds = $derived(services.ids);
+
 	async function handleToggle(provider: Provider) {
 		const id = provider.provider_id;
 		const wasSubscribed = services.ids.has(id);
@@ -71,9 +74,9 @@
 			{#each queueProviders as provider (provider.provider_id)}
 				<button
 					onclick={() => handleToggle(provider)}
-					style:border-color={services.ids.has(provider.provider_id) ? '#22c55e' : 'transparent'}
+					style:border-color={subscribedIds.has(provider.provider_id) ? '#22c55e' : 'transparent'}
 					class="flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors
-						{services.ids.has(provider.provider_id)
+						{subscribedIds.has(provider.provider_id)
 							? 'bg-white dark:bg-gray-900'
 							: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
 				>
@@ -82,12 +85,12 @@
 						alt=""
 						class="h-6 w-6 rounded-md object-cover"
 					/>
-					<span class="{services.ids.has(provider.provider_id) ? 'text-gray-900 dark:text-white' : ''}">{provider.provider_name}</span>
+					<span class="{subscribedIds.has(provider.provider_id) ? 'text-gray-900 dark:text-white' : ''}">{provider.provider_name}</span>
 				</button>
 			{/each}
 		</div>
 		<p class="text-xs text-gray-400 dark:text-gray-500">
-			{services.ids.size} service{services.ids.size === 1 ? '' : 's'} selected
+			{subscribedIds.size} service{subscribedIds.size === 1 ? '' : 's'} selected
 		</p>
 		{#if toggleError}
 			<p class="text-xs text-red-500">{toggleError}</p>
