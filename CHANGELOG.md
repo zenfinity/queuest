@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.0] — 2026-06-21
+
+### Services & subscription awareness
+
+- **Subscribed services** — new Services page lets users mark which streaming services they currently subscribe to. State is stored in IndexedDB alongside queue data and shared reactively across the app via a singleton Svelte store. (#36)
+- **Service-aware queue filter** — Filter dropdown gains "Subscribed only" and "Not Subscribed" toggles that filter all three views (Grid, List, Gantt) by whether each title is available on a subscribed service. (#37)
+- **Share pre-filtering by subscribed services** — the Share modal pre-selects the user's subscribed providers as the default filter when generating a share link.
+
+### Landing page
+
+- **Standalone landing page at `/`** — welcome content moved from a modal to a full marketing page at the root route. Returning visitors are redirected directly to `/app`. (#38)
+- **Landing page redesign** — hero with interactive product mock (Grid / List / Gantt tab switcher), ambient parallax glow, scroll-reveal animations, Features 4-up, "How it works" 3-step section, and bottom CTA card. App nav links hidden on the landing page.
+
+### Navigation
+
+- **Search in top nav** — "Search" added as the leftmost nav link, surfacing the add-titles flow as a first-class destination. (#53)
+
+### Design
+
+- **Design reference** — `.design-sync/design-reference.md` added as a canonical record of the app's visual language: semantic color roles, typography scale, border radius, component class patterns, layout conventions, z-index stack, and transitions.
+
+---
+
 ## [0.4.1] — 2026-05-31
 
 ### Bug fixes
