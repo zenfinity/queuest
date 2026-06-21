@@ -71,12 +71,10 @@
 			{#each queueProviders as provider (provider.provider_id)}
 				<button
 					onclick={() => handleToggle(provider)}
-					style:outline={services.ids.has(provider.provider_id) ? '2px solid #22c55e' : 'none'}
-					style:outline-offset="2px"
-					class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors
+					class="flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors
 						{services.ids.has(provider.provider_id)
-							? 'bg-white dark:bg-gray-900'
-							: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
+							? 'border-green-500 bg-white dark:bg-gray-900'
+							: 'border-transparent bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
 				>
 					<img
 						src="{TMDB_IMG}/original{provider.logo_path}"

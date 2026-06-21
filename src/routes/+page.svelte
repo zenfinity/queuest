@@ -44,7 +44,7 @@
 	// Toolbar dropdowns
 	let filterOpen        = $state(false);
 	let viewOpen          = $state(false);
-	let filterSubscribed  = $state(false);
+	let serviceFilter     = $state<'all' | 'subscribed' | 'not-subscribed'>('all');
 	let releasePopupId: number | null = $state(null);
 	let libraryPopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
@@ -226,10 +226,17 @@
 	let activeItems = $derived(tab === 'queue' ? queued : watched);
 
 	let visibleItems = $derived.by(() => {
-		if (!filterSubscribed || services.ids.size === 0) return activeItems;
+		if (serviceFilter === 'all' || services.ids.size === 0) return activeItems;
+		if (serviceFilter === 'subscribed') {
+			return activeItems.filter(item =>
+				item.providers.length === 0 ||
+				item.providers.some(p => services.ids.has(p.provider_id))
+			);
+		}
+		// not-subscribed: has providers, none of which are subscribed
 		return activeItems.filter(item =>
-			item.providers.length === 0 ||
-			item.providers.some(p => services.ids.has(p.provider_id))
+			item.providers.length > 0 &&
+			!item.providers.some(p => services.ids.has(p.provider_id))
 		);
 	});
 
@@ -503,15 +510,19 @@
 						<!-- Subscribed filter -->
 						{#if services.ids.size > 0}
 							<button
-								onclick={() => (filterSubscribed = !filterSubscribed)}
-								class="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors
-									{filterSubscribed
+								onclick={() => (serviceFilter = serviceFilter === 'subscribed' ? 'all' : 'subscribed')}
+								class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
+									{serviceFilter === 'subscribed'
 										? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400'
 										: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-							>
-								<span class="h-2 w-2 rounded-full {filterSubscribed ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}"></span>
-								Subscribed only
-							</button>
+							>Subscribed only</button>
+							<button
+								onclick={() => (serviceFilter = serviceFilter === 'not-subscribed' ? 'all' : 'not-subscribed')}
+								class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
+									{serviceFilter === 'not-subscribed'
+										? 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
+										: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
+							>Not Subscribed</button>
 						{/if}
 					</div>
 				{/if}
