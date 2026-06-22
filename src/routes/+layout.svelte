@@ -9,7 +9,7 @@
 	const navLinks = [
 		{ href: '/budget',    label: 'Budget',    exact: false },
 		{ href: '/search',    label: 'Search',    exact: false },
-		{ href: '/app',       label: 'My Queue',  exact: true },
+		{ href: '/app',       label: 'Queue',      exact: true },
 		{ href: '/suggest',   label: 'Suggest',   exact: false },
 	];
 
