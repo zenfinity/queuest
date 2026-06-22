@@ -11,11 +11,6 @@
 	const VERSION = pkg.version;
 	const GITHUB_REPO = 'https://github.com/zenfinity/streamq';
 
-	// ── Budget ────────────────────────────────────────────────────────────────
-	let hoursPerWeek  = $state(10);
-	let weeksPerMonth = $state(4);
-	let budgetHours   = $derived(hoursPerWeek * weeksPerMonth);
-
 	// ── Export ────────────────────────────────────────────────────────────────
 	let exportPassphrase = $state('');
 	let exporting        = $state(false);
@@ -26,14 +21,16 @@
 		exporting = true; exportDone = false;
 		try {
 			const [items, services] = await Promise.all([getAll(), getServices()]);
+			const _weeklyHours  = JSON.parse(localStorage.getItem('sq:budget:weekly') ?? '10');
+			const _weeksPerMonth = JSON.parse(localStorage.getItem('sq:budget:weeks') ?? '4');
 			// Wrap items + preferences so a restore is complete
 			const payload = {
 				version: 1,
 				prefs: {
 					theme: theme.dark ? 'dark' : 'light',
-					weeklyHours: hoursPerWeek,
-					weeksPerMonth,
-					budget: budgetHours, // kept for backwards compat
+					weeklyHours: _weeklyHours,
+					weeksPerMonth: _weeksPerMonth,
+					budget: _weeklyHours * _weeksPerMonth, // kept for backwards compat
 					queueName: getQueueName(),
 					queueColors: getQueueColors(),
 					sort: localStorage.getItem('sq:sort') ?? 'added',
@@ -177,20 +174,6 @@
 
 	// ── Persistence ───────────────────────────────────────────────────────────
 	onMount(async () => {
-		try {
-			const weekly = localStorage.getItem('sq:budget:weekly');
-			const weeks  = localStorage.getItem('sq:budget:weeks');
-			if (weekly !== null && weeks !== null) {
-				hoursPerWeek  = JSON.parse(weekly);
-				weeksPerMonth = JSON.parse(weeks);
-			} else {
-				// Migrate legacy single-value budget, defaulting to 10 × 4 = 40
-				const legacy = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
-				weeksPerMonth = 4;
-				hoursPerWeek  = Math.round(legacy / weeksPerMonth);
-			}
-		} catch {}
-
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		myQueueName = getQueueName();
 		queueColors = getQueueColors();
@@ -203,14 +186,7 @@
 		importedTags = [...tags].sort();
 	});
 
-	$effect(() => {
-		try {
-			localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
-			localStorage.setItem('sq:budget:weeks',  JSON.stringify(weeksPerMonth));
-			// Keep sq:budget in sync — used by the rest of the app and export format
-			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
-		} catch {}
-	});
+
 </script>
 
 <svelte:head><title>Queuest — Settings</title></svelte:head>
@@ -288,31 +264,6 @@
 				{/each}
 			</div>
 		{/if}
-	</section>
-
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
-
-	<!-- Budget -->
-	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Viewing Budget</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Your estimated monthly watch time. Used to normalise bar widths across all views.
-		</p>
-		<div class="flex flex-wrap items-center gap-2 text-sm">
-			<input
-				type="number" min="1" max="24" step="0.5"
-				bind:value={hoursPerWeek}
-				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-			/>
-			<span class="text-gray-600 dark:text-gray-400">hrs ×</span>
-			<input
-				type="number" min="1" max="6" step="0.5"
-				bind:value={weeksPerMonth}
-				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-			/>
-			<span class="text-gray-600 dark:text-gray-400">weeks =</span>
-			<span class="font-semibold text-gray-900 dark:text-white">{budgetHours} hrs/month</span>
-		</div>
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>

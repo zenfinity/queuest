@@ -7,9 +7,9 @@
 	let { children } = $props();
 
 	const navLinks = [
+		{ href: '/budget',    label: 'Budget',    exact: false },
 		{ href: '/search',    label: 'Search',    exact: false },
 		{ href: '/app',       label: 'My Queue',  exact: true },
-		{ href: '/services',  label: 'Services',  exact: false },
 		{ href: '/suggest',   label: 'Suggest',   exact: false },
 	];
 
