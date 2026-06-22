@@ -1,1180 +1,405 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { WatchlistItem } from '$lib/types';
-	import { getAll, removeItem, setWatched, updateShowProgress } from '$lib/db';
-	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
-	import { theme } from '$lib/theme.svelte';
-	import { remainingRuntime, releaseChip } from '$lib/progress';
-	import { generateShareKey, encryptWithKey } from '$lib/crypto';
-	import { getQueueName, getQueueColors } from '$lib/queue-colors';
-	import type { SharePayload } from '$lib/types';
+	import { goto } from '$app/navigation';
 
-	// ── Constants ─────────────────────────────────────────────────────────────
-	const BAR_H = 32; // px — compact chip height
-	const DEFAULT_RUNTIME: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
+	let tab = $state<'timeline' | 'list' | 'cards'>('timeline');
 
-	function effectiveRuntime(item: WatchlistItem): number {
-		return remainingRuntime(item);
-	}
-
-	// ── Persisted prefs ───────────────────────────────────────────────────────
-	type SortKey = 'added' | 'title' | 'runtime';
-	type ViewKey = 'grid' | 'list' | 'lanes';
-
-	function loadPref<T extends string>(key: string, fallback: T): T {
-		try { return (localStorage.getItem(key) as T) ?? fallback; } catch { return fallback; }
-	}
-	function loadJSON<T>(key: string, fallback: T): T {
-		try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
-	}
-
-	// ── Core state ────────────────────────────────────────────────────────────
-	let items        = $state<WatchlistItem[]>([]);
-	let loaded       = $state(false);
-	let queueColors  = $state<Record<string, string>>({});
-	let tab         = $state<'queue' | 'watched'>('queue');
-	let busy        = $state(new Set<number>());
-	// Gantt detail popup — fixed-position to escape the overflow:hidden budget zone
-	let activeItem       = $state<WatchlistItem | null>(null);
-	let ganttPopupAnchor = $state<{ x: number; y: number } | null>(null);
-
-	// Toolbar dropdowns
-	let filterOpen = $state(false);
-	let viewOpen   = $state(false);
-	let releasePopupId: number | null = $state(null);
-	let libraryPopupId: number | null = $state(null);
-	let detailItem: WatchlistItem | null = $state(null);
-	let overviewExpanded = $state(false);
-	let posterExpanded = $state(false);
-
-	// ── Share ─────────────────────────────────────────────────────────────────
-	let shareOpen          = $state(false);
-	let shareStatus        = $state<'queue' | 'watched' | 'both'>('queue');
-	let shareType          = $state<'all' | 'movie' | 'tv'>('all');
-	let shareProviderNames = $state(new Set<string>());
-	let shareQueueNames    = $state(new Set<string>());
-	let shareCreating      = $state(false);
-	let shareUrl           = $state('');
-	let shareCopied        = $state(false);
-	let shareError         = $state('');
-
-	let allShareQueues = $derived.by(() => {
-		const names = new Set<string>();
-		for (const item of items) { if (item.queue_tag) names.add(item.queue_tag); }
-		return [...names].sort();
-	});
-
-	let shareAllProviders = $derived.by(() => {
-		const map = new Map<string, { provider_id: number; logo_path: string; count: number }>();
-		for (const item of items) {
-			for (const p of item.providers) {
-				if (!map.has(p.provider_name)) {
-					map.set(p.provider_name, { provider_id: p.provider_id, logo_path: p.logo_path, count: 0 });
-				}
-				map.get(p.provider_name)!.count++;
+	onMount(() => {
+		try {
+			if (localStorage.getItem('sq:welcomed')) {
+				goto('/app', { replaceState: true });
+				return;
 			}
-		}
-		return [...map.entries()]
-			.sort((a, b) => b[1].count - a[1].count)
-			.map(([name, { provider_id, logo_path, count }]) => ({ name, provider_id, logo_path, count }));
-	});
-
-	let shareFiltered = $derived.by(() => {
-		let base = items;
-		if (shareStatus === 'queue') base = base.filter((i) => !i.watched_at);
-		else if (shareStatus === 'watched') base = base.filter((i) => i.watched_at);
-		if (shareType !== 'all') base = base.filter((i) => i.media_type === shareType);
-		if (allShareQueues.length > 0 && shareQueueNames.size < allShareQueues.length) {
-			base = base.filter((i) => !i.queue_tag || shareQueueNames.has(i.queue_tag));
-		}
-		const allChecked = shareProviderNames.size === shareAllProviders.length;
-		return base.filter((i) => {
-			if (!i.providers.length) return allChecked;
-			return i.providers.some((p) => shareProviderNames.has(p.provider_name));
-		});
-	});
-
-	let shareTotal = $derived(shareFiltered.reduce((s, i) => s + effectiveRuntime(i), 0));
-
-	function openShare() {
-		shareStatus = 'queue';
-		shareType = 'all';
-		shareQueueNames    = new Set(allShareQueues);
-		shareProviderNames = new Set(shareAllProviders.map((p) => p.name));
-		shareUrl = '';
-		shareCopied = false;
-		shareError = '';
-		shareOpen = true;
-	}
-
-	function toggleShareProvider(name: string) {
-		const next = new Set(shareProviderNames);
-		if (next.has(name)) next.delete(name); else next.add(name);
-		shareProviderNames = next;
-		shareUrl = '';
-	}
-
-	function toggleShareQueue(name: string) {
-		const next = new Set(shareQueueNames);
-		if (next.has(name)) next.delete(name); else next.add(name);
-		shareQueueNames = next;
-		shareUrl = '';
-	}
-
-	async function createShareLink() {
-		if (!shareFiltered.length || shareCreating) return;
-		shareCreating = true;
-		shareUrl = '';
-		shareError = '';
-		try {
-			const activeQueues = allShareQueues.filter((q) => shareQueueNames.has(q));
-			const payload: SharePayload = {
-				v: 1,
-				queue_name: activeQueues.length === 1 ? activeQueues[0] : getQueueName(),
-				items: shareFiltered.map((item) => ({
-					tmdb_id: item.tmdb_id,
-					media_type: item.media_type,
-					title: item.title,
-					poster_path: item.poster_path,
-					providers: item.providers,
-					runtime_minutes: item.runtime_minutes,
-					seasons: (item.seasons ?? []).map((s) => ({ season_number: s.season_number, runtime_minutes: s.runtime_minutes })),
-					queue_tag: item.queue_tag ?? null
-				}))
-			};
-			const key = await generateShareKey();
-			const blob = await encryptWithKey(JSON.stringify(payload), key);
-			const res = await fetch('/api/share', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/octet-stream' },
-				body: blob
-			});
-			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-			const { token } = (await res.json()) as { token: string };
-			shareUrl = `${window.location.origin}/share/${token}#${key}`;
-		} catch (e) {
-			shareError = e instanceof Error ? e.message : 'Failed to create share link.';
-		} finally {
-			shareCreating = false;
-		}
-	}
-
-	async function copyShareUrl() {
-		try {
-			await navigator.clipboard.writeText(shareUrl);
-			shareCopied = true;
-			setTimeout(() => { shareCopied = false; }, 2000);
 		} catch {}
-	}
 
-	function openGanttPopup(e: MouseEvent, item: WatchlistItem) {
-		e.stopPropagation();
-		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; return; }
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		ganttPopupAnchor = {
-			x: Math.min(rect.left, window.innerWidth - 248),
-			y: rect.bottom + 8
+		// Parallax blobs
+		const blobs = [...document.querySelectorAll<HTMLElement>('[data-parallax]')];
+		function onScroll() {
+			const y = window.scrollY;
+			blobs.forEach((b) => {
+				const s = parseFloat(b.dataset.parallax ?? '0.1');
+				b.style.transform = `translateY(${y * s}px)`;
+			});
+		}
+		window.addEventListener('scroll', onScroll, { passive: true });
+
+		// Scroll-reveal
+		const io = new IntersectionObserver(
+			(entries) => {
+				entries.forEach((e) => {
+					if (e.isIntersecting) {
+						const el = e.target as HTMLElement;
+						el.style.opacity = '1';
+						el.style.transform = 'translateY(0)';
+						io.unobserve(el);
+					}
+				});
+			},
+			{ threshold: 0.1 }
+		);
+		document.querySelectorAll('[data-reveal]').forEach((el) => {
+			const h = el as HTMLElement;
+			h.style.opacity = '0';
+			h.style.transform = 'translateY(26px)';
+			h.style.transition = 'opacity .5s ease, transform .5s ease';
+			io.observe(h);
+		});
+
+		return () => {
+			window.removeEventListener('scroll', onScroll);
+			io.disconnect();
 		};
-		activeItem = item;
-	}
-
-	let sortBy      = $state<SortKey>('added');
-	let viewMode    = $state<ViewKey>('grid');
-	let budgetHours = $state(40); // user-adjustable month budget
-
-
-	// logo-derived hues: logo_path → extracted hue (populated async)
-	let logoHues = $state(new Map<string, number>());
-
-	// helper: best available hue for a provider
-	function resolvedHue(providerId: number | null, logoPath: string | null): number | null {
-		if (logoPath && logoHues.has(logoPath)) {
-			const h = logoHues.get(logoPath)!;
-			return h >= 0 ? h : (providerId !== null ? providerHue(providerId) : null);
-		}
-		return providerId !== null ? providerHue(providerId) : null;
-	}
-
-	// ── Derived lists ─────────────────────────────────────────────────────────
-	let queued      = $derived(items.filter((i) => !i.watched_at));
-	let watched     = $derived(items.filter((i) => i.watched_at));
-	let activeItems = $derived(tab === 'queue' ? queued : watched);
-
-	function sorted(list: WatchlistItem[]): WatchlistItem[] {
-		return [...list].sort((a, b) => {
-			if (sortBy === 'title') return a.title.localeCompare(b.title);
-			if (sortBy === 'runtime') {
-				return effectiveRuntime(a) - effectiveRuntime(b);
-			}
-			return b.added_at.localeCompare(a.added_at);
-		});
-	}
-
-	let flatItems = $derived(sorted(activeItems));
-
-	type Lane = {
-		key: string;
-		label: string;
-		logo: string | null;
-		providerId: number | null;
-		items: WatchlistItem[];
-		totalMins: number;
-		overMins: number;
-	};
-
-	let rawLanes = $derived.by((): Lane[] => {
-		const budgetMins = budgetHours * 60;
-		const list = sorted(activeItems);
-		const map  = new Map<string, Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }>();
-		const noProvider: WatchlistItem[] = [];
-
-		for (const item of list) {
-			if (!item.providers.length) {
-				noProvider.push(item);
-			} else {
-				const p = item.providers[0];
-				if (!map.has(p.provider_name)) {
-					map.set(p.provider_name, { key: p.provider_name, label: p.provider_name,
-						logo: p.logo_path, providerId: p.provider_id, items: [], totalMins: 0 });
-				}
-				const lane = map.get(p.provider_name)!;
-				lane.items.push(item);
-				lane.totalMins += effectiveRuntime(item);
-			}
-		}
-
-		const out: Lane[] = [...map.values()]
-			.sort((a, b) => {
-				if (sortBy === 'title') return a.label.localeCompare(b.label);
-				if (sortBy === 'added') {
-					const aMax = a.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
-					const bMax = b.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
-					return bMax.localeCompare(aMax);
-				}
-				return b.totalMins - a.totalMins;
-			})
-			.map((l) => ({ ...l, overMins: Math.max(0, l.totalMins - budgetMins) }));
-
-		if (noProvider.length) {
-			const totalMins = noProvider.reduce((s, i) => s + effectiveRuntime(i), 0);
-			out.push({ key: '__none__', label: 'Not Streaming', logo: null, providerId: null,
-				items: noProvider, totalMins, overMins: Math.max(0, totalMins - budgetMins) });
-		}
-		return out;
 	});
 
-	let lanes = $derived(rawLanes);
-
-	// ── Lifecycle ─────────────────────────────────────────────────────────────
-	async function reload() {
-		items = await getAll();
-	}
-
-	onMount(async () => {
-		sortBy      = loadPref<SortKey>('sq:sort', 'added');
-		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
-		budgetHours = loadJSON<number>('sq:budget', 40);
-		queueColors = getQueueColors();
-		await reload();
-		loaded = true;
-	});
-
-	$effect(() => {
-		try {
-			localStorage.setItem('sq:sort', sortBy);
-			localStorage.setItem('sq:view', viewMode);
-			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
-		} catch {}
-	});
-
-	// Extract logo hues for all providers in view (runs whenever activeItems changes)
-	$effect(() => {
-		const logos = new Set<string>();
-		for (const item of activeItems) {
-			for (const p of item.providers) {
-				if (p.logo_path && !logoHues.has(p.logo_path)) logos.add(p.logo_path);
-			}
-		}
-		for (const logoPath of logos) {
-			extractLogoHue(logoPath, TMDB_IMG).then((hue) => {
-				logoHues = new Map(logoHues).set(logoPath, hue);
-			});
-		}
-	});
-
-	// ── Actions ───────────────────────────────────────────────────────────────
-	async function toggle(item: WatchlistItem) {
-		busy = new Set(busy).add(item.id);
-		await setWatched(item.id, !item.watched_at);
-		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
-		await reload();
-		const next = new Set(busy); next.delete(item.id); busy = next;
-	}
-	async function remove(item: WatchlistItem) {
-		busy = new Set(busy).add(item.id);
-		await removeItem(item.id);
-		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
-		await reload();
-		const next = new Set(busy); next.delete(item.id); busy = next;
-	}
-
-	// ── Season progress ───────────────────────────────────────────────────────
-	async function toggleSeason(item: WatchlistItem, seasonNum: number) {
-		const current = item.watched_seasons ?? [];
-		const next = current.includes(seasonNum)
-			? current.filter((s) => s !== seasonNum)
-			: [...current, seasonNum];
-		await updateShowProgress(item.id, next, item.current_season, item.current_episode);
-		await reload();
-	}
-
-	// ── Helpers ───────────────────────────────────────────────────────────────
-	function hms(mins: number): string {
-		const h = Math.floor(mins / 60), m = mins % 60;
-		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
-	}
-	function overLabel(mins: number): string {
-		const h = (mins / 60);
-		return `+${h % 1 === 0 ? h : h.toFixed(1)}h over`;
+	function start() {
+		try { localStorage.setItem('sq:welcomed', '1'); } catch {}
+		goto('/app');
 	}
 </script>
 
-<svelte:head><title>Queuest — My Queue</title></svelte:head>
+<svelte:head><title>Queuest — Know when to cancel</title></svelte:head>
 
-<svelte:document onclick={(e) => {
-	const t = e.target as Element;
-	if (activeItem && !t.closest('[data-item]')) { activeItem = null; ganttPopupAnchor = null; }
-	if (!t.closest('[data-dropdown]')) { filterOpen = false; viewOpen = false; }
-	if (!t.closest('[data-release-popup]')) { releasePopupId = null; }
-	if (!t.closest('[data-library-popup]')) { libraryPopupId = null; }
-	if (!t.closest('[data-detail-panel]') && !t.closest('[data-detail-trigger]')) { detailItem = null; overviewExpanded = false; posterExpanded = false; }
-}} />
+<style>
+	@keyframes qfloat {
+		0%, 100% { transform: translateY(0); }
+		50%       { transform: translateY(-12px); }
+	}
+	.mock-float { animation: qfloat 7s ease-in-out infinite; }
+</style>
 
-{#snippet seasonPicker(item: WatchlistItem)}
-	{@const chip = releaseChip(item.release)}
-	{#if item.media_type === 'tv' && (item.seasons?.length || chip)}
-		<div class="flex flex-wrap gap-0.5 pt-0.5">
-			{#each (item.seasons ?? []).filter(s =>
-				s.episode_count > 0 &&
-				(!chip || item.release?.next_season == null || s.season_number < item.release.next_season)
-			) as season (season.season_number)}
-				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
-				<button
-					class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
-						{watched
-							? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
-							: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
-					onclick={() => toggleSeason(item, season.season_number)}
-					title="{season.name} · {season.episode_count} eps"
-				>
-					{watched ? '✓' : 'S'}{season.season_number}
-				</button>
-			{/each}
-			{#if chip}
-				{@const isOpen = releasePopupId === item.id}
-				<button
-					class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
-						{isOpen
-							? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
-							: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
-					onclick={() => { releasePopupId = isOpen ? null : item.id; }}
-					data-release-popup
-				>
-					{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
-					{#if isOpen}
-						<div class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700">
-							{chip}
-						</div>
-					{/if}
-				</button>
-			{/if}
-		</div>
-	{/if}
-{/snippet}
+<div class="relative overflow-hidden">
 
-<div class="space-y-4 xs:space-y-6">
-	<!-- Toolbar -->
-	<div class="flex items-center gap-2">
-		<!-- Add Titles -->
-		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
-			<span class="sm:hidden">+</span>
-			<span class="hidden sm:inline">+ Add Titles</span>
-		</a>
+	<!-- Ambient glow blobs -->
+	<div data-parallax="0.12" class="pointer-events-none absolute -right-28 -top-44 z-0 h-[520px] w-[520px] rounded-full"
+		style="background:radial-gradient(circle,color-mix(in srgb,#f97316 26%,transparent),transparent 68%);filter:blur(20px)"></div>
+	<div data-parallax="0.06" class="pointer-events-none absolute -left-40 top-[520px] z-0 h-[460px] w-[460px] rounded-full"
+		style="background:radial-gradient(circle,color-mix(in srgb,#14b8a6 18%,transparent),transparent 70%);filter:blur(20px)"></div>
 
-		{#if loaded && items.length > 0}
-			<!-- Filter dropdown -->
-			<div class="relative" data-dropdown="filter">
-				<button
-					onclick={() => { filterOpen = !filterOpen; viewOpen = false; }}
-					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-						{filterOpen
-							? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white'
-							: 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-				>
-					<!-- Funnel icon -->
-					<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0">
-						<path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 018 18.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 6.22A2.25 2.25 0 012 4.629V2.34a.75.75 0 01.628-.74z" clip-rule="evenodd" />
-					</svg>
-					<span class="hidden sm:inline">Filter</span>
-				</button>
-				{#if filterOpen}
-					<div class="absolute left-0 top-full z-40 mt-1 min-w-max space-y-1.5 rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10">
-						<!-- Tab filter -->
-						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'queue' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (tab = 'queue')}>To Watch ({queued.length})</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'watched' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (tab = 'watched')}>Watched ({watched.length})</button>
-						</div>
-						<!-- Sort -->
-						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-							{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-								<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-									onclick={() => (sortBy = key)}>{label}</button>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</div>
+	<!-- ─── HERO ─────────────────────────────────────────────────────── -->
+	<section id="top" class="relative z-10 mx-auto max-w-5xl px-6 pb-14 pt-16">
+		<div class="grid grid-cols-1 items-center gap-14 lg:grid-cols-2">
 
-			<!-- View dropdown -->
-			<div class="relative" data-dropdown="view">
-				<button
-					onclick={() => { viewOpen = !viewOpen; filterOpen = false; }}
-					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-						{viewOpen
-							? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white'
-							: 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-				>
-					<!-- Eye icon -->
-					<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0">
-						<path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
-						<path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41z" clip-rule="evenodd" />
-					</svg>
-					<span class="hidden sm:inline">View</span>
-				</button>
-				{#if viewOpen}
-					<div class="absolute left-0 top-full z-40 mt-1 min-w-max rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10">
-						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'grid')}>⊞ Grid</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'list')}>☰ List</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'lanes')}>≋ Gantt</button>
-						</div>
-					</div>
-				{/if}
-			</div>
-
-			<!-- Share button -->
-			<button
-				onclick={openShare}
-				class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-					bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-			>
-				<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0" aria-hidden="true">
-					<path d="M13 4.5a2.5 2.5 0 11.702 1.737L6.97 9.604a2.518 2.518 0 010 .792l6.733 3.367a2.5 2.5 0 11-.671 1.341l-6.733-3.367a2.5 2.5 0 110-3.474l6.733-3.367A2.5 2.5 0 0113 4.5z"/>
-				</svg>
-				<span class="hidden sm:inline">Share</span>
-			</button>
-		{/if}
-	</div>
-
-	<!-- Loading -->
-	{#if !loaded}
-		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-			{#each { length: 5 } as _, i (i)}<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>{/each}
-		</div>
-
-	<!-- Empty -->
-	{:else if activeItems.length === 0}
-		<div class="flex flex-col items-center justify-center py-12 text-center xs:py-24">
-			{#if tab === 'queue'}
-				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🎬</p>
-				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Your queue is empty</p>
-				<p class="mt-1 text-sm text-gray-500">
-					<a class="text-orange-500 hover:underline" href="/search">Search for movies and shows</a> to get started
+			<!-- Copy -->
+			<div class="max-w-[560px]">
+				<h1 data-reveal class="mb-5 text-[clamp(36px,5.4vw,60px)] font-extrabold leading-[1.04] tracking-[-1.8px]">
+					Find out which streaming services are actually worth it.
+				</h1>
+				<p data-reveal class="mb-7 max-w-[480px] text-lg leading-relaxed text-gray-600 dark:text-gray-400">
+					Add the shows and movies you actually want to watch, see which service has them, and cancel everything else.
 				</p>
-			{:else}
-				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">✅</p>
-				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Nothing watched yet</p>
-				<p class="mt-1 text-sm text-gray-500">Mark titles as watched and they'll appear here</p>
-			{/if}
-		</div>
-
-	<!-- ── GRID ──────────────────────────────────────────────────────────────── -->
-	{:else if viewMode === 'grid'}
-		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-			{#each flatItems as item (item.id)}
-				{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
-				{@const cardPct = Math.min(100, (effectiveRuntime(item) / (budgetHours * 60)) * 100)}
-				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
-				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
-				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
-					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
-					<button
-						class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
-						onclick={() => { detailItem = item; overviewExpanded = false; }}
-						data-detail-trigger
-						aria-label="View details for {item.title}"
-					>
-						{#if item.poster_path}
-							<img src="{TMDB_IMG}/w300{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
-						{:else}
-							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
-						{/if}
+				<div data-reveal class="flex flex-wrap items-center gap-3">
+					<button onclick={start}
+						class="rounded-2xl bg-orange-500 px-7 py-3.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110">
+						Start your queue
 					</button>
-					<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
-						<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
-						<!-- Runtime sparkline -->
-						<div class="flex items-center gap-2">
-							<div class="relative flex-1">
-								<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
-								<div class="absolute top-0 left-0 h-px transition-all duration-300"
-									style="width:{cardPct}%; background:{cardLine}; opacity:0.75;"></div>
-								<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
-									style="left:{cardPct}%; margin-left:-3px; background:{cardDot};"></div>
-							</div>
-							<span class="shrink-0 text-[10px] tabular-nums text-gray-500">
-								{formatRuntime(effectiveRuntime(item), item.media_type)}
-							</span>
-						</div>
-						{@render seasonPicker(item)}
-						<!-- Type chip + providers -->
-						<div class="flex flex-wrap items-center gap-1">
-							<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
-								{item.media_type === 'movie' ? '🎬' : '📺'}
-							</span>
-							{#each item.providers.slice(0, 4) as p (p.provider_id)}
-								<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
-							{/each}
-							{#if item.providers.length > 4}<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>{/if}
-							{#if !item.providers.length}
-								{#if item.rentable}
-									<span class="text-sm leading-none" title="Rent/Buy only">💲</span>
-								{:else}
-									{@const isOpen = libraryPopupId === item.id}
-									<div class="relative" data-library-popup>
-										<button
-											class="text-sm leading-none transition-opacity hover:opacity-60"
-											onclick={() => { libraryPopupId = isOpen ? null : item.id; }}
-											title="Not on streaming services"
-										>🚫</button>
-										{#if isOpen}
-											<div class="absolute top-full left-0 z-20 mt-1 w-max rounded-lg bg-white px-3 py-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-700">
-												<p class="mb-1.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500">Check your library</p>
-												<div class="flex flex-col gap-1">
-													<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400">Kanopy →</a>
-													<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400">Hoopla →</a>
-												</div>
-											</div>
-										{/if}
-									</div>
-								{/if}
-							{/if}
-						</div>
-						{#if item.media_type === 'movie' && releaseChip(item.release)}
-							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(item.release)}</p>
-						{/if}
-						<div class="mt-auto flex gap-1.5 pt-1">
-							<button class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
-								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
-								{item.watched_at ? 'Unwatch' : '✓ Watched'}
-							</button>
-							<button class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
-						</div>
-					</div>
+					<a href="#how"
+						class="rounded-2xl bg-gray-100 px-6 py-3.5 text-[15px] font-semibold text-gray-900 transition-[filter] hover:brightness-95 dark:bg-gray-800 dark:text-gray-100">
+						See how it works
+					</a>
 				</div>
-			{/each}
-		</div>
+				<p data-reveal class="mt-5 text-[13px] text-gray-500">No card required · Free while in beta</p>
+			</div>
 
-	<!-- ── LIST ─────────────────────────────────────────────────────────────── -->
-	{:else if viewMode === 'list'}
-		<div class="divide-y divide-gray-200 rounded-xl dark:divide-gray-800/60">
-			{#each flatItems as item (item.id)}
-				{@const rt = effectiveRuntime(item)}
-				{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
-				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
-				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
-				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
-				{@const tagColor  = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 first:rounded-t-xl last:rounded-b-xl"
-					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
-					<!-- Row 1: poster · title · actions -->
-					<div class="flex items-center gap-3">
-						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
-							{#if item.poster_path}
-								<img src="{TMDB_IMG}/w92{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
-							{:else}
-								<div class="flex h-full w-full items-center justify-center text-sm text-gray-400 dark:text-gray-600">🎬</div>
-							{/if}
-						</div>
-						<button
-							class="min-w-0 flex-1 text-left text-sm font-medium leading-tight hover:text-orange-500 transition-colors"
-							onclick={() => { detailItem = item; overviewExpanded = false; }}
-							data-detail-trigger
-						>{item.title}</button>
-						<div class="flex shrink-0 gap-1">
-							<button class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
-								{item.watched_at ? 'Unwatch' : '✓'}
-							</button>
-							<button class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
-						</div>
-					</div>
+			<!-- Product mock — always dark -->
+			<div data-reveal class="relative z-10">
+				<div class="mock-float overflow-hidden rounded-[20px]"
+					style="background:#0c1117;border:1px solid #1d2535;box-shadow:0 32px 64px -24px rgba(0,0,0,0.55)">
 
-					<!-- Row 2: type chip · provider icons · sparkline · runtime -->
-					<div class="ml-11 mt-1.5 flex items-center gap-2">
-						<span class="shrink-0 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-							{item.media_type === 'movie' ? '🎬' : '📺'}
-						</span>
-						{#if item.providers.length > 0}
-							<div class="flex shrink-0 gap-0.5">
-								{#each item.providers.slice(0, 3) as p (p.provider_id)}
-									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-3.5 w-3.5 rounded" />
-								{/each}
-								{#if item.providers.length > 3}
-									<span class="text-[9px] text-gray-400 dark:text-gray-600">+{item.providers.length - 3}</span>
-								{/if}
-							</div>
-						{:else if item.rentable}
-							<span class="shrink-0 text-xs leading-none" title="Rent/Buy only">💲</span>
-						{:else}
-							{@const isOpen = libraryPopupId === item.id}
-							<div class="relative shrink-0" data-library-popup>
+					<!-- Mock header + tab switcher -->
+					<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #1d2535">
+						<span style="font-size:13px;font-weight:700;color:#e5e7eb">Your Queue</span>
+						<div style="display:flex;gap:2px;background:#161d2c;padding:3px;border-radius:8px">
+							{#each ([['cards','Grid'],['list','List'],['timeline','Gantt']] as const) as [t, label] (t)}
 								<button
-									class="text-xs leading-none transition-opacity hover:opacity-60"
-									onclick={() => { libraryPopupId = isOpen ? null : item.id; }}
-									title="Not on streaming services"
-								>🚫</button>
-								{#if isOpen}
-									<div class="absolute top-full left-0 z-20 mt-1 w-max rounded-lg bg-white px-3 py-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-700">
-										<p class="mb-1.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500">Check your library</p>
-										<div class="flex flex-col gap-1">
-											<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400">Kanopy →</a>
-											<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(item.title)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400">Hoopla →</a>
-										</div>
-									</div>
-								{/if}
+									onclick={() => (tab = t)}
+									style:background={tab === t ? '#1e2736' : 'transparent'}
+									style:color={tab === t ? '#e5e7eb' : '#6b7280'}
+									style="border:none;cursor:pointer;border-radius:5px;padding:4px 9px;font-size:11px;font-weight:600;transition:background .15s,color .15s"
+								>{label}</button>
+							{/each}
+						</div>
+					</div>
+
+					<!-- GANTT tab -->
+					{#if tab === 'timeline'}
+						<div style="padding:14px 14px 10px">
+							<div style="display:flex;justify-content:space-between;font-size:10px;color:#4b5563;margin-bottom:8px;padding-left:118px">
+								<span>0</span><span>40h / mo</span>
 							</div>
-						{/if}
-						<div class="relative min-w-0 flex-1">
-							<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
-							<div class="absolute top-0 left-0 h-px transition-all duration-300"
-								style="width:{pct}%; background:{lineColor}; opacity:0.7;"></div>
-							<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
-								style="left:{pct}%; margin-left:-3px; background:{dotColor};"></div>
-						</div>
-						<span class="shrink-0 w-12 text-right text-[10px] tabular-nums text-gray-500">
-							{#if item.runtime_minutes}
-								{formatRuntime(effectiveRuntime(item), item.media_type)}
-							{:else}
-								<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
-							{/if}
-						</span>
-					</div>
-
-					<!-- Row 3: release chip (movies only; TV shows it in the season chip row) -->
-					{#if item.media_type === 'movie' && releaseChip(item.release)}
-						<p class="ml-11 mt-0.5 text-[10px] leading-snug text-amber-500 dark:text-amber-400">{releaseChip(item.release)}</p>
-					{/if}
-
-					<!-- Row 4: season picker -->
-					{#if item.media_type === 'tv' && (item.seasons?.length || releaseChip(item.release))}
-						<div class="ml-11 mt-1">
-							{@render seasonPicker(item)}
-						</div>
-					{/if}
-				</div>
-			{/each}
-		</div>
-
-	<!-- ── GANTT LANES ────────────────────────────────────────────────────────── -->
-	{:else}
-		<!-- X-axis header -->
-		<div class="flex items-center gap-0 pl-40">
-			<div class="flex-1 border-t border-dashed border-gray-300 pt-1 dark:border-gray-700">
-				<div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-600">
-					<span>0</span>
-					<span class="font-medium text-gray-500">{budgetHours}h / mo</span>
-				</div>
-			</div>
-		</div>
-
-		<div class="space-y-1.5">
-			{#each lanes as lane (lane.key)}
-				{@const colors = laneColors(resolvedHue(lane.providerId, lane.logo), theme.dark)}
-				{@const budgetMins = budgetHours * 60}
-
-				<div
-					class="flex items-stretch overflow-visible rounded-xl"
-					style="background:{colors.row}; border-left:{colors.border};"
-				>
-					<!-- Lane header -->
-					<div class="flex w-40 shrink-0 flex-col items-center justify-center gap-1.5 px-3 py-2.5 text-center"
-						style="background:{colors.header};">
-						{#if lane.logo}
-							<img src="{TMDB_IMG}/w92{lane.logo}" alt={lane.label} class="h-8 w-8 rounded-lg object-cover shadow" />
-						{:else}
-							<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-200 text-base dark:bg-gray-800">📺</div>
-						{/if}
-						<p class="text-[11px] font-semibold leading-tight" style="color:{colors.labelText}">{lane.label}</p>
-						<p class="text-[10px] text-gray-400 dark:text-gray-600">{lane.items.length} title{lane.items.length === 1 ? '' : 's'} · {hms(lane.totalMins)}</p>
-					</div>
-
-					<!-- Budget zone: clips at month boundary -->
-					<div class="relative min-w-0 flex-1 overflow-hidden py-3 pr-0">
-						<!-- Month-end marker line -->
-						<div class="pointer-events-none absolute inset-y-0 right-0 w-px border-r border-dashed border-white/15"></div>
-
-						<!-- Bar ribbon -->
-						<div class="flex h-8 items-stretch gap-0 pl-2">
-							{#each lane.items as item (item.id)}
-								{@const pct = (effectiveRuntime(item) / budgetMins) * 100}
-								{@const isActive = activeItem?.id === item.id}
-								{@const posterW = Math.round(BAR_H * 2 / 3)}
-
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div class="relative shrink-0" style="flex: 0 0 {pct}%; min-width: 18px;" data-item>
-									<button
-										class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive ? 'ring-2 ring-white/50 brightness-125' : 'hover:brightness-110'}"
-										style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace('1px solid ', '')};"
-										onclick={(e) => openGanttPopup(e, item)}
-										title="{item.title} · {formatRuntime(effectiveRuntime(item), item.media_type)} remaining"
-									>
-										{#if item.poster_path}
-											<img
-												src="{TMDB_IMG}/w92{item.poster_path}"
-												alt=""
-												class="h-full shrink-0 object-cover"
-												style="width:{posterW}px;"
-											/>
-										{/if}
-										<div class="flex min-w-0 flex-col justify-center gap-0.5 px-1.5">
-											<p class="truncate text-[10px] font-semibold leading-tight text-white/90">{item.title}</p>
-											<p class="truncate text-[9px] leading-tight text-white/50">
-												{formatRuntime(effectiveRuntime(item), item.media_type)}
-											</p>
-										</div>
-									</button>
-
-								</div>
-							{/each}
-						</div>
-					</div>
-
-					<!-- Overflow badge (outside the clipped zone) -->
-					{#if lane.overMins > 0}
-						<div class="flex shrink-0 items-center px-2">
-							<span class="whitespace-nowrap rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-semibold text-orange-400">
-								{overLabel(lane.overMins)}
-							</span>
-						</div>
-					{/if}
-				</div>
-			{/each}
-		</div>
-
-		{#if lanes.length > 1}
-			<p class="pt-1 text-center text-[11px] text-gray-400 dark:text-gray-700">Lanes sorted by filter selection · bar width = runtime · budget = {budgetHours}h/mo</p>
-		{/if}
-	{/if}
-</div>
-
-<!-- ── Detail panel ───────────────────────────────────────────────────────── -->
-{#if detailItem}
-	{@const di = detailItem}
-	{@const diHue = resolvedHue(di.providers[0]?.provider_id ?? null, di.providers[0]?.logo_path ?? null)}
-	{@const diPct = Math.min(100, (effectiveRuntime(di) / (budgetHours * 60)) * 100)}
-	{@const diLine = diHue !== null ? `hsl(${diHue} 60% 52%)` : '#374151'}
-	{@const diDot  = diHue !== null ? `hsl(${diHue} 70% 62%)` : '#4b5563'}
-	<!-- Scrim -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-		onclick={() => { detailItem = null; overviewExpanded = false; posterExpanded = false; }}
-	></div>
-
-	<!-- Panel: bottom sheet on mobile, right drawer on sm+ -->
-	<div
-		class="fixed bottom-0 inset-x-0 z-50 flex max-h-[90vh] flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-gray-900 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[22rem] sm:max-h-none sm:rounded-t-none sm:rounded-l-2xl"
-		data-detail-panel
-	>
-		<!-- Title bar -->
-		<div class="shrink-0 flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-			<h2 class="truncate pr-2 text-sm font-semibold text-gray-900 dark:text-white">{di.title}</h2>
-			<button
-				onclick={() => { detailItem = null; overviewExpanded = false; posterExpanded = false; }}
-				class="shrink-0 rounded-full p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-				aria-label="Close"
-			>
-				<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
-			</button>
-		</div>
-
-		<!-- Scrollable content -->
-		<div class="flex-1 overflow-y-auto">
-			<!-- Hero: poster + title/meta -->
-			<div class="flex gap-3 px-4 pt-4 pb-3">
-				{#if di.poster_path}
-					<button
-						class="w-20 shrink-0 self-start rounded-lg shadow-md overflow-hidden cursor-zoom-in"
-						onclick={() => posterExpanded = true}
-						aria-label="Expand poster"
-					>
-						<img src="{TMDB_IMG}/w185{di.poster_path}" alt={di.title} class="w-full h-full object-cover" />
-					</button>
-				{/if}
-				<div class="min-w-0">
-					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
-						{#if di.added_at}<span>{di.added_at.slice(0,4)}</span>{/if}
-						<span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-800">{di.media_type === 'movie' ? '🎬 Movie' : '📺 TV'}</span>
-						{#if di.director}<span>Dir. {di.director}</span>{/if}
-						{#if di.creator}<span>Created by {di.creator}</span>{/if}
-					</div>
-					{#if di.genres?.length}
-						<div class="mt-1.5 flex flex-wrap gap-1">
-							{#each di.genres as g (g)}
-								<span class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{g}</span>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<div class="space-y-4 px-4 pb-4">
-				<!-- Overview -->
-				{#if di.overview}
-					<div>
-						<p class="text-xs leading-relaxed text-gray-600 dark:text-gray-400
-							{overviewExpanded ? '' : 'line-clamp-4'}">{di.overview}</p>
-						{#if di.overview.length > 200}
-							<button
-								onclick={() => { overviewExpanded = !overviewExpanded; }}
-								class="mt-1 text-[10px] font-medium text-orange-500 hover:text-orange-400"
-							>{overviewExpanded ? 'Less' : 'More'}</button>
-						{/if}
-					</div>
-				{/if}
-
-				<!-- Runtime lollipop -->
-				<div class="flex items-center gap-2">
-					<div class="relative flex-1">
-						<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
-						<div class="absolute top-0 left-0 h-px transition-all duration-300"
-							style="width:{diPct}%; background:{diLine}; opacity:0.75;"></div>
-						<div class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
-							style="left:{diPct}%; margin-left:-3px; background:{diDot};"></div>
-					</div>
-					<span class="shrink-0 text-[10px] tabular-nums text-gray-500">
-						{formatRuntime(effectiveRuntime(di), di.media_type)}
-						{#if di.runtime_minutes && di.media_type === 'tv'}<span class="text-gray-400 dark:text-gray-600"> / {formatRuntime(di.runtime_minutes, di.media_type)}</span>{/if}
-					</span>
-				</div>
-
-				<!-- Cast -->
-				{#if di.cast?.length}
-					<div>
-						<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Cast</p>
-						<div class="flex gap-2 overflow-x-auto pb-1">
-							{#each di.cast as c (c.name)}
-								<div class="flex shrink-0 flex-col items-center gap-1 w-14">
-									<div class="h-12 w-12 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
-										{#if c.profile_path}
-											<img src="{TMDB_IMG}/w185{c.profile_path}" alt={c.name} class="h-full w-full object-cover" />
-										{:else}
-											<div class="flex h-full w-full items-center justify-center text-lg text-gray-400">👤</div>
-										{/if}
+							<!-- Hulu -->
+							<div style="background:#0c1a0f;border:1px solid #1a3020;border-radius:11px;margin-bottom:8px;display:flex;overflow:hidden">
+								<div style="width:108px;flex:none;padding:12px;border-right:1px solid #1a3020">
+									<div style="width:32px;height:32px;border-radius:9px;background:#1ce783;display:flex;align-items:center;justify-content:center;margin-bottom:6px">
+										<span style="font-size:9px;font-weight:900;color:#000">hulu</span>
 									</div>
-									<p class="text-center text-[9px] font-medium leading-tight text-gray-700 dark:text-gray-300 line-clamp-2">{c.name}</p>
-									<p class="text-center text-[9px] leading-tight text-gray-400 dark:text-gray-600 line-clamp-1">{c.character}</p>
+									<div style="font-size:11px;font-weight:700;color:#1ce783;margin-bottom:2px">Hulu</div>
+									<div style="font-size:9px;color:#4b5563">2 titles · 27h 43m</div>
 								</div>
-							{/each}
+								<div style="flex:1;padding:12px;display:flex;align-items:center">
+									<div style="display:flex;align-items:center;gap:7px;background:#112218;border:1px solid #1c3a24;border-radius:7px;padding:7px 10px;width:62%">
+										<div style="width:22px;height:30px;border-radius:4px;background:#1c3a24;flex:none"></div>
+										<div>
+											<div style="font-size:11px;font-weight:600;color:#e5e7eb">The Bear</div>
+											<div style="font-size:9px;color:#1ce783">~26h</div>
+										</div>
+									</div>
+								</div>
+							</div>
+							<!-- Apple TV -->
+							<div style="background:#0c1420;border:1px solid #1a2436;border-radius:11px;display:flex;overflow:hidden;position:relative">
+								<div style="width:108px;flex:none;padding:12px;border-right:1px solid #1a2436">
+									<div style="width:32px;height:32px;border-radius:9px;background:#1d1d1f;border:1px solid #333;display:flex;align-items:center;justify-content:center;margin-bottom:6px">
+										<span style="font-size:13px">📺</span>
+									</div>
+									<div style="font-size:11px;font-weight:700;color:#4da6ff;margin-bottom:2px">Apple TV</div>
+									<div style="font-size:9px;color:#4b5563">2 titles · 41h 38m</div>
+								</div>
+								<div style="flex:1;padding:12px;display:flex;align-items:center;gap:4px;overflow:hidden;position:relative">
+									<div style="display:flex;align-items:center;gap:7px;background:#0e1e30;border:1px solid #1a2e44;border-radius:7px;padding:7px 9px;flex:none;width:30%">
+										<div style="width:22px;height:30px;border-radius:4px;background:#1a2e44;flex:none"></div>
+										<div>
+											<div style="font-size:11px;font-weight:600;color:#e5e7eb">Severance</div>
+											<div style="font-size:9px;color:#4da6ff">~13h</div>
+										</div>
+									</div>
+									<div style="display:flex;align-items:center;gap:7px;background:#0e1e30;border:1px solid #1a2e44;border-radius:7px;padding:7px 9px;flex:none;width:40%">
+										<div style="width:22px;height:30px;border-radius:4px;background:#1a2e44;flex:none"></div>
+										<div>
+											<div style="font-size:11px;font-weight:600;color:#e5e7eb">Ted Lasso</div>
+											<div style="font-size:9px;color:#4da6ff">~29h</div>
+										</div>
+									</div>
+									<div style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:#f97316;color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap">+1.6h over</div>
+								</div>
+							</div>
+							<div style="text-align:center;font-size:9px;color:#374151;margin-top:9px">bar width = runtime · budget = 40h / mo</div>
 						</div>
-					</div>
-				{:else if !di.cast}
-					<p class="text-[10px] text-gray-400 dark:text-gray-600">Run <strong>Settings → Refresh Data</strong> to load cast info.</p>
-				{/if}
 
-				<!-- Where to watch -->
-				<div>
-					<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Where to watch</p>
-					{#if di.providers.length}
-						<div class="flex flex-wrap gap-2">
-							{#each di.providers as p (p.provider_id)}
-								<div class="flex items-center gap-1.5">
-									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} class="h-6 w-6 rounded-lg" />
-									<span class="text-xs text-gray-600 dark:text-gray-400">{p.provider_name}</span>
+					<!-- LIST tab -->
+					{:else if tab === 'list'}
+						<div style="padding:6px 8px 8px">
+							<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #1d2535">
+								<div style="width:30px;height:44px;border-radius:5px;flex:none;background:linear-gradient(145deg,#2a3a1a,#3d5c28)"></div>
+								<div style="flex:1;min-width:0">
+									<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">The Princess Bride</div>
+									<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
+										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#1ce783;color:#000">hulu</span>
+										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#e8242d;color:#fff">fubo</span>
+									</div>
+									<div style="display:flex;align-items:center;gap:7px">
+										<div style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative">
+											<div style="width:18%;height:100%;border-radius:2px;background:#1ce783"></div>
+											<div style="position:absolute;left:18%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"></div>
+										</div>
+										<span style="font-size:10px;color:#6b7280;white-space:nowrap">1h 39m</span>
+									</div>
 								</div>
-							{/each}
+								<div style="display:flex;gap:3px">
+									<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center">✓</button>
+									<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center">×</button>
+								</div>
+							</div>
+							<div style="display:flex;align-items:center;gap:10px;padding:10px">
+								<div style="width:30px;height:44px;border-radius:5px;flex:none;background:linear-gradient(145deg,#1a2535,#2a3d55)"></div>
+								<div style="flex:1;min-width:0">
+									<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">The Bear</div>
+									<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px;flex-wrap:wrap">
+										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#1ce783;color:#000">hulu</span>
+										<div style="display:flex;gap:2px">
+											{#each ['S1','S2','S3','S4'] as s}
+												<span style="font-size:8px;padding:2px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600">{s}</span>
+											{/each}
+											<span style="font-size:8px;padding:2px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600">S5</span>
+										</div>
+									</div>
+									<div style="display:flex;align-items:center;gap:7px">
+										<div style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative">
+											<div style="width:82%;height:100%;border-radius:2px;background:#1ce783"></div>
+											<div style="position:absolute;left:82%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"></div>
+										</div>
+										<span style="font-size:10px;color:#6b7280;white-space:nowrap">~26h</span>
+									</div>
+								</div>
+								<div style="display:flex;gap:3px">
+									<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center">✓</button>
+									<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center">×</button>
+								</div>
+							</div>
 						</div>
-					{:else if di.rentable}
-						<p class="text-xs text-gray-500">💲 Available to rent or buy</p>
+
+					<!-- CARDS tab -->
 					{:else}
-						<div class="space-y-1">
-							<p class="text-xs text-gray-500">🚫 Not on streaming services</p>
-							<div class="flex gap-3">
-								<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(di.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-orange-500 hover:text-orange-400">Kanopy →</a>
-								<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(di.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-orange-500 hover:text-orange-400">Hoopla →</a>
+						<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:11px">
+							<div style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden">
+								<div style="height:110px;background:linear-gradient(160deg,#2a4018,#3d5c28,#1a2a10)"></div>
+								<div style="padding:9px">
+									<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">The Princess Bride</div>
+									<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
+										<div style="flex:1;height:3px;border-radius:2px;background:#1d2535">
+											<div style="width:18%;height:100%;border-radius:2px;background:#1ce783"></div>
+										</div>
+										<span style="font-size:9px;color:#6b7280">1h 39m</span>
+									</div>
+									<div style="display:flex;gap:3px;margin-bottom:7px">
+										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#1ce783;color:#000">hulu</span>
+										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#e8242d;color:#fff">fubo</span>
+									</div>
+									<div style="display:flex;gap:3px">
+										<button style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer">✓ Watched</button>
+										<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer">×</button>
+									</div>
+								</div>
+							</div>
+							<div style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden">
+								<div style="height:110px;background:linear-gradient(160deg,#1a2535,#2a3d55,#0d1825)"></div>
+								<div style="padding:9px">
+									<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">The Bear</div>
+									<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
+										<div style="flex:1;height:3px;border-radius:2px;background:#1d2535">
+											<div style="width:82%;height:100%;border-radius:2px;background:#1ce783"></div>
+										</div>
+										<span style="font-size:9px;color:#6b7280">~26h</span>
+									</div>
+									<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:4px">
+										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#1ce783;color:#000">hulu</span>
+									</div>
+									<div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:7px">
+										{#each ['S1','S2','S3','S4'] as s}
+											<span style="font-size:7px;padding:1px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600">{s}</span>
+										{/each}
+										<span style="font-size:7px;padding:1px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600">S5</span>
+									</div>
+									<div style="display:flex;gap:3px">
+										<button style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer">✓ Watched</button>
+										<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer">×</button>
+									</div>
+								</div>
 							</div>
 						</div>
 					{/if}
-				</div>
 
-				<!-- Seasons with episode counts -->
-				{#if di.media_type === 'tv' && (di.seasons?.length || releaseChip(di.release))}
-					{@const chip = releaseChip(di.release)}
-					<div>
-						<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Seasons</p>
-						<div class="space-y-1">
-							{#each (di.seasons ?? []).filter(s =>
-								s.episode_count > 0 &&
-								(!chip || di.release?.next_season == null || s.season_number < di.release.next_season)
-							) as season (season.season_number)}
-								{@const watched = (di.watched_seasons ?? []).includes(season.season_number)}
-								<div class="flex items-center gap-2">
-									<button
-										class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
-											{watched
-												? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
-												: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
-										onclick={() => toggleSeason(di, season.season_number)}
-									>
-										{watched ? '✓' : 'S'}{season.season_number}
-									</button>
-									<span class="text-xs text-gray-500 dark:text-gray-400">{season.episode_count} eps</span>
-								</div>
-							{/each}
-							{#if chip}
-								{@const isOpen = releasePopupId === di.id}
-								{@const nextSeasonData = (di.seasons ?? []).find(s => s.season_number === di.release?.next_season)}
-								<div class="flex items-center gap-2">
-									<button
-										class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
-											{isOpen
-												? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
-												: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
-										onclick={() => { releasePopupId = isOpen ? null : di.id; }}
-										data-release-popup
-									>
-										{di.release?.next_season != null ? `S${di.release.next_season}` : 'Next'}
-										{#if isOpen}
-											<div class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700">
-												{chip}
-											</div>
-										{/if}
-									</button>
-									{#if nextSeasonData?.episode_count}
-										<span class="text-xs text-gray-500 dark:text-gray-400">{nextSeasonData.episode_count} eps</span>
-									{/if}
-									<span class="text-xs text-orange-500 dark:text-orange-400">{chip}</span>
-								</div>
-							{/if}
-						</div>
-					</div>
-				{/if}
+				</div>
 			</div>
 		</div>
+	</section>
 
-		<!-- Sticky footer actions -->
-		<div class="shrink-0 border-t border-gray-100 px-4 py-3 dark:border-gray-800 flex gap-2">
-			<button
-				class="flex-1 rounded-lg py-2 text-sm font-medium transition-colors
-					{di.watched_at
-						? 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-400 dark:hover:bg-teal-900/60'
-						: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
-				disabled={busy.has(di.id)}
-				onclick={async () => { await toggle(di); detailItem = items.find(i => i.id === di.id) ?? null; }}
-			>{di.watched_at ? '↩ Unwatch' : '✓ Watched'}</button>
-			<button
-				class="rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-				disabled={busy.has(di.id)}
-				onclick={async () => { await remove(di); detailItem = null; }}
-			>✕ Remove</button>
+	<!-- ─── FEATURES ─────────────────────────────────────────────────── -->
+	<section id="features" class="relative z-10 mx-auto max-w-5xl scroll-mt-20 px-6 py-16">
+		<div data-reveal class="mb-10 max-w-[560px]">
+			<div class="mb-3 text-[13px] font-bold tracking-[0.4px] text-orange-500">FEATURES</div>
+			<h2 class="text-[clamp(28px,3.6vw,40px)] font-extrabold leading-tight tracking-[-1px]">
+				Track what you watch. Cut what you don't.
+			</h2>
 		</div>
-	</div>
-
-	<!-- Poster lightbox -->
-	{#if posterExpanded && di.poster_path}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div
-			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
-			onclick={() => posterExpanded = false}
-		>
-			<img
-				src="{TMDB_IMG}/w500{di.poster_path}"
-				alt={di.title}
-				class="max-h-full max-w-full rounded-xl shadow-2xl"
-			/>
-		</div>
-	{/if}
-{/if}
-
-<!-- ── Share modal ────────────────────────────────────────────────────────── -->
-{#if shareOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
-		onclick={() => { shareOpen = false; }}
-	>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div
-			class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-900"
-			onclick={(e) => e.stopPropagation()}
-		>
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-base font-semibold text-gray-900 dark:text-white">Share list</h2>
-				<button onclick={() => { shareOpen = false; }} class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Close">✕</button>
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+			<div data-reveal class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+				<div class="mb-4 flex h-[46px] w-[46px] flex-col items-center justify-center gap-1 rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)">
+					<span class="h-1 w-5 rounded-sm bg-orange-500"></span>
+					<span class="h-1 w-5 rounded-sm bg-orange-500 opacity-70"></span>
+					<span class="h-1 w-5 rounded-sm bg-orange-500 opacity-40"></span>
+				</div>
+				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Build your watchlist</h3>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">Drop in shows and movies as you hear about them. Queuest keeps them organized so nothing slips off your radar.</p>
 			</div>
 
-			<div class="space-y-4">
-				<!-- Status filter -->
-				<div>
-					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Include</p>
-					<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-						{#each ([['queue','To Watch'],['watched','Watched'],['both','Both']] as const) as [key, label] (key)}
-							<button class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
-								{shareStatus === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => { shareStatus = key; shareUrl = ''; }}>{label}</button>
-						{/each}
-					</div>
-				</div>
-
-				<!-- Type filter -->
-				<div>
-					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Type</p>
-					<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-						{#each ([['all','All'],['movie','Movies'],['tv','TV']] as const) as [key, label] (key)}
-							<button class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
-								{shareType === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => { shareType = key; shareUrl = ''; }}>{label}</button>
-						{/each}
-					</div>
-				</div>
-
-				<!-- Queue filter -->
-				{#if allShareQueues.length > 1}
-					<div>
-						<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Queues</p>
-						<div class="flex flex-wrap gap-1.5">
-							{#each allShareQueues as q (q)}
-								{@const on = shareQueueNames.has(q)}
-								{@const color = queueColors[q] ?? null}
-								<button
-									onclick={() => toggleShareQueue(q)}
-									class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors
-										{on ? 'bg-orange-50 text-orange-700 ring-orange-300 dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-800' : 'bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700'}"
-								>
-									{#if color}<span class="h-2 w-2 rounded-full shrink-0" style="background:{color}"></span>{/if}
-									{q}
-								</button>
-							{/each}
-						</div>
-					</div>
-				{/if}
-
-				<!-- Provider filter -->
-				{#if shareAllProviders.length > 0}
-					<div>
-						<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Providers</p>
-						<div class="flex flex-wrap gap-1.5">
-							{#each shareAllProviders as p (p.name)}
-								{@const on = shareProviderNames.has(p.name)}
-								<button
-									onclick={() => toggleShareProvider(p.name)}
-									class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors
-										{on ? 'bg-orange-50 text-orange-700 ring-orange-300 dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-800' : 'bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700'}"
-								>
-									<img src="{TMDB_IMG}/w92{p.logo_path}" alt="" class="h-4 w-4 rounded" />
-									{p.name}
-								</button>
-							{/each}
-						</div>
-					</div>
-				{/if}
-
-				<!-- Summary -->
-				<div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
-					<span class="text-xs text-gray-500">
-						{shareFiltered.length} title{shareFiltered.length === 1 ? '' : 's'}
-						{#if shareFiltered.length > 0}· {hms(shareTotal)}{/if}
+			<div data-reveal class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+				<div class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)">
+					<span class="flex h-6 w-6 items-center justify-center rounded-full border-[3.5px] border-orange-500">
+						<span class="h-[7px] w-[7px] rounded-full bg-orange-500"></span>
 					</span>
-					{#if shareFiltered.length === 0}
-						<span class="text-xs text-amber-500">Nothing to share</span>
-					{/if}
 				</div>
+				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">See where it's streaming</h3>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">Every title in your list shows which services carry it right now — so you know exactly which subscription you actually need open.</p>
+			</div>
 
-				<!-- URL / create button -->
-				{#if shareUrl}
-					<div class="space-y-2">
-						<div class="flex gap-2">
-							<input
-								type="text"
-								readonly
-								value={shareUrl}
-								class="min-w-0 flex-1 rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700 outline-none dark:bg-gray-800 dark:text-gray-300"
-							/>
-							<button
-								onclick={copyShareUrl}
-								class="shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition-colors
-									{shareCopied ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'}"
-							>
-								{shareCopied ? '✓ Copied' : 'Copy'}
-							</button>
+			<div data-reveal class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+				<div class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)">
+					<span class="h-6 w-6 rounded-full"
+						style="background:conic-gradient(#f97316 0 30%,color-mix(in srgb,#f97316 22%,transparent) 30% 100%)"></span>
+				</div>
+				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Know what to cancel</h3>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">The Gantt view shows how long it takes to watch through your queue on each service. Thin queues are cancel candidates — thick ones are worth keeping.</p>
+			</div>
+
+			<div data-reveal class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+				<div class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)">
+					<div class="flex flex-col items-center">
+						<div class="h-2 w-3 rounded-t-full border-[2.5px] border-b-0 border-orange-500"></div>
+						<div class="flex h-3.5 w-5 items-center justify-center rounded-sm bg-orange-500">
+							<div class="h-1 w-1 rounded-full" style="background:color-mix(in srgb,#f97316 10%,white)"></div>
 						</div>
-						<p class="text-[10px] text-gray-400 dark:text-gray-600">Link expires in 30 days · server stores only the encrypted blob</p>
 					</div>
-				{:else}
-					<button
-						onclick={createShareLink}
-						disabled={shareFiltered.length === 0 || shareCreating}
-						class="w-full rounded-lg bg-orange-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-					>
-						{shareCreating ? 'Creating link…' : 'Create share link'}
-					</button>
-				{/if}
-
-				{#if shareError}
-					<p class="text-xs text-red-500">{shareError}</p>
-				{/if}
+				</div>
+				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Private by design</h3>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">No account, no login. Your queue lives on your device and leaves as an encrypted file you own. Nothing personal ever touches our servers.</p>
 			</div>
 		</div>
-	</div>
-{/if}
+	</section>
 
-<!-- ── Gantt detail popup (fixed-position, escapes overflow:hidden) ──────── -->
-{#if activeItem && ganttPopupAnchor}
-	<div
-		class="fixed z-50 w-56 rounded-xl bg-white p-3 shadow-2xl ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-white/10"
-		style="left:{ganttPopupAnchor.x}px; top:{ganttPopupAnchor.y}px;"
-		data-item
-	>
-		<p class="mb-1 text-sm font-semibold leading-snug">{activeItem.title}</p>
-		<p class="mb-1 text-xs text-gray-500 dark:text-gray-400">
-				🕐 {formatRuntime(effectiveRuntime(activeItem), activeItem.media_type)} remaining
-		</p>
-		{@render seasonPicker(activeItem)}
-		<div class="mt-2 mb-2 flex flex-wrap items-center gap-1">
-			<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-700">
-				{activeItem.media_type === 'movie' ? '🎬' : '📺'}
-			</span>
-			{#each activeItem.providers as p (p.provider_id)}
-				<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
-			{/each}
+	<!-- ─── HOW IT WORKS ─────────────────────────────────────────────── -->
+	<section id="how" class="relative z-10 scroll-mt-16 border-y border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-gray-900/50">
+		<div class="mx-auto max-w-5xl px-6 py-16">
+			<div data-reveal class="mb-11 max-w-[560px]">
+				<div class="mb-3 text-[13px] font-bold tracking-[0.4px] text-orange-500">HOW IT WORKS</div>
+				<h2 class="text-[clamp(28px,3.6vw,40px)] font-extrabold leading-tight tracking-[-1px]">
+					Three steps to smarter streaming spend.
+				</h2>
+			</div>
+			<div class="grid grid-cols-1 gap-7 sm:grid-cols-3">
+				<div data-reveal>
+					<div class="mb-3.5 text-5xl font-extrabold tracking-[-2px] text-orange-500">01</div>
+					<h3 class="mb-2 text-lg font-bold">Set your watch budget</h3>
+					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">Tell Queuest how many hours a month you want to watch and which services you're paying for. That's your baseline.</p>
+				</div>
+				<div data-reveal>
+					<div class="mb-3.5 text-5xl font-extrabold tracking-[-2px] text-orange-500">02</div>
+					<h3 class="mb-2 text-lg font-bold">Build your queue</h3>
+					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">Add the shows and movies you actually want to see. Queuest finds where each one is streaming so you always know what to open.</p>
+				</div>
+				<div data-reveal>
+					<div class="mb-3.5 text-5xl font-extrabold tracking-[-2px] text-orange-500">03</div>
+					<h3 class="mb-2 text-lg font-bold">Trim your subscriptions</h3>
+					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">The Gantt view shows how many hours of your queue live on each service. Cancel the ones you'd finish in a weekend — resubscribe when you're ready.</p>
+				</div>
+			</div>
 		</div>
-		<div class="flex gap-1.5">
-			<button class="flex-1 rounded-md bg-gray-100 py-1.5 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-gray-600"
-				disabled={busy.has(activeItem.id)} onclick={() => toggle(activeItem!)}>
-				{activeItem.watched_at ? 'Unwatch' : '✓ Watched'}
-			</button>
-			<button class="rounded-md bg-gray-100 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-				disabled={busy.has(activeItem.id)} onclick={() => remove(activeItem!)} aria-label="Remove">✕</button>
+	</section>
+
+	<!-- ─── BOTTOM CTA ───────────────────────────────────────────────── -->
+	<section class="relative z-10 mx-auto max-w-5xl px-6 py-20">
+		<div data-reveal class="relative overflow-hidden rounded-[26px] border border-gray-200 bg-white px-10 py-14 text-center dark:border-gray-800 dark:bg-gray-900">
+			<div class="pointer-events-none absolute inset-0"
+				style="background:radial-gradient(circle at 50% -20%,color-mix(in srgb,#f97316 18%,transparent),transparent 60%)"></div>
+			<div class="relative">
+				<h2 class="mb-3.5 text-[clamp(28px,4vw,44px)] font-extrabold leading-[1.08] tracking-[-1.2px]">
+					Stop guessing.<br>Start cancelling.
+				</h2>
+				<p class="mx-auto mb-7 max-w-[440px] text-base leading-relaxed text-gray-600 dark:text-gray-400">
+					Add what you want to watch, find out which services have it, and finally know what's worth paying for.
+				</p>
+				<button onclick={start}
+					class="rounded-2xl bg-orange-500 px-9 py-4 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110">
+					See what you're paying for — free
+				</button>
+			</div>
+		</div>
+	</section>
+
+	<!-- ─── PAGE FOOTER ──────────────────────────────────────────────── -->
+	<div class="relative z-10 border-t border-gray-200 dark:border-gray-800">
+		<div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-6">
+			<span class="text-base font-extrabold tracking-[-0.4px]">Queu<span class="text-orange-500">est</span></span>
+			<div class="flex gap-5">
+				<a href="#features" class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white">Features</a>
+				<a href="#how" class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white">How it works</a>
+				<button onclick={start} class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white">Get started</button>
+			</div>
+			<div class="text-[12px] text-gray-500">© 2026 Queuest</div>
 		</div>
 	</div>
-{/if}
 
+</div>

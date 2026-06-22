@@ -39,8 +39,19 @@ export function formatRuntime(minutes: number, mediaType: 'movie' | 'tv'): strin
 	}
 }
 
+// Retries once on 429 (TMDB rate limit) before giving up
+async function tmdbFetch(url: string): Promise<Response> {
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const res = await fetch(url);
+		if (res.status !== 429) return res;
+		const wait = (parseInt(res.headers.get('Retry-After') ?? '2') + 0.5) * 1000;
+		await new Promise<void>((r) => setTimeout(r, wait));
+	}
+	return new Response('Rate limited', { status: 429 });
+}
+
 export async function searchMulti(query: string, apiKey: string) {
-	const res = await fetch(
+	const res = await tmdbFetch(
 		`${BASE}/search/multi?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US`
 	);
 	if (!res.ok) return [];
@@ -72,7 +83,7 @@ export async function getRuntime(
 ): Promise<RuntimeResult> {
 	// Movies: append release_dates + credits in one call; TV: just credits
 	const qs = mediaType === 'movie' ? '&append_to_response=release_dates,credits' : '&append_to_response=credits';
-	const res = await fetch(`${BASE}/${mediaType}/${id}?api_key=${apiKey}&language=en-US${qs}`);
+	const res = await tmdbFetch(`${BASE}/${mediaType}/${id}?api_key=${apiKey}&language=en-US${qs}`);
 	if (!res.ok) return { runtime_minutes: null, seasons: [], networkIds: [], companyIds: [], release: null, backdrop_path: null, genres: [], cast: [], director: null, creator: null };
 
 	if (mediaType === 'movie') {
@@ -359,7 +370,7 @@ export async function getWatchProviders(
 	mediaType: 'movie' | 'tv',
 	apiKey: string
 ): Promise<{ providers: Provider[]; rentable: boolean }> {
-	const res = await fetch(`${BASE}/${mediaType}/${id}/watch/providers?api_key=${apiKey}`);
+	const res = await tmdbFetch(`${BASE}/${mediaType}/${id}/watch/providers?api_key=${apiKey}`);
 	if (!res.ok) return { providers: [], rentable: false };
 	const data = (await res.json()) as {
 		results?: { US?: { flatrate?: Provider[]; rent?: Provider[]; buy?: Provider[] } };

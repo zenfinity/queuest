@@ -1,20 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getAll, replaceAll, patchProviders } from '$lib/db';
-	import { encrypt, decrypt } from '$lib/crypto';
+	import { getAll, replaceAll, patchProviders, getServices, setServices } from '$lib/db';
+	import { encrypt } from '$lib/crypto';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
-	import { openWelcome } from '$lib/welcome.svelte';
+
 	import { getQueueName, setQueueName, getQueueColors, setQueueColor } from '$lib/queue-colors';
-	import type { WatchlistItem } from '$lib/types';
+	import type { WatchlistItem, Provider } from '$lib/types';
 	import pkg from '../../../package.json';
 
 	const VERSION = pkg.version;
 	const GITHUB_REPO = 'https://github.com/zenfinity/streamq';
-
-	// ── Budget ────────────────────────────────────────────────────────────────
-	let hoursPerWeek  = $state(10);
-	let weeksPerMonth = $state(4);
-	let budgetHours   = $derived(hoursPerWeek * weeksPerMonth);
 
 	// ── Export ────────────────────────────────────────────────────────────────
 	let exportPassphrase = $state('');
@@ -25,21 +20,24 @@
 		if (!exportPassphrase) return;
 		exporting = true; exportDone = false;
 		try {
-			const items = await getAll();
+			const [items, services] = await Promise.all([getAll(), getServices()]);
+			const _weeklyHours  = JSON.parse(localStorage.getItem('sq:budget:weekly') ?? '10');
+			const _weeksPerMonth = JSON.parse(localStorage.getItem('sq:budget:weeks') ?? '4');
 			// Wrap items + preferences so a restore is complete
 			const payload = {
 				version: 1,
 				prefs: {
 					theme: theme.dark ? 'dark' : 'light',
-					weeklyHours: hoursPerWeek,
-					weeksPerMonth,
-					budget: budgetHours, // kept for backwards compat
+					weeklyHours: _weeklyHours,
+					weeksPerMonth: _weeksPerMonth,
+					budget: _weeklyHours * _weeksPerMonth, // kept for backwards compat
 					queueName: getQueueName(),
 					queueColors: getQueueColors(),
 					sort: localStorage.getItem('sq:sort') ?? 'added',
 					view: localStorage.getItem('sq:view') ?? 'grid',
 				},
-				items
+				items,
+				services
 			};
 			const buf = await encrypt(JSON.stringify(payload), exportPassphrase);
 			const url = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
@@ -51,69 +49,6 @@
 			exportPassphrase = '';
 			exportDone = true;
 		} finally { exporting = false; }
-	}
-
-	// ── Import ────────────────────────────────────────────────────────────────
-	let importFile       = $state<File | null>(null);
-	let importPassphrase = $state('');
-	let importing        = $state(false);
-	let importError      = $state('');
-	let importDone       = $state(false);
-
-	function onFileChange(e: Event) {
-		importFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
-		importError = ''; importDone = false;
-	}
-
-	async function doImport() {
-		if (!importFile || !importPassphrase) return;
-		importing = true; importError = ''; importDone = false;
-		try {
-			const parsed = JSON.parse(await decrypt(await importFile.arrayBuffer(), importPassphrase));
-
-			let items: WatchlistItem[];
-			if (Array.isArray(parsed)) {
-				// Legacy format — bare array
-				items = parsed;
-			} else {
-				// v1 format — { version, prefs, items }
-				items = parsed.items ?? [];
-				if (parsed.prefs?.theme) {
-					const dark = parsed.prefs.theme === 'dark';
-					theme.dark = dark;
-					localStorage.setItem('sq:theme', parsed.prefs.theme);
-					document.documentElement.classList.toggle('dark', dark);
-				}
-				// Budget — prefer the explicit breakdown; fall back to dividing the total
-				if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
-					hoursPerWeek  = parsed.prefs.weeklyHours;
-					weeksPerMonth = parsed.prefs.weeksPerMonth;
-				} else if (typeof parsed.prefs?.budget === 'number') {
-					weeksPerMonth = 4;
-					hoursPerWeek  = Math.round(parsed.prefs.budget / 4);
-				}
-				localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
-				localStorage.setItem('sq:budget:weeks',  JSON.stringify(weeksPerMonth));
-				localStorage.setItem('sq:budget', JSON.stringify(hoursPerWeek * weeksPerMonth));
-
-				if (typeof parsed.prefs?.queueName === 'string') {
-					setQueueName(parsed.prefs.queueName);
-					myQueueName = parsed.prefs.queueName;
-				}
-				if (parsed.prefs?.queueColors && typeof parsed.prefs.queueColors === 'object') {
-					for (const [tag, color] of Object.entries(parsed.prefs.queueColors)) {
-						if (typeof color === 'string') setQueueColor(tag, color);
-					}
-				}
-				if (typeof parsed.prefs?.sort === 'string') localStorage.setItem('sq:sort', parsed.prefs.sort);
-				if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
-			}
-
-			await replaceAll(items);
-			importFile = null; importPassphrase = ''; importDone = true;
-		} catch (e) {
-			importError = e instanceof Error ? e.message : 'Import failed.';
-		} finally { importing = false; }
 	}
 
 	// ── Refresh providers ─────────────────────────────────────────────────────
@@ -210,12 +145,20 @@
 		if (!resetArmed) { resetArmed = true; return; }
 		resetting = true;
 		try {
-			await replaceAll([]);
+			await Promise.all([replaceAll([]), setServices([])]);
 			const keys = ['sq:theme','sq:budget','sq:budget:weekly','sq:budget:weeks',
-			               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed'];
+			               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed','sq:import-missed'];
 			for (const k of keys) { try { localStorage.removeItem(k); } catch {} }
 			window.location.href = '/';
 		} finally { resetting = false; }
+	}
+
+	// ── Cancel alerts opt-in ─────────────────────────────────────────────────
+	let cancelAlertsEnabled = $state(false);
+
+	function toggleCancelAlerts() {
+		cancelAlertsEnabled = !cancelAlertsEnabled;
+		try { localStorage.setItem('sq:cancel-alerts', cancelAlertsEnabled ? 'true' : 'false'); } catch {}
 	}
 
 	// ── Queue identity ────────────────────────────────────────────────────────
@@ -231,20 +174,7 @@
 
 	// ── Persistence ───────────────────────────────────────────────────────────
 	onMount(async () => {
-		try {
-			const weekly = localStorage.getItem('sq:budget:weekly');
-			const weeks  = localStorage.getItem('sq:budget:weeks');
-			if (weekly !== null && weeks !== null) {
-				hoursPerWeek  = JSON.parse(weekly);
-				weeksPerMonth = JSON.parse(weeks);
-			} else {
-				// Migrate legacy single-value budget, defaulting to 10 × 4 = 40
-				const legacy = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
-				weeksPerMonth = 4;
-				hoursPerWeek  = Math.round(legacy / weeksPerMonth);
-			}
-		} catch {}
-
+		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		myQueueName = getQueueName();
 		queueColors = getQueueColors();
 
@@ -256,14 +186,7 @@
 		importedTags = [...tags].sort();
 	});
 
-	$effect(() => {
-		try {
-			localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
-			localStorage.setItem('sq:budget:weeks',  JSON.stringify(weeksPerMonth));
-			// Keep sq:budget in sync — used by the rest of the app and export format
-			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
-		} catch {}
-	});
+
 </script>
 
 <svelte:head><title>Queuest — Settings</title></svelte:head>
@@ -345,26 +268,25 @@
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
-	<!-- Budget -->
+	<!-- Cancel alerts -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Viewing Budget</h2>
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Cancellation Alerts</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Your estimated monthly watch time. Used to normalise bar widths across all views.
+			When enabled, a banner appears on your queue when you've nearly cleared a streaming service — a nudge to consider pausing your subscription.
 		</p>
-		<div class="flex flex-wrap items-center gap-2 text-sm">
-			<input
-				type="number" min="1" max="24" step="0.5"
-				bind:value={hoursPerWeek}
-				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-			/>
-			<span class="text-gray-600 dark:text-gray-400">hrs ×</span>
-			<input
-				type="number" min="1" max="6" step="0.5"
-				bind:value={weeksPerMonth}
-				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-			/>
-			<span class="text-gray-600 dark:text-gray-400">weeks =</span>
-			<span class="font-semibold text-gray-900 dark:text-white">{budgetHours} hrs/month</span>
+		<div class="flex items-center justify-between">
+			<span class="text-sm text-gray-600 dark:text-gray-400">Show cancellation alerts</span>
+			<button
+				role="switch"
+				aria-checked={cancelAlertsEnabled}
+				onclick={toggleCancelAlerts}
+				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors
+					{cancelAlertsEnabled ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}"
+			>
+				<span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
+					{cancelAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}">
+				</span>
+			</button>
 		</div>
 	</section>
 
@@ -395,40 +317,6 @@
 		{#if exportDone}
 			<p class="text-xs text-teal-600 dark:text-teal-400">✓ File downloaded.</p>
 		{/if}
-	</section>
-
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
-
-	<!-- Import -->
-	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Import Watchlist</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Restore from a <code class="text-orange-500">.queuest</code> file. Theme and budget preferences are restored too.
-			<span class="font-medium text-red-500">This replaces your current queue.</span>
-		</p>
-		<input
-			type="file" accept=".queuest"
-			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
-			onchange={onFileChange}
-		/>
-		<div class="flex gap-2">
-			<input
-				type="password"
-				placeholder="Passphrase"
-				bind:value={importPassphrase}
-				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
-				onkeydown={(e) => e.key === 'Enter' && doImport()}
-			/>
-			<button
-				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-				disabled={!importFile || !importPassphrase || importing}
-				onclick={doImport}
-			>
-				{importing ? 'Decrypting…' : 'Import'}
-			</button>
-		</div>
-		{#if importError}<p class="text-xs text-red-500">{importError}</p>{/if}
-		{#if importDone}<p class="text-xs text-teal-600 dark:text-teal-400">✓ Queue restored successfully.</p>{/if}
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
@@ -505,7 +393,7 @@
 
 		<div class="flex items-center justify-between">
 			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-				Queue<span class="text-orange-400">st</span>
+				Queu<span class="text-orange-400">est</span>
 			</span>
 			<span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
 				v{VERSION}
@@ -513,13 +401,6 @@
 		</div>
 
 		<div class="flex flex-wrap gap-2">
-			<button
-				onclick={openWelcome}
-				class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-			>
-				Show welcome guide
-			</button>
-
 			<a
 				href={GITHUB_REPO}
 				target="_blank"
