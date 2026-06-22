@@ -3,7 +3,7 @@
 	import { getAll, replaceAll, patchProviders, getServices, setServices } from '$lib/db';
 	import { encrypt } from '$lib/crypto';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
-	import { openWelcome } from '$lib/welcome.svelte';
+
 	import { getQueueName, setQueueName, getQueueColors, setQueueColor } from '$lib/queue-colors';
 	import type { WatchlistItem, Provider } from '$lib/types';
 	import pkg from '../../../package.json';
@@ -401,13 +401,6 @@
 		</div>
 
 		<div class="flex flex-wrap gap-2">
-			<button
-				onclick={openWelcome}
-				class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-			>
-				Show welcome guide
-			</button>
-
 			<a
 				href={GITHUB_REPO}
 				target="_blank"
