@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { motion } from '$lib/motion.svelte';
 
 	let tab = $state<'timeline' | 'list' | 'cards'>('timeline');
 
@@ -24,31 +25,34 @@
 		}
 		window.addEventListener('scroll', onScroll, { passive: true });
 
-		// Scroll-reveal
-		const io = new IntersectionObserver(
-			(entries) => {
-				entries.forEach((e) => {
-					if (e.isIntersecting) {
-						const el = e.target as HTMLElement;
-						el.style.opacity = '1';
-						el.style.transform = 'translateY(0)';
-						io.unobserve(el);
-					}
-				});
-			},
-			{ threshold: 0.1 }
-		);
-		document.querySelectorAll('[data-reveal]').forEach((el) => {
-			const h = el as HTMLElement;
-			h.style.opacity = '0';
-			h.style.transform = 'translateY(26px)';
-			h.style.transition = 'opacity .5s ease, transform .5s ease';
-			io.observe(h);
-		});
+		// Scroll-reveal (skipped when reduced motion is preferred)
+		const revealEls = [...document.querySelectorAll<HTMLElement>('[data-reveal]')];
+		let io: IntersectionObserver | null = null;
+		if (!motion.reduced) {
+			io = new IntersectionObserver(
+				(entries) => {
+					entries.forEach((e) => {
+						if (e.isIntersecting) {
+							const el = e.target as HTMLElement;
+							el.style.opacity = '1';
+							el.style.transform = 'translateY(0)';
+							io!.unobserve(el);
+						}
+					});
+				},
+				{ threshold: 0.1 }
+			);
+			revealEls.forEach((h) => {
+				h.style.opacity = '0';
+				h.style.transform = 'translateY(26px)';
+				h.style.transition = 'opacity .5s ease, transform .5s ease';
+				io!.observe(h);
+			});
+		}
 
 		return () => {
 			window.removeEventListener('scroll', onScroll);
-			io.disconnect();
+			io?.disconnect();
 		};
 	});
 
@@ -103,7 +107,7 @@
 
 			<!-- Product mock — always dark -->
 			<div data-reveal class="relative z-10">
-				<div class="mock-float overflow-hidden rounded-[20px]"
+				<div class="{motion.reduced ? '' : 'mock-float'} overflow-hidden rounded-[20px]"
 					style="background:#0c1117;border:1px solid #1d2535;box-shadow:0 32px 64px -24px rgba(0,0,0,0.55)">
 
 					<!-- Mock header + tab switcher -->

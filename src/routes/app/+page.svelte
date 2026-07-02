@@ -11,6 +11,8 @@
 	import { getQueueName, getQueueColors } from '$lib/queue-colors';
 	import type { SharePayload } from '$lib/types';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
+	import { motion } from '$lib/motion.svelte';
+	import { queueControls } from '$lib/queue-controls.svelte';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
@@ -35,7 +37,6 @@
 	let items        = $state<WatchlistItem[]>([]);
 	let loaded       = $state(false);
 	let queueColors  = $state<Record<string, string>>({});
-	let tab         = $state<'queue' | 'watched'>('queue');
 	let busy        = $state(new Set<number>());
 	// Gantt detail popup — fixed-position to escape the overflow:hidden budget zone
 	let activeItem       = $state<WatchlistItem | null>(null);
@@ -44,7 +45,6 @@
 	// Toolbar dropdowns
 	let filterOpen        = $state(false);
 	let viewOpen          = $state(false);
-	let serviceFilter     = $state<'all' | 'subscribed' | 'not-subscribed'>('all');
 	let releasePopupId: number | null = $state(null);
 	let libraryPopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
@@ -187,8 +187,6 @@
 		activeItem = item;
 	}
 
-	let sortBy      = $state<SortKey>('added');
-	let viewMode    = $state<ViewKey>('grid');
 	let budgetHours = $state(40); // user-adjustable month budget
 
 
@@ -243,11 +241,11 @@
 	// ── Derived lists ─────────────────────────────────────────────────────────
 	let queued      = $derived(items.filter((i) => !i.watched_at));
 	let watched     = $derived(items.filter((i) => i.watched_at));
-	let activeItems = $derived(tab === 'queue' ? queued : watched);
+	let activeItems = $derived(queueControls.tab === 'queue' ? queued : watched);
 
 	let visibleItems = $derived.by(() => {
-		if (serviceFilter === 'all' || services.ids.size === 0) return activeItems;
-		if (serviceFilter === 'subscribed') {
+		if (queueControls.serviceFilter === 'all' || services.ids.size === 0) return activeItems;
+		if (queueControls.serviceFilter === 'subscribed') {
 			return activeItems.filter(item =>
 				item.providers.length === 0 ||
 				item.providers.some(p => services.ids.has(p.provider_id))
@@ -262,8 +260,8 @@
 
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
 		return [...list].sort((a, b) => {
-			if (sortBy === 'title') return a.title.localeCompare(b.title);
-			if (sortBy === 'runtime') {
+			if (queueControls.sortBy === 'title') return a.title.localeCompare(b.title);
+			if (queueControls.sortBy === 'runtime') {
 				return effectiveRuntime(a) - effectiveRuntime(b);
 			}
 			return b.added_at.localeCompare(a.added_at);
@@ -305,8 +303,8 @@
 
 		const out: Lane[] = [...map.values()]
 			.sort((a, b) => {
-				if (sortBy === 'title') return a.label.localeCompare(b.label);
-				if (sortBy === 'added') {
+				if (queueControls.sortBy === 'title') return a.label.localeCompare(b.label);
+				if (queueControls.sortBy === 'added') {
 					const aMax = a.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
 					const bMax = b.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
 					return bMax.localeCompare(aMax);
@@ -331,8 +329,9 @@
 	}
 
 	onMount(() => {
-		sortBy      = loadPref<SortKey>('sq:sort', 'added');
-		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
+		queueControls.sortBy      = loadPref<SortKey>('sq:sort', 'added');
+		queueControls.viewMode    = loadPref<ViewKey>('sq:view', 'grid');
+		queueControls.ready       = true;
 		budgetHours = loadJSON<number>('sq:budget', 40);
 		queueColors = getQueueColors();
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
@@ -355,8 +354,8 @@
 
 	$effect(() => {
 		try {
-			localStorage.setItem('sq:sort', sortBy);
-			localStorage.setItem('sq:view', viewMode);
+			localStorage.setItem('sq:sort', queueControls.sortBy);
+			localStorage.setItem('sq:view', queueControls.viewMode);
 			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
 		} catch {}
 	});
@@ -531,8 +530,8 @@
 		</a>
 
 		{#if loaded && items.length > 0}
-			<!-- Filter dropdown -->
-			<div class="relative" data-dropdown="filter">
+			<!-- Filter dropdown (hidden at lg — controls move into nav) -->
+			<div class="relative lg:hidden" data-dropdown="filter">
 				<button
 					onclick={() => { filterOpen = !filterOpen; viewOpen = false; }}
 					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
@@ -550,30 +549,30 @@
 					<div class="absolute left-0 top-full z-40 mt-1 min-w-max space-y-1.5 rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10">
 						<!-- Tab filter -->
 						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'queue' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (tab = 'queue')}>To Watch ({queued.length})</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'watched' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (tab = 'watched')}>Watched ({watched.length})</button>
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {queueControls.tab === 'queue' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (queueControls.tab = 'queue')}>To Watch ({queued.length})</button>
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {queueControls.tab === 'watched' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (queueControls.tab = 'watched')}>Watched ({watched.length})</button>
 						</div>
 						<!-- Sort -->
 						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
 							{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-								<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-									onclick={() => (sortBy = key)}>{label}</button>
+								<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {queueControls.sortBy === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+									onclick={() => (queueControls.sortBy = key)}>{label}</button>
 							{/each}
 						</div>
 						<!-- Subscribed filter -->
 						<button
-							onclick={() => (serviceFilter = serviceFilter === 'subscribed' ? 'all' : 'subscribed')}
+							onclick={() => (queueControls.serviceFilter = queueControls.serviceFilter === 'subscribed' ? 'all' : 'subscribed')}
 							class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
-								{serviceFilter === 'subscribed'
+								{queueControls.serviceFilter === 'subscribed'
 									? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400'
 									: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
 						>Subscribed only</button>
 						<button
-							onclick={() => (serviceFilter = serviceFilter === 'not-subscribed' ? 'all' : 'not-subscribed')}
+							onclick={() => (queueControls.serviceFilter = queueControls.serviceFilter === 'not-subscribed' ? 'all' : 'not-subscribed')}
 							class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
-								{serviceFilter === 'not-subscribed'
+								{queueControls.serviceFilter === 'not-subscribed'
 									? 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
 									: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
 						>Not Subscribed</button>
@@ -581,8 +580,8 @@
 				{/if}
 			</div>
 
-			<!-- View dropdown -->
-			<div class="relative" data-dropdown="view">
+			<!-- View dropdown (hidden at lg — controls move into nav) -->
+			<div class="relative lg:hidden" data-dropdown="view">
 				<button
 					onclick={() => { viewOpen = !viewOpen; filterOpen = false; }}
 					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
@@ -600,12 +599,12 @@
 				{#if viewOpen}
 					<div class="absolute left-0 top-full z-40 mt-1 min-w-max rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10">
 						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'grid')}>⊞ Grid</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'list')}>☰ List</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'lanes')}>≋ Gantt</button>
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {queueControls.viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (queueControls.viewMode = 'grid')}>⊞ Grid</button>
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {queueControls.viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (queueControls.viewMode = 'list')}>☰ List</button>
+							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {queueControls.viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								onclick={() => (queueControls.viewMode = 'lanes')}>≋ Gantt</button>
 						</div>
 					</div>
 				{/if}
@@ -634,7 +633,7 @@
 	<!-- Empty -->
 	{:else if activeItems.length === 0}
 		<div class="flex flex-col items-center justify-center py-12 text-center xs:py-24">
-			{#if tab === 'queue'}
+			{#if queueControls.tab === 'queue'}
 				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🎬</p>
 				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Your queue is empty</p>
 				<p class="mt-1 text-sm text-gray-500">
@@ -648,7 +647,7 @@
 		</div>
 
 	<!-- ── GRID ──────────────────────────────────────────────────────────────── -->
-	{:else if viewMode === 'grid'}
+	{:else if queueControls.viewMode === 'grid'}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each flatItems as item (item.id)}
 				{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
@@ -656,7 +655,7 @@
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div animate:flip={{ duration: 250 }}
+				<div animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
 					onclick={() => { detailItem = item; overviewExpanded = false; }}
@@ -742,7 +741,7 @@
 		</div>
 
 	<!-- ── LIST ─────────────────────────────────────────────────────────────── -->
-	{:else if viewMode === 'list'}
+	{:else if queueControls.viewMode === 'list'}
 		<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
 			{#each flatItems as item (item.id)}
 				{@const rt = effectiveRuntime(item)}
@@ -751,7 +750,7 @@
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
 				{@const tagColor  = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div animate:flip={{ duration: 250 }}
+				<div animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 					class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<!-- Row 1: poster · title · actions -->
@@ -890,7 +889,7 @@
 								{@const posterW = Math.round(BAR_H * 2 / 3)}
 
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div animate:flip={{ duration: 250 }} class="relative shrink-0" style="flex: 0 0 {pct}%; min-width: 18px;" data-item>
+								<div animate:flip={{ duration: motion.reduced ? 0 : 250 }} class="relative shrink-0" style="flex: 0 0 {pct}%; min-width: 18px;" data-item>
 									<button
 										class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive ? 'ring-2 ring-white/50 brightness-125' : 'hover:brightness-110'}"
 										style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace('1px solid ', '')};"
