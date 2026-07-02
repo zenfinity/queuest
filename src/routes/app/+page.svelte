@@ -204,6 +204,26 @@
 		return providerId !== null ? providerHue(providerId) : null;
 	}
 
+	// ── Budget callout (first visit) ─────────────────────────────────────────
+	let showBudgetCallout      = $state(false);
+	let calloutHoursPerWeek    = $state(10);
+	let calloutWeeksPerMonth   = $state(4);
+
+	function saveBudgetCallout() {
+		try {
+			localStorage.setItem('sq:budget:weekly', JSON.stringify(calloutHoursPerWeek));
+			localStorage.setItem('sq:budget:weeks',  JSON.stringify(calloutWeeksPerMonth));
+			localStorage.setItem('sq:budget', JSON.stringify(calloutHoursPerWeek * calloutWeeksPerMonth));
+			budgetHours = calloutHoursPerWeek * calloutWeeksPerMonth;
+		} catch {}
+		showBudgetCallout = false;
+	}
+
+	function dismissBudgetCallout() {
+		try { localStorage.setItem('sq:budget-callout-dismissed', 'true'); } catch {}
+		showBudgetCallout = false;
+	}
+
 	// ── Cancellation alerts ───────────────────────────────────────────────────
 	let cancelAlertsEnabled = $state(false);
 	let dismissedAlerts     = $state<Record<string, string>>({});
@@ -310,15 +330,27 @@
 		items = await getAll();
 	}
 
-	onMount(async () => {
+	onMount(() => {
 		sortBy      = loadPref<SortKey>('sq:sort', 'added');
 		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
 		budgetHours = loadJSON<number>('sq:budget', 40);
 		queueColors = getQueueColors();
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		try { dismissedAlerts = JSON.parse(localStorage.getItem('sq:dismiss-cancel') ?? '{}'); } catch {}
-		await Promise.all([reload(), ensureSubscribedLoaded()]);
-		loaded = true;
+
+		const hasBudget    = localStorage.getItem('sq:budget:weekly') !== null;
+		const wasDismissed = localStorage.getItem('sq:budget-callout-dismissed') === 'true';
+		if (!hasBudget && !wasDismissed) showBudgetCallout = true;
+
+		// "Save before leaving" — browser native dialog when navigating away from the site
+		function onBeforeUnload(e: BeforeUnloadEvent) {
+			if (items.length > 0) e.preventDefault();
+		}
+		window.addEventListener('beforeunload', onBeforeUnload);
+
+		Promise.all([reload(), ensureSubscribedLoaded()]).then(() => { loaded = true; });
+
+		return () => window.removeEventListener('beforeunload', onBeforeUnload);
 	});
 
 	$effect(() => {
@@ -459,10 +491,33 @@
 		</div>
 	{/if}
 
+	<!-- Budget callout (first visit, no budget set) -->
+	{#if showBudgetCallout}
+		<div class="flex flex-wrap items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 dark:border-orange-700/40 dark:bg-orange-950/20">
+			<p class="text-sm font-medium text-orange-800 dark:text-orange-300">Set your monthly viewing budget to calibrate bar widths.</p>
+			<div class="flex flex-wrap items-center gap-2 text-sm">
+				<input type="number" min="1" max="24" step="0.5"
+					bind:value={calloutHoursPerWeek}
+					class="w-14 rounded-lg bg-white px-2 py-1.5 text-center font-medium text-gray-900 outline-none ring-1 ring-orange-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-orange-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				/>
+				<span class="text-orange-700 dark:text-orange-400">hrs ×</span>
+				<input type="number" min="1" max="6" step="0.5"
+					bind:value={calloutWeeksPerMonth}
+					class="w-14 rounded-lg bg-white px-2 py-1.5 text-center font-medium text-gray-900 outline-none ring-1 ring-orange-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-orange-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				/>
+				<span class="text-orange-700 dark:text-orange-400">weeks/mo</span>
+			</div>
+			<div class="ml-auto flex gap-2">
+				<button onclick={dismissBudgetCallout} class="text-xs text-orange-400 hover:text-orange-600 dark:hover:text-orange-200">Skip</button>
+				<button onclick={saveBudgetCallout} class="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-400">Save</button>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Toolbar -->
 	<div class="flex items-center gap-2">
 		<!-- Add Titles -->
-		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
+		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/add">
 			<span class="sm:hidden">+</span>
 			<span class="hidden sm:inline">+ Add Titles</span>
 		</a>
@@ -583,7 +638,7 @@
 				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🎬</p>
 				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Your queue is empty</p>
 				<p class="mt-1 text-sm text-gray-500">
-					<a class="text-orange-500 hover:underline" href="/search">Search for movies and shows</a> to get started
+					<a class="text-orange-500 hover:underline" href="/add">Search for movies and shows</a> to get started
 				</p>
 			{:else}
 				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">✅</p>

@@ -6,7 +6,8 @@
 
 	onMount(() => {
 		try {
-			if (localStorage.getItem('sq:welcomed')) {
+			const isPreview = new URLSearchParams(window.location.search).has('preview');
+			if (!isPreview && localStorage.getItem('sq:welcomed')) {
 				goto('/app', { replaceState: true });
 				return;
 			}

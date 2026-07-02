@@ -8,7 +8,7 @@
 
 	const navLinks = [
 		{ href: '/budget',    label: 'Budget',    exact: false },
-		{ href: '/search',    label: 'Search',    exact: false },
+		{ href: '/add',       label: 'Add',       exact: false },
 		{ href: '/app',       label: 'Queue',      exact: true },
 		{ href: '/suggest',   label: 'Suggest',   exact: false },
 	];

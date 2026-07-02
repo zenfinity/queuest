@@ -67,7 +67,7 @@
 }} />
 
 <svelte:head>
-	<title>Queuest — Search</title>
+	<title>Queuest — Add</title>
 </svelte:head>
 
 <div class="space-y-5 xs:space-y-8">
