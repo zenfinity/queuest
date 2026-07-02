@@ -1,0 +1,6 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-yI9WzoMpM1Q1H4JaL3EuvifigoDRR7Pfn++cvOhiXWQ='; style-src 'self' 'unsafe-inline'; img-src 'self' https://image.tmdb.org https://www.themoviedb.org data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

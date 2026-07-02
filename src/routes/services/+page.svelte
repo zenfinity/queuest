@@ -75,6 +75,7 @@
 				<button
 					onclick={() => handleToggle(provider)}
 					style:border-color={subscribedIds.has(provider.provider_id) ? '#22c55e' : 'transparent'}
+					style:border-style="solid"
 					class="flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors
 						{subscribedIds.has(provider.provider_id)
 							? 'bg-white dark:bg-gray-900'

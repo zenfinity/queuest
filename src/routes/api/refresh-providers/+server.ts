@@ -25,6 +25,12 @@ interface RefreshResult {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
+	// Same-origin guard
+	const fetchSite = request.headers.get('Sec-Fetch-Site');
+	if (fetchSite && fetchSite !== 'same-origin') {
+		throw error(403, 'Forbidden');
+	}
+
 	const apiKey = env.TMDB_API_KEY ?? '';
 	if (!apiKey) throw error(503, 'TMDB API key not configured');
 
@@ -33,8 +39,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json([] as RefreshResult[]);
 	}
 
-	// Cap to avoid runaway requests
-	const batch = items.slice(0, 100);
+	// Validate and cap batch
+	const valid = items.filter(
+		(r) => Number.isInteger(r?.id) && Number.isInteger(r?.tmdb_id) && (r?.media_type === 'movie' || r?.media_type === 'tv')
+	);
+	const batch = valid.slice(0, 100);
 
 	const results: RefreshResult[] = await Promise.all(
 		batch.map(async ({ id, tmdb_id, media_type }) => {

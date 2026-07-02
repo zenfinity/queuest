@@ -406,7 +406,7 @@
 						{watched
 							? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
 							: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
-					onclick={() => toggleSeason(item, season.season_number)}
+					onclick={(e) => { e.stopPropagation(); toggleSeason(item, season.season_number); }}
 					title="{season.name} · {season.episode_count} eps"
 				>
 					{watched ? '✓' : 'S'}{season.season_number}
@@ -419,7 +419,7 @@
 						{isOpen
 							? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
 							: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
-					onclick={() => { releasePopupId = isOpen ? null : item.id; }}
+					onclick={(e) => { e.stopPropagation(); releasePopupId = isOpen ? null : item.id; }}
 					data-release-popup
 				>
 					{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
@@ -602,8 +602,13 @@
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 				<div animate:flip={{ duration: 250 }}
-					class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
-					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
+					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer"
+					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
+					onclick={() => { detailItem = item; overviewExpanded = false; }}
+					role="button"
+					tabindex="0"
+					aria-label="View details for {item.title}"
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { detailItem = item; overviewExpanded = false; } }}>
 					<button
 						class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
 						onclick={() => { detailItem = item; overviewExpanded = false; }}
@@ -649,7 +654,7 @@
 									<div class="relative" data-library-popup>
 										<button
 											class="text-sm leading-none transition-opacity hover:opacity-60"
-											onclick={() => { libraryPopupId = isOpen ? null : item.id; }}
+											onclick={(e) => { e.stopPropagation(); libraryPopupId = isOpen ? null : item.id; }}
 											title="Not on streaming services"
 										>🚫</button>
 										{#if isOpen}
@@ -670,11 +675,11 @@
 						{/if}
 						<div class="mt-auto flex gap-1.5 pt-1">
 							<button class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
-								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
+								disabled={busy.has(item.id)} onclick={(e) => { e.stopPropagation(); toggle(item); }}>
 								{item.watched_at ? 'Unwatch' : '✓ Watched'}
 							</button>
 							<button class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
+								disabled={busy.has(item.id)} onclick={(e) => { e.stopPropagation(); remove(item); }} aria-label="Remove">✕</button>
 						</div>
 					</div>
 				</div>
