@@ -4,7 +4,6 @@
 	import { onMount } from 'svelte';
 	import { initTheme } from '$lib/theme.svelte';
 	import '$lib/motion.svelte';
-	import { queueControls } from '$lib/queue-controls.svelte';
 
 	let { children } = $props();
 
@@ -13,6 +12,7 @@
 		{ href: '/add',       label: 'Add',       exact: false },
 		{ href: '/app',       label: 'Queue',      exact: true },
 		{ href: '/suggest',   label: 'Suggest',   exact: false },
+		{ href: '/share',     label: 'Share',     exact: true },
 	];
 
 	function isActive(href: string, exact: boolean) {
@@ -20,7 +20,6 @@
 	}
 
 	let isLanding = $derived(page.url.pathname === '/');
-	let isQueue   = $derived(page.url.pathname === '/app');
 
 	onMount(() => {
 		initTheme();
@@ -61,68 +60,6 @@
 			{/if}
 
 			<div class="flex-1"></div>
-
-			{#if isQueue && queueControls.ready}
-				<!-- Inline queue controls — only visible at lg+ (replaces toolbar dropdowns) -->
-				<div class="hidden lg:flex items-center gap-1">
-					<!-- Tab: Queue / Watched -->
-					<div class="flex rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
-						<button
-							class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {queueControls.tab === 'queue' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							onclick={() => (queueControls.tab = 'queue')}
-						>Queue</button>
-						<button
-							class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {queueControls.tab === 'watched' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							onclick={() => (queueControls.tab = 'watched')}
-						>Watched</button>
-					</div>
-
-					<!-- Sort -->
-					<div class="flex rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
-						{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-							<button
-								class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {queueControls.sortBy === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (queueControls.sortBy = key)}
-							>{label}</button>
-						{/each}
-					</div>
-
-					<!-- View mode -->
-					<div class="flex rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
-						<button
-							class="rounded-md px-2 py-1 text-xs font-medium transition-colors {queueControls.viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							onclick={() => (queueControls.viewMode = 'grid')}
-							title="Grid"
-						>⊞</button>
-						<button
-							class="rounded-md px-2 py-1 text-xs font-medium transition-colors {queueControls.viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							onclick={() => (queueControls.viewMode = 'list')}
-							title="List"
-						>☰</button>
-						<button
-							class="rounded-md px-2 py-1 text-xs font-medium transition-colors {queueControls.viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							onclick={() => (queueControls.viewMode = 'lanes')}
-							title="Gantt lanes"
-						>≋</button>
-					</div>
-
-					<!-- Service filter -->
-					<div class="flex rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
-						<button
-							class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {queueControls.serviceFilter === 'all' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							onclick={() => (queueControls.serviceFilter = 'all')}
-						>All</button>
-						<button
-							class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {queueControls.serviceFilter === 'subscribed' ? 'bg-white text-green-700 shadow-sm dark:bg-gray-700 dark:text-green-400' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							onclick={() => (queueControls.serviceFilter = 'subscribed')}
-						>Subscribed</button>
-						<button
-							class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {queueControls.serviceFilter === 'not-subscribed' ? 'bg-white text-orange-600 shadow-sm dark:bg-gray-700 dark:text-orange-400' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							onclick={() => (queueControls.serviceFilter = 'not-subscribed')}
-						>Unsubscribed</button>
-					</div>
-				</div>
-			{/if}
 
 			{#if !isLanding}
 			<a
