@@ -12,9 +12,8 @@
 
 ### Bug fixes
 
-- **Green chip stroke** on the Budget (Services) page: Tailwind preflight resets `border-style` on `<button>` elements; added `style:border-style="solid"` so subscribed-service chips render their `border-2` correctly. (#51)
 - **Clipped dropdown** on queue grid cards: removed `overflow-hidden` from the card wrapper so season/release popups are no longer cut off. (#52)
-- **Card tap opens detail panel**: added `onclick` + `role="button"` to each grid card; inner action elements (season chips, release popup, Watch/Remove, library popup) call `e.stopPropagation()` so they don't accidentally open the panel. (#64)
+- Attempted fixes for the green subscribed-service chip stroke (#51) and card-tap-opens-detail-panel (#64) — **neither actually resolved on review; both remain open.**
 
 ### Onboarding & UX
 
@@ -25,7 +24,9 @@
 ### Navigation
 
 - **Search renamed to Add**: nav link, route (`/add`), and page title updated; `/search` issues a 301 redirect to `/add` preserving the `?q=` param. (#57)
-- **Inline queue controls in nav (lg+)**: Queue/Watched, Recent/A–Z/Runtime, Grid/List/Gantt, and All/My Services/Unwatched controls appear inline in the sticky nav at `≥1024 px`; the toolbar Filter and View dropdowns are hidden at that breakpoint. Controls share a `queue-controls.svelte.ts` singleton store so nav and page stay in sync. (#58)
+- **Floating filter dock**: a pill dock fixed at the bottom of the Queue page replaces the old toolbar dropdowns — Card/List/Timeline view switcher, an inclusive Watched toggle (mixes watched items in with a teal badge instead of an exclusive tab), and a Filter button opening a Sort-by/Services popover. A summary line above content reads "N titles · ~Xh remaining." Reworked from an initial inline-nav-controls attempt after design review. (#58)
+- **Add Titles / Import / Share row removed** from the Queue page toolbar — Share is now its own nav page (`/share`); an Import link was added to the Add page header.
+- Service filter labels corrected to **All / Subscribed / Not Subscribed**.
 
 ### Accessibility & motion
 
