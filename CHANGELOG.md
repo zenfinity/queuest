@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.5.1] — 2026-07-02
+
+### Security
+
+- **SSRF fix** on the import-fetch proxy: allowlist limited to Criterion, Letterboxd, and IMDb; 2 MB response cap; 10 s timeout. (#65)
+- **Same-origin enforcement** on all POST API routes via `Sec-Fetch-Site` header; cross-origin requests are rejected with 403. (#66)
+- **Feedback endpoint hardening**: 200-char title cap, 5 000-char body cap, generic error message returned to client. (#67)
+- **Security headers** via `_headers`: `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, HSTS (1 year + subdomains), `Permissions-Policy` (camera/mic/geo off). (#69)
+- **PBKDF2 strengthened** to 600 000 iterations; existing `.queuest` exports encrypted at 200 000 iterations are transparently migrated on next import. (#74)
+
+### Bug fixes
+
+- **Green chip stroke** on the Budget (Services) page: Tailwind preflight resets `border-style` on `<button>` elements; added `style:border-style="solid"` so subscribed-service chips render their `border-2` correctly. (#51)
+- **Clipped dropdown** on queue grid cards: removed `overflow-hidden` from the card wrapper so season/release popups are no longer cut off. (#52)
+- **Card tap opens detail panel**: added `onclick` + `role="button"` to each grid card; inner action elements (season chips, release popup, Watch/Remove, library popup) call `e.stopPropagation()` so they don't accidentally open the panel. (#64)
+
+### Onboarding & UX
+
+- **Budget callout**: shown once on first visit when no monthly budget is set; inputs for hrs/week × weeks/month with Save and Skip options. (#54)
+- **Save before leaving**: browser-native "leave site?" dialog appears when the queue has items and the user tries to close or navigate away. (#55)
+- **Landing page always accessible**: `/?preview` bypasses the returning-visitor redirect so the landing page can be revisited; Settings → About links there. (#56)
+
+### Navigation
+
+- **Search renamed to Add**: nav link, route (`/add`), and page title updated; `/search` issues a 301 redirect to `/add` preserving the `?q=` param. (#57)
+- **Inline queue controls in nav (lg+)**: Queue/Watched, Recent/A–Z/Runtime, Grid/List/Gantt, and All/My Services/Unwatched controls appear inline in the sticky nav at `≥1024 px`; the toolbar Filter and View dropdowns are hidden at that breakpoint. Controls share a `queue-controls.svelte.ts` singleton store so nav and page stay in sync. (#58)
+
+### Accessibility & motion
+
+- **`prefers-reduced-motion` support**: new `motion.svelte.ts` store gates scroll-reveal and float animations on the landing page and zeroes the `animate:flip` duration on queue grid cards when reduced motion is active. (#45)
+
+### Infrastructure
+
+- **Build fix**: upgraded `@sveltejs/kit` `0.0.30` → `2.69.0` and `@sveltejs/adapter-cloudflare` `0.0.1` → `7.2.9`; both were ancient stubs that caused `svelte-kit sync` to fail on Cloudflare Pages. Moved `_headers` to the project root as required by adapter 7.x.
+
+---
+
 ## [0.5.0] — 2026-06-21
 
 ### Services & subscription awareness

@@ -1,4 +1,4 @@
-import { json } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { searchMulti, getWatchProviders, getRuntime, augmentProviders } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
@@ -21,6 +21,12 @@ async function pooled<T, R>(items: T[], limit: number, fn: (item: T) => Promise<
 }
 
 export const POST: RequestHandler = async ({ request }) => {
+	// Same-origin guard
+	const fetchSite = request.headers.get('Sec-Fetch-Site');
+	if (fetchSite && fetchSite !== 'same-origin') {
+		throw error(403, 'Forbidden');
+	}
+
 	const apiKey = env.TMDB_API_KEY ?? '';
 	const body = await request.json() as Array<{
 		title: string;

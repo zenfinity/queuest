@@ -1,6 +1,7 @@
 const SALT_LEN = 16;
 const IV_LEN = 12;
-const PBKDF2_ITERATIONS = 200_000;
+const PBKDF2_ITERATIONS = 600_000;
+const PBKDF2_LEGACY_ITERATIONS = 200_000;
 
 function b64urlEncode(bytes: Uint8Array<ArrayBuffer>): string {
 	let bin = '';
@@ -18,7 +19,7 @@ function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
 	return out;
 }
 
-async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<CryptoKey> {
 	const enc = new TextEncoder();
 	const keyMaterial = await crypto.subtle.importKey(
 		'raw',
@@ -28,7 +29,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>): Pro
 		['deriveKey']
 	);
 	return crypto.subtle.deriveKey(
-		{ name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+		{ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
 		keyMaterial,
 		{ name: 'AES-GCM', length: 256 },
 		false,
@@ -43,7 +44,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>): Pro
 export async function encrypt(data: string, passphrase: string): Promise<ArrayBuffer> {
 	const salt = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(SALT_LEN)));
 	const iv   = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(IV_LEN)));
-	const key  = await deriveKey(passphrase, salt);
+	const key  = await deriveKey(passphrase, salt, PBKDF2_ITERATIONS);
 
 	const ciphertext = await crypto.subtle.encrypt(
 		{ name: 'AES-GCM', iv },
@@ -60,7 +61,8 @@ export async function encrypt(data: string, passphrase: string): Promise<ArrayBu
 
 /**
  * Decrypt a buffer produced by `encrypt`.
- * Returns the original UTF-8 string, or throws if the passphrase is wrong.
+ * Tries current iteration count first, falls back to legacy count for
+ * files encrypted before the iteration bump.
  */
 export async function decrypt(buffer: ArrayBuffer, passphrase: string): Promise<string> {
 	const bytes = new Uint8Array(buffer);
@@ -68,16 +70,16 @@ export async function decrypt(buffer: ArrayBuffer, passphrase: string): Promise<
 	const iv   = new Uint8Array(buffer, SALT_LEN, IV_LEN);
 	const ciphertext = new Uint8Array(buffer, SALT_LEN + IV_LEN);
 
-	const key = await deriveKey(passphrase, salt);
-
-	let plain: ArrayBuffer;
-	try {
-		plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
-	} catch {
-		throw new Error('Decryption failed — wrong passphrase or corrupted file.');
+	for (const iterations of [PBKDF2_ITERATIONS, PBKDF2_LEGACY_ITERATIONS]) {
+		const key = await deriveKey(passphrase, salt, iterations);
+		try {
+			const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+			return new TextDecoder().decode(plain);
+		} catch {
+			// try next iteration count
+		}
 	}
-
-	return new TextDecoder().decode(plain);
+	throw new Error('Decryption failed — wrong passphrase or corrupted file.');
 }
 
 // ── Key-based sharing (random key in URL fragment, no PBKDF2) ─────────────────

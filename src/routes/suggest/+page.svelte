@@ -64,7 +64,7 @@
 			<p class="mb-4 text-5xl">📺</p>
 			<p class="text-lg font-medium text-gray-700 dark:text-gray-300">No suggestions yet</p>
 			<p class="mt-1 text-sm text-gray-500">
-				<a class="text-orange-500 hover:underline" href="/search">Add titles to your queue</a>
+				<a class="text-orange-500 hover:underline" href="/add">Add titles to your queue</a>
 				to get streaming recommendations
 			</p>
 		</div>

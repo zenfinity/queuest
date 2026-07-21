@@ -7,10 +7,9 @@
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
 	import { remainingRuntime, releaseChip, cancelCandidates } from '$lib/progress';
-	import { generateShareKey, encryptWithKey } from '$lib/crypto';
-	import { getQueueName, getQueueColors } from '$lib/queue-colors';
-	import type { SharePayload } from '$lib/types';
+	import { getQueueColors } from '$lib/queue-colors';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
+	import { motion } from '$lib/motion.svelte';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
@@ -35,146 +34,25 @@
 	let items        = $state<WatchlistItem[]>([]);
 	let loaded       = $state(false);
 	let queueColors  = $state<Record<string, string>>({});
-	let tab         = $state<'queue' | 'watched'>('queue');
 	let busy        = $state(new Set<number>());
 	// Gantt detail popup — fixed-position to escape the overflow:hidden budget zone
 	let activeItem       = $state<WatchlistItem | null>(null);
 	let ganttPopupAnchor = $state<{ x: number; y: number } | null>(null);
 
-	// Toolbar dropdowns
-	let filterOpen        = $state(false);
-	let viewOpen          = $state(false);
-	let serviceFilter     = $state<'all' | 'subscribed' | 'not-subscribed'>('all');
 	let releasePopupId: number | null = $state(null);
 	let libraryPopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
 	let overviewExpanded = $state(false);
 	let posterExpanded = $state(false);
 
-	// ── Share ─────────────────────────────────────────────────────────────────
-	let shareOpen          = $state(false);
-	let shareStatus        = $state<'queue' | 'watched' | 'both'>('queue');
-	let shareType          = $state<'all' | 'movie' | 'tv'>('all');
-	let shareProviderNames = $state(new Set<string>());
-	let shareQueueNames    = $state(new Set<string>());
-	let shareCreating      = $state(false);
-	let shareUrl           = $state('');
-	let shareCopied        = $state(false);
-	let shareError         = $state('');
+	// ── Dock: view / sort / filter / watched toggle ──────────────────────────
+	let sortBy       = $state<SortKey>('added');
+	let viewMode     = $state<ViewKey>('grid');
+	let serviceFilter = $state<'all' | 'subscribed' | 'not-subscribed'>('all');
+	let watchedOn    = $state(false);
+	let filterOpen   = $state(false);
 
-	let allShareQueues = $derived.by(() => {
-		const names = new Set<string>();
-		for (const item of items) { if (item.queue_tag) names.add(item.queue_tag); }
-		return [...names].sort();
-	});
-
-	let shareAllProviders = $derived.by(() => {
-		const map = new Map<string, { provider_id: number; logo_path: string; count: number }>();
-		for (const item of items) {
-			for (const p of item.providers) {
-				if (!map.has(p.provider_name)) {
-					map.set(p.provider_name, { provider_id: p.provider_id, logo_path: p.logo_path, count: 0 });
-				}
-				map.get(p.provider_name)!.count++;
-			}
-		}
-		return [...map.entries()]
-			.sort((a, b) => b[1].count - a[1].count)
-			.map(([name, { provider_id, logo_path, count }]) => ({ name, provider_id, logo_path, count }));
-	});
-
-	let shareFiltered = $derived.by(() => {
-		let base = items;
-		if (shareStatus === 'queue') base = base.filter((i) => !i.watched_at);
-		else if (shareStatus === 'watched') base = base.filter((i) => i.watched_at);
-		if (shareType !== 'all') base = base.filter((i) => i.media_type === shareType);
-		if (allShareQueues.length > 0 && shareQueueNames.size < allShareQueues.length) {
-			base = base.filter((i) => !i.queue_tag || shareQueueNames.has(i.queue_tag));
-		}
-		const allChecked = shareProviderNames.size === shareAllProviders.length;
-		return base.filter((i) => {
-			if (!i.providers.length) return allChecked;
-			return i.providers.some((p) => shareProviderNames.has(p.provider_name));
-		});
-	});
-
-	let shareTotal = $derived(shareFiltered.reduce((s, i) => s + effectiveRuntime(i), 0));
-
-	function openShare() {
-		shareStatus = 'queue';
-		shareType = 'all';
-		shareQueueNames = new Set(allShareQueues);
-		const subscribedProviderNames = services.ids.size > 0
-			? new Set(shareAllProviders.filter(p => services.ids.has(p.provider_id)).map(p => p.name))
-			: new Set<string>();
-		shareProviderNames = subscribedProviderNames.size > 0
-			? subscribedProviderNames
-			: new Set(shareAllProviders.map(p => p.name));
-		shareUrl = '';
-		shareCopied = false;
-		shareError = '';
-		shareOpen = true;
-	}
-
-	function toggleShareProvider(name: string) {
-		const next = new Set(shareProviderNames);
-		if (next.has(name)) next.delete(name); else next.add(name);
-		shareProviderNames = next;
-		shareUrl = '';
-	}
-
-	function toggleShareQueue(name: string) {
-		const next = new Set(shareQueueNames);
-		if (next.has(name)) next.delete(name); else next.add(name);
-		shareQueueNames = next;
-		shareUrl = '';
-	}
-
-	async function createShareLink() {
-		if (!shareFiltered.length || shareCreating) return;
-		shareCreating = true;
-		shareUrl = '';
-		shareError = '';
-		try {
-			const activeQueues = allShareQueues.filter((q) => shareQueueNames.has(q));
-			const payload: SharePayload = {
-				v: 1,
-				queue_name: activeQueues.length === 1 ? activeQueues[0] : getQueueName(),
-				items: shareFiltered.map((item) => ({
-					tmdb_id: item.tmdb_id,
-					media_type: item.media_type,
-					title: item.title,
-					poster_path: item.poster_path,
-					providers: item.providers,
-					runtime_minutes: item.runtime_minutes,
-					seasons: (item.seasons ?? []).map((s) => ({ season_number: s.season_number, runtime_minutes: s.runtime_minutes })),
-					queue_tag: item.queue_tag ?? null
-				}))
-			};
-			const key = await generateShareKey();
-			const blob = await encryptWithKey(JSON.stringify(payload), key);
-			const res = await fetch('/api/share', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/octet-stream' },
-				body: blob
-			});
-			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-			const { token } = (await res.json()) as { token: string };
-			shareUrl = `${window.location.origin}/share/${token}#${key}`;
-		} catch (e) {
-			shareError = e instanceof Error ? e.message : 'Failed to create share link.';
-		} finally {
-			shareCreating = false;
-		}
-	}
-
-	async function copyShareUrl() {
-		try {
-			await navigator.clipboard.writeText(shareUrl);
-			shareCopied = true;
-			setTimeout(() => { shareCopied = false; }, 2000);
-		} catch {}
-	}
+	let hasActiveFilters = $derived(sortBy !== 'added' || serviceFilter !== 'all');
 
 	function openGanttPopup(e: MouseEvent, item: WatchlistItem) {
 		e.stopPropagation();
@@ -187,8 +65,6 @@
 		activeItem = item;
 	}
 
-	let sortBy      = $state<SortKey>('added');
-	let viewMode    = $state<ViewKey>('grid');
 	let budgetHours = $state(40); // user-adjustable month budget
 
 
@@ -202,6 +78,26 @@
 			return h >= 0 ? h : (providerId !== null ? providerHue(providerId) : null);
 		}
 		return providerId !== null ? providerHue(providerId) : null;
+	}
+
+	// ── Budget callout (first visit) ─────────────────────────────────────────
+	let showBudgetCallout      = $state(false);
+	let calloutHoursPerWeek    = $state(10);
+	let calloutWeeksPerMonth   = $state(4);
+
+	function saveBudgetCallout() {
+		try {
+			localStorage.setItem('sq:budget:weekly', JSON.stringify(calloutHoursPerWeek));
+			localStorage.setItem('sq:budget:weeks',  JSON.stringify(calloutWeeksPerMonth));
+			localStorage.setItem('sq:budget', JSON.stringify(calloutHoursPerWeek * calloutWeeksPerMonth));
+			budgetHours = calloutHoursPerWeek * calloutWeeksPerMonth;
+		} catch {}
+		showBudgetCallout = false;
+	}
+
+	function dismissBudgetCallout() {
+		try { localStorage.setItem('sq:budget-callout-dismissed', 'true'); } catch {}
+		showBudgetCallout = false;
 	}
 
 	// ── Cancellation alerts ───────────────────────────────────────────────────
@@ -221,20 +117,22 @@
 	});
 
 	// ── Derived lists ─────────────────────────────────────────────────────────
-	let queued      = $derived(items.filter((i) => !i.watched_at));
-	let watched     = $derived(items.filter((i) => i.watched_at));
-	let activeItems = $derived(tab === 'queue' ? queued : watched);
+	// "queued" always means unwatched, independent of the Watched toggle — used for cancel alerts.
+	let queued = $derived(items.filter((i) => !i.watched_at));
+
+	// Watched toggle is inclusive: off shows only unwatched titles, on mixes in watched titles too.
+	let baseItems = $derived(watchedOn ? items : queued);
 
 	let visibleItems = $derived.by(() => {
-		if (serviceFilter === 'all' || services.ids.size === 0) return activeItems;
+		if (serviceFilter === 'all' || services.ids.size === 0) return baseItems;
 		if (serviceFilter === 'subscribed') {
-			return activeItems.filter(item =>
+			return baseItems.filter(item =>
 				item.providers.length === 0 ||
 				item.providers.some(p => services.ids.has(p.provider_id))
 			);
 		}
 		// not-subscribed: has providers, none of which are subscribed
-		return activeItems.filter(item =>
+		return baseItems.filter(item =>
 			item.providers.length > 0 &&
 			!item.providers.some(p => services.ids.has(p.provider_id))
 		);
@@ -310,15 +208,27 @@
 		items = await getAll();
 	}
 
-	onMount(async () => {
+	onMount(() => {
 		sortBy      = loadPref<SortKey>('sq:sort', 'added');
 		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
 		budgetHours = loadJSON<number>('sq:budget', 40);
 		queueColors = getQueueColors();
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		try { dismissedAlerts = JSON.parse(localStorage.getItem('sq:dismiss-cancel') ?? '{}'); } catch {}
-		await Promise.all([reload(), ensureSubscribedLoaded()]);
-		loaded = true;
+
+		const hasBudget    = localStorage.getItem('sq:budget:weekly') !== null;
+		const wasDismissed = localStorage.getItem('sq:budget-callout-dismissed') === 'true';
+		if (!hasBudget && !wasDismissed) showBudgetCallout = true;
+
+		// "Save before leaving" — browser native dialog when navigating away from the site
+		function onBeforeUnload(e: BeforeUnloadEvent) {
+			if (items.length > 0) e.preventDefault();
+		}
+		window.addEventListener('beforeunload', onBeforeUnload);
+
+		Promise.all([reload(), ensureSubscribedLoaded()]).then(() => { loaded = true; });
+
+		return () => window.removeEventListener('beforeunload', onBeforeUnload);
 	});
 
 	$effect(() => {
@@ -329,10 +239,10 @@
 		} catch {}
 	});
 
-	// Extract logo hues for all providers in view (runs whenever activeItems changes)
+	// Extract logo hues for all providers in view (runs whenever baseItems changes)
 	$effect(() => {
 		const logos = new Set<string>();
-		for (const item of activeItems) {
+		for (const item of baseItems) {
 			for (const p of item.providers) {
 				if (p.logo_path && !logoHues.has(p.logo_path)) logos.add(p.logo_path);
 			}
@@ -386,7 +296,6 @@
 <svelte:document onclick={(e) => {
 	const t = e.target as Element;
 	if (activeItem && !t.closest('[data-item]')) { activeItem = null; ganttPopupAnchor = null; }
-	if (!t.closest('[data-dropdown]')) { filterOpen = false; viewOpen = false; }
 	if (!t.closest('[data-release-popup]')) { releasePopupId = null; }
 	if (!t.closest('[data-library-popup]')) { libraryPopupId = null; }
 	if (!t.closest('[data-detail-panel]') && !t.closest('[data-detail-trigger]')) { detailItem = null; overviewExpanded = false; posterExpanded = false; }
@@ -406,7 +315,7 @@
 						{watched
 							? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
 							: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
-					onclick={() => toggleSeason(item, season.season_number)}
+					onclick={(e) => { e.stopPropagation(); toggleSeason(item, season.season_number); }}
 					title="{season.name} · {season.episode_count} eps"
 				>
 					{watched ? '✓' : 'S'}{season.season_number}
@@ -419,7 +328,7 @@
 						{isOpen
 							? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
 							: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
-					onclick={() => { releasePopupId = isOpen ? null : item.id; }}
+					onclick={(e) => { e.stopPropagation(); releasePopupId = isOpen ? null : item.id; }}
 					data-release-popup
 				>
 					{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
@@ -434,7 +343,7 @@
 	{/if}
 {/snippet}
 
-<div class="space-y-4 xs:space-y-6">
+<div class="space-y-4 xs:space-y-6 {loaded && items.length > 0 ? 'pb-24' : ''}">
 	<!-- Cancellation alert -->
 	{#if cancelAlert}
 		{@const a = cancelAlert}
@@ -459,116 +368,35 @@
 		</div>
 	{/if}
 
-	<!-- Toolbar -->
-	<div class="flex items-center gap-2">
-		<!-- Add Titles -->
-		<a class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400" href="/search">
-			<span class="sm:hidden">+</span>
-			<span class="hidden sm:inline">+ Add Titles</span>
-		</a>
-
-		<!-- Import -->
-		<a href="/import" class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white">
-			<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0" aria-hidden="true">
-				<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-10.707a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V16a1 1 0 11-2 0V9.414L7.707 10.707a1 1 0 01-1.414-1.414l3-3z" clip-rule="evenodd"/>
-			</svg>
-			<span class="hidden sm:inline">Import</span>
-		</a>
-
-		{#if loaded && items.length > 0}
-			<!-- Filter dropdown -->
-			<div class="relative" data-dropdown="filter">
-				<button
-					onclick={() => { filterOpen = !filterOpen; viewOpen = false; }}
-					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-						{filterOpen
-							? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white'
-							: 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-				>
-					<!-- Funnel icon -->
-					<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0">
-						<path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 018 18.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 6.22A2.25 2.25 0 012 4.629V2.34a.75.75 0 01.628-.74z" clip-rule="evenodd" />
-					</svg>
-					<span class="hidden sm:inline">Filter</span>
-				</button>
-				{#if filterOpen}
-					<div class="absolute left-0 top-full z-40 mt-1 min-w-max space-y-1.5 rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10">
-						<!-- Tab filter -->
-						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'queue' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (tab = 'queue')}>To Watch ({queued.length})</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {tab === 'watched' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (tab = 'watched')}>Watched ({watched.length})</button>
-						</div>
-						<!-- Sort -->
-						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-							{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-								<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {sortBy === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-									onclick={() => (sortBy = key)}>{label}</button>
-							{/each}
-						</div>
-						<!-- Subscribed filter -->
-						<button
-							onclick={() => (serviceFilter = serviceFilter === 'subscribed' ? 'all' : 'subscribed')}
-							class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
-								{serviceFilter === 'subscribed'
-									? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400'
-									: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-						>Subscribed only</button>
-						<button
-							onclick={() => (serviceFilter = serviceFilter === 'not-subscribed' ? 'all' : 'not-subscribed')}
-							class="w-full rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors
-								{serviceFilter === 'not-subscribed'
-									? 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
-									: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-						>Not Subscribed</button>
-					</div>
-				{/if}
+	<!-- Budget callout (first visit, no budget set) -->
+	{#if showBudgetCallout}
+		<div class="flex flex-wrap items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 dark:border-orange-700/40 dark:bg-orange-950/20">
+			<p class="text-sm font-medium text-orange-800 dark:text-orange-300">Set your monthly viewing budget to calibrate bar widths.</p>
+			<div class="flex flex-wrap items-center gap-2 text-sm">
+				<input type="number" min="1" max="24" step="0.5"
+					bind:value={calloutHoursPerWeek}
+					class="w-14 rounded-lg bg-white px-2 py-1.5 text-center font-medium text-gray-900 outline-none ring-1 ring-orange-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-orange-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				/>
+				<span class="text-orange-700 dark:text-orange-400">hrs ×</span>
+				<input type="number" min="1" max="6" step="0.5"
+					bind:value={calloutWeeksPerMonth}
+					class="w-14 rounded-lg bg-white px-2 py-1.5 text-center font-medium text-gray-900 outline-none ring-1 ring-orange-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-orange-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				/>
+				<span class="text-orange-700 dark:text-orange-400">weeks/mo</span>
 			</div>
-
-			<!-- View dropdown -->
-			<div class="relative" data-dropdown="view">
-				<button
-					onclick={() => { viewOpen = !viewOpen; filterOpen = false; }}
-					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-						{viewOpen
-							? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white'
-							: 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
-				>
-					<!-- Eye icon -->
-					<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0">
-						<path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
-						<path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41z" clip-rule="evenodd" />
-					</svg>
-					<span class="hidden sm:inline">View</span>
-				</button>
-				{#if viewOpen}
-					<div class="absolute left-0 top-full z-40 mt-1 min-w-max rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10">
-						<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'grid')}>⊞ Grid</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'list')}>☰ List</button>
-							<button class="rounded-md px-3 py-1 text-xs font-medium transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => (viewMode = 'lanes')}>≋ Gantt</button>
-						</div>
-					</div>
-				{/if}
+			<div class="ml-auto flex gap-2">
+				<button onclick={dismissBudgetCallout} class="text-xs text-orange-400 hover:text-orange-600 dark:hover:text-orange-200">Skip</button>
+				<button onclick={saveBudgetCallout} class="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-400">Save</button>
 			</div>
+		</div>
+	{/if}
 
-			<!-- Share button -->
-			<button
-				onclick={openShare}
-				class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-					bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-			>
-				<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0" aria-hidden="true">
-					<path d="M13 4.5a2.5 2.5 0 11.702 1.737L6.97 9.604a2.518 2.518 0 010 .792l6.733 3.367a2.5 2.5 0 11-.671 1.341l-6.733-3.367a2.5 2.5 0 110-3.474l6.733-3.367A2.5 2.5 0 0113 4.5z"/>
-				</svg>
-				<span class="hidden sm:inline">Share</span>
-			</button>
-		{/if}
-	</div>
+	<!-- Summary line -->
+	{#if loaded && items.length > 0}
+		<p class="text-xs text-gray-500 dark:text-gray-500">
+			{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(visibleItems.reduce((s, i) => s + effectiveRuntime(i), 0))} remaining{watchedOn ? ' · showing watched' : ''}
+		</p>
+	{/if}
 
 	<!-- Loading -->
 	{#if !loaded}
@@ -576,20 +404,20 @@
 			{#each { length: 5 } as _, i (i)}<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>{/each}
 		</div>
 
-	<!-- Empty -->
-	{:else if activeItems.length === 0}
+	<!-- Empty: no items in queue at all -->
+	{:else if items.length === 0}
 		<div class="flex flex-col items-center justify-center py-12 text-center xs:py-24">
-			{#if tab === 'queue'}
-				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🎬</p>
-				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Your queue is empty</p>
-				<p class="mt-1 text-sm text-gray-500">
-					<a class="text-orange-500 hover:underline" href="/search">Search for movies and shows</a> to get started
-				</p>
-			{:else}
-				<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">✅</p>
-				<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Nothing watched yet</p>
-				<p class="mt-1 text-sm text-gray-500">Mark titles as watched and they'll appear here</p>
-			{/if}
+			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🎬</p>
+			<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">Your queue is empty</p>
+			<p class="mt-1 text-sm text-gray-500">
+				<a class="text-orange-500 hover:underline" href="/add">Search for movies and shows</a> to get started
+			</p>
+		</div>
+
+	<!-- Empty: items exist but none match the current filters -->
+	{:else if visibleItems.length === 0}
+		<div class="flex flex-col items-center justify-center py-12 text-center xs:py-24">
+			<p class="text-sm text-gray-500">Nothing matches these filters.</p>
 		</div>
 
 	<!-- ── GRID ──────────────────────────────────────────────────────────────── -->
@@ -601,9 +429,14 @@
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot  = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div animate:flip={{ duration: 250 }}
-					class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
-					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
+				<div animate:flip={{ duration: motion.reduced ? 0 : 250 }}
+					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer"
+					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
+					onclick={() => { detailItem = item; overviewExpanded = false; }}
+					role="button"
+					tabindex="0"
+					aria-label="View details for {item.title}"
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { detailItem = item; overviewExpanded = false; } }}>
 					<button
 						class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
 						onclick={() => { detailItem = item; overviewExpanded = false; }}
@@ -614,6 +447,9 @@
 							<img src="{TMDB_IMG}/w300{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
 						{:else}
 							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
+						{/if}
+						{#if watchedOn && item.watched_at}
+							<span class="absolute top-2 left-2 rounded bg-teal-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-teal-400">✓ Watched</span>
 						{/if}
 					</button>
 					<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
@@ -649,7 +485,7 @@
 									<div class="relative" data-library-popup>
 										<button
 											class="text-sm leading-none transition-opacity hover:opacity-60"
-											onclick={() => { libraryPopupId = isOpen ? null : item.id; }}
+											onclick={(e) => { e.stopPropagation(); libraryPopupId = isOpen ? null : item.id; }}
 											title="Not on streaming services"
 										>🚫</button>
 										{#if isOpen}
@@ -670,11 +506,11 @@
 						{/if}
 						<div class="mt-auto flex gap-1.5 pt-1">
 							<button class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
-								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
+								disabled={busy.has(item.id)} onclick={(e) => { e.stopPropagation(); toggle(item); }}>
 								{item.watched_at ? 'Unwatch' : '✓ Watched'}
 							</button>
 							<button class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
+								disabled={busy.has(item.id)} onclick={(e) => { e.stopPropagation(); remove(item); }} aria-label="Remove">✕</button>
 						</div>
 					</div>
 				</div>
@@ -691,7 +527,7 @@
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
 				{@const tagColor  = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div animate:flip={{ duration: 250 }}
+				<div animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 					class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
 					<!-- Row 1: poster · title · actions -->
@@ -708,6 +544,9 @@
 							onclick={() => { detailItem = item; overviewExpanded = false; }}
 							data-detail-trigger
 						>{item.title}</button>
+						{#if watchedOn && item.watched_at}
+							<span class="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900/60 dark:text-teal-400">✓</span>
+						{/if}
 						<div class="flex shrink-0 gap-1">
 							<button class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
@@ -830,7 +669,7 @@
 								{@const posterW = Math.round(BAR_H * 2 / 3)}
 
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div animate:flip={{ duration: 250 }} class="relative shrink-0" style="flex: 0 0 {pct}%; min-width: 18px;" data-item>
+								<div animate:flip={{ duration: motion.reduced ? 0 : 250 }} class="relative shrink-0" style="flex: 0 0 {pct}%; min-width: 18px;" data-item>
 									<button
 										class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive ? 'ring-2 ring-white/50 brightness-125' : 'hover:brightness-110'}"
 										style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace('1px solid ', '')};"
@@ -871,7 +710,7 @@
 		</div>
 
 		{#if lanes.length > 1}
-			<p class="pt-1 text-center text-[11px] text-gray-400 dark:text-gray-700">Lanes sorted by filter selection · bar width = runtime · budget = {budgetHours}h/mo</p>
+			<p class="pt-1 text-center text-[11px] text-gray-400 dark:text-gray-700">Timeline sorted by filter selection · bar width = runtime · budget = {budgetHours}h/mo</p>
 		{/if}
 	{/if}
 </div>
@@ -1105,136 +944,103 @@
 	{/if}
 {/if}
 
-<!-- ── Share modal ────────────────────────────────────────────────────────── -->
-{#if shareOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
-		onclick={() => { shareOpen = false; }}
-	>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div
-			class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-900"
-			onclick={(e) => e.stopPropagation()}
-		>
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-base font-semibold text-gray-900 dark:text-white">Share list</h2>
-				<button onclick={() => { shareOpen = false; }} class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Close">✕</button>
+<!-- ── Filter dock ────────────────────────────────────────────────────────── -->
+{#if loaded && items.length > 0}
+	<div class="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+		<div class="flex items-center gap-2.5 rounded-full border border-gray-200 bg-white/90 px-2 py-1.5 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-gray-900/90">
+			<!-- View switcher -->
+			<div class="flex gap-0.5 rounded-full bg-gray-100 p-[3px] dark:bg-white/5">
+				<button
+					aria-label="Card view"
+					onclick={() => (viewMode = 'grid')}
+					class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {viewMode === 'grid' ? 'bg-orange-500 text-white' : 'text-gray-500 dark:text-gray-400'}"
+				>
+					<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+						<rect x="1" y="1" width="5" height="5" rx="1" /><rect x="8" y="1" width="5" height="5" rx="1" />
+						<rect x="1" y="8" width="5" height="5" rx="1" /><rect x="8" y="8" width="5" height="5" rx="1" />
+					</svg>
+				</button>
+				<button
+					aria-label="List view"
+					onclick={() => (viewMode = 'list')}
+					class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {viewMode === 'list' ? 'bg-orange-500 text-white' : 'text-gray-500 dark:text-gray-400'}"
+				>
+					<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+						<rect x="1" y="2" width="12" height="2" rx="1" /><rect x="1" y="6" width="12" height="2" rx="1" /><rect x="1" y="10" width="12" height="2" rx="1" />
+					</svg>
+				</button>
+				<button
+					aria-label="Timeline view"
+					onclick={() => (viewMode = 'lanes')}
+					class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 dark:text-gray-400'}"
+				>
+					<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+						<rect x="1" y="2" width="7" height="2.5" rx="1.2" /><rect x="4" y="6" width="9" height="2.5" rx="1.2" /><rect x="2" y="10" width="6" height="2.5" rx="1.2" />
+					</svg>
+				</button>
 			</div>
 
-			<div class="space-y-4">
-				<!-- Status filter -->
-				<div>
-					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Include</p>
-					<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-						{#each ([['queue','To Watch'],['watched','Watched'],['both','Both']] as const) as [key, label] (key)}
-							<button class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
-								{shareStatus === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => { shareStatus = key; shareUrl = ''; }}>{label}</button>
-						{/each}
-					</div>
-				</div>
+			<span class="h-4.5 w-px bg-gray-200 dark:bg-white/10"></span>
 
-				<!-- Type filter -->
-				<div>
-					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Type</p>
-					<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-						{#each ([['all','All'],['movie','Movies'],['tv','TV']] as const) as [key, label] (key)}
-							<button class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
-								{shareType === key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-								onclick={() => { shareType = key; shareUrl = ''; }}>{label}</button>
-						{/each}
-					</div>
-				</div>
+			<!-- Watched toggle -->
+			<button
+				onclick={() => (watchedOn = !watchedOn)}
+				class="rounded-full px-3 py-1.5 text-xs font-semibold transition-colors
+					{watchedOn ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/70 dark:text-teal-400' : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400'}"
+			>{watchedOn ? '✓ Watched' : 'Watched'}</button>
 
-				<!-- Queue filter -->
-				{#if allShareQueues.length > 1}
-					<div>
-						<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Queues</p>
-						<div class="flex flex-wrap gap-1.5">
-							{#each allShareQueues as q (q)}
-								{@const on = shareQueueNames.has(q)}
-								{@const color = queueColors[q] ?? null}
-								<button
-									onclick={() => toggleShareQueue(q)}
-									class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors
-										{on ? 'bg-orange-50 text-orange-700 ring-orange-300 dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-800' : 'bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700'}"
-								>
-									{#if color}<span class="h-2 w-2 rounded-full shrink-0" style="background:{color}"></span>{/if}
-									{q}
-								</button>
-							{/each}
-						</div>
-					</div>
+			<span class="h-4.5 w-px bg-gray-200 dark:bg-white/10"></span>
+
+			<!-- Filter button -->
+			<button
+				aria-label="Sort and filter"
+				onclick={() => (filterOpen = !filterOpen)}
+				class="relative flex items-center rounded-full px-2.5 py-1.5 text-gray-500 dark:text-gray-400"
+			>
+				<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+					<rect x="1" y="3" width="12" height="1.6" rx=".8" fill="currentColor" />
+					<circle cx="9" cy="3.8" r="2" fill="none" stroke="currentColor" stroke-width="1.4" />
+					<rect x="1" y="9" width="12" height="1.6" rx=".8" fill="currentColor" />
+					<circle cx="5" cy="9.8" r="2" fill="none" stroke="currentColor" stroke-width="1.4" />
+				</svg>
+				{#if hasActiveFilters}
+					<span class="absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full bg-orange-500"></span>
 				{/if}
-
-				<!-- Provider filter -->
-				{#if shareAllProviders.length > 0}
-					<div>
-						<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Providers</p>
-						<div class="flex flex-wrap gap-1.5">
-							{#each shareAllProviders as p (p.name)}
-								{@const on = shareProviderNames.has(p.name)}
-								<button
-									onclick={() => toggleShareProvider(p.name)}
-									class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors
-										{on ? 'bg-orange-50 text-orange-700 ring-orange-300 dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-800' : 'bg-gray-100 text-gray-500 ring-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700'}"
-								>
-									<img src="{TMDB_IMG}/w92{p.logo_path}" alt="" class="h-4 w-4 rounded" />
-									{p.name}
-								</button>
-							{/each}
-						</div>
-					</div>
-				{/if}
-
-				<!-- Summary -->
-				<div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
-					<span class="text-xs text-gray-500">
-						{shareFiltered.length} title{shareFiltered.length === 1 ? '' : 's'}
-						{#if shareFiltered.length > 0}· {hms(shareTotal)}{/if}
-					</span>
-					{#if shareFiltered.length === 0}
-						<span class="text-xs text-amber-500">Nothing to share</span>
-					{/if}
-				</div>
-
-				<!-- URL / create button -->
-				{#if shareUrl}
-					<div class="space-y-2">
-						<div class="flex gap-2">
-							<input
-								type="text"
-								readonly
-								value={shareUrl}
-								class="min-w-0 flex-1 rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700 outline-none dark:bg-gray-800 dark:text-gray-300"
-							/>
-							<button
-								onclick={copyShareUrl}
-								class="shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition-colors
-									{shareCopied ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'}"
-							>
-								{shareCopied ? '✓ Copied' : 'Copy'}
-							</button>
-						</div>
-						<p class="text-[10px] text-gray-400 dark:text-gray-600">Link expires in 30 days · server stores only the encrypted blob</p>
-					</div>
-				{:else}
-					<button
-						onclick={createShareLink}
-						disabled={shareFiltered.length === 0 || shareCreating}
-						class="w-full rounded-lg bg-orange-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-					>
-						{shareCreating ? 'Creating link…' : 'Create share link'}
-					</button>
-				{/if}
-
-				{#if shareError}
-					<p class="text-xs text-red-500">{shareError}</p>
-				{/if}
-			</div>
+			</button>
 		</div>
 	</div>
+
+	{#if filterOpen}
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div class="fixed inset-0 z-40" onclick={() => (filterOpen = false)}></div>
+		<div class="fixed bottom-20 left-1/2 z-[55] w-52 -translate-x-1/2 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-gray-900">
+			<p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Sort by</p>
+			{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
+				<button
+					onclick={() => (sortBy = key)}
+					class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
+						{sortBy === key ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
+				>
+					<span>{label}</span>
+					{#if sortBy === key}<span class="text-orange-500">✓</span>{/if}
+				</button>
+			{/each}
+
+			<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
+
+			<p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Services</p>
+			{#each ([['all','All'],['subscribed','Subscribed'],['not-subscribed','Not Subscribed']] as const) as [key, label] (key)}
+				<button
+					onclick={() => (serviceFilter = key)}
+					class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
+						{serviceFilter === key ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
+				>
+					<span>{label}</span>
+					{#if serviceFilter === key}<span class="text-orange-500">✓</span>{/if}
+				</button>
+			{/each}
+		</div>
+	{/if}
 {/if}
 
 <!-- ── Gantt detail popup (fixed-position, escapes overflow:hidden) ──────── -->

@@ -67,11 +67,19 @@
 }} />
 
 <svelte:head>
-	<title>Queuest — Search</title>
+	<title>Queuest — Add</title>
 </svelte:head>
 
 <div class="space-y-5 xs:space-y-8">
-	<h1 class="text-xl font-bold xs:text-2xl">Search</h1>
+	<div class="flex items-center justify-between">
+		<h1 class="text-xl font-bold xs:text-2xl">Search</h1>
+		<a href="/import" class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white">
+			<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0" aria-hidden="true">
+				<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-10.707a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V16a1 1 0 11-2 0V9.414L7.707 10.707a1 1 0 01-1.414-1.414l3-3z" clip-rule="evenodd"/>
+			</svg>
+			Import
+		</a>
+	</div>
 
 	<form action="/search" method="GET" class="flex gap-2">
 		<!-- svelte-ignore a11y_autofocus -->
