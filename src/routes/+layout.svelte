@@ -115,11 +115,11 @@
 						<button
 							class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {queueControls.serviceFilter === 'subscribed' ? 'bg-white text-green-700 shadow-sm dark:bg-gray-700 dark:text-green-400' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 							onclick={() => (queueControls.serviceFilter = 'subscribed')}
-						>My Services</button>
+						>Subscribed</button>
 						<button
 							class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {queueControls.serviceFilter === 'not-subscribed' ? 'bg-white text-orange-600 shadow-sm dark:bg-gray-700 dark:text-orange-400' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 							onclick={() => (queueControls.serviceFilter = 'not-subscribed')}
-						>Unwatched</button>
+						>Unsubscribed</button>
 					</div>
 				</div>
 			{/if}
