@@ -432,7 +432,7 @@
 				<div animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
-					onclick={() => { detailItem = item; overviewExpanded = false; }}
+					onclick={(e) => { e.stopPropagation(); detailItem = item; overviewExpanded = false; }}
 					role="button"
 					tabindex="0"
 					aria-label="View details for {item.title}"
@@ -528,8 +528,13 @@
 				{@const dotColor  = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
 				{@const tagColor  = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 				<div animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-					class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80"
-					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}>
+					class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer"
+					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
+					onclick={(e) => { e.stopPropagation(); detailItem = item; overviewExpanded = false; }}
+					role="button"
+					tabindex="0"
+					aria-label="View details for {item.title}"
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { detailItem = item; overviewExpanded = false; } }}>
 					<!-- Row 1: poster · title · actions -->
 					<div class="flex items-center gap-3">
 						<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
@@ -541,7 +546,7 @@
 						</div>
 						<button
 							class="min-w-0 flex-1 text-left text-sm font-medium leading-tight hover:text-orange-500 transition-colors"
-							onclick={() => { detailItem = item; overviewExpanded = false; }}
+							onclick={(e) => { e.stopPropagation(); detailItem = item; overviewExpanded = false; }}
 							data-detail-trigger
 						>{item.title}</button>
 						{#if watchedOn && item.watched_at}
@@ -549,11 +554,11 @@
 						{/if}
 						<div class="flex shrink-0 gap-1">
 							<button class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-								disabled={busy.has(item.id)} onclick={() => toggle(item)}>
+								disabled={busy.has(item.id)} onclick={(e) => { e.stopPropagation(); toggle(item); }}>
 								{item.watched_at ? 'Unwatch' : '✓'}
 							</button>
 							<button class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-								disabled={busy.has(item.id)} onclick={() => remove(item)} aria-label="Remove">✕</button>
+								disabled={busy.has(item.id)} onclick={(e) => { e.stopPropagation(); remove(item); }} aria-label="Remove">✕</button>
 						</div>
 					</div>
 
@@ -578,7 +583,7 @@
 							<div class="relative shrink-0" data-library-popup>
 								<button
 									class="text-xs leading-none transition-opacity hover:opacity-60"
-									onclick={() => { libraryPopupId = isOpen ? null : item.id; }}
+									onclick={(e) => { e.stopPropagation(); libraryPopupId = isOpen ? null : item.id; }}
 									title="Not on streaming services"
 								>🚫</button>
 								{#if isOpen}
