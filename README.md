@@ -1,15 +1,27 @@
-# StreamQ
+# Queuest
 
-**Figure out how long you actually need a streaming subscription — before paying for another month.**
+**Find out which streaming services are actually worth it.**
 
-StreamQ lets you build a watch queue, see which services carry each title, and estimate whether your backlog fits inside a single month of a given subscription. Stop auto-renewing things you're not watching.
+Queuest lets you build a watch queue, see which services carry each title, and estimate whether your backlog fits inside a single month of a given subscription. Stop auto-renewing things you're not watching.
+
+---
+
+## Showcase
+
+**Landing page** — hero with interactive demo, service-aware queue filters, and how-it-works callout:
+
+![Queuest landing page](docs/screenshots/landing-hero.png)
+
+**Queue view** — Grid, List, and Gantt visualizations with provider swimlanes, runtime sparklines, and per-season progress tracking. Filter by subscribed services, watched status, and sort order:
+
+![Queuest queue Gantt view](docs/screenshots/queue-gantt.png)
 
 ---
 
 ## How it works
 
 ### 1. Build your queue
-Search for movies and TV shows by name. StreamQ pulls metadata from TMDB — poster, runtime, cast, genres, and which streaming services carry the title in the US (via JustWatch data). Tap any result to open a detail panel with the full picture before you add it. Add anything you want to watch to your queue.
+Search for movies and TV shows by name. Queuest pulls metadata from TMDB — poster, runtime, cast, genres, and which streaming services carry the title in the US (via JustWatch data). Tap any result to open a detail panel with the full picture before you add it. Add anything you want to watch to your queue.
 
 ### 2. See your subscription value
 The **Gantt view** groups your queue by provider. Each bar's width represents watch time relative to your monthly viewing budget (configurable in Settings). If a provider's lane fits inside one bar-width, one month is all you need.
@@ -92,7 +104,7 @@ npm run preview   # uses wrangler pages dev
 
 ### A note on Disney+ data
 
-Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API returns no Disney+ entries for the US. StreamQ works around this by inferring Disney+ availability from first-party TMDB metadata that is still present — the show's network (Disney+) for TV, and the production company (Lucasfilm, Marvel Studios, Pixar, Walt Disney Pictures, Walt Disney Animation) for films. This correctly attributes titles like Star Wars, the MCU, and Loki to Disney+ rather than showing them as unavailable or mislabelled as Hulu. FX/Hulu originals like The Bear are unaffected. Use **Settings → Refresh provider data** if anything looks wrong after a streaming rights change.
+Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API returns no Disney+ entries for the US. Queuest works around this by inferring Disney+ availability from first-party TMDB metadata that is still present — the show's network (Disney+) for TV, and the production company (Lucasfilm, Marvel Studios, Pixar, Walt Disney Pictures, Walt Disney Animation) for films. This correctly attributes titles like Star Wars, the MCU, and Loki to Disney+ rather than showing them as unavailable or mislabelled as Hulu. FX/Hulu originals like The Bear are unaffected. Use **Settings → Refresh provider data** if anything looks wrong after a streaming rights change.
 
 ---
 
