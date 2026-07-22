@@ -46,13 +46,28 @@
 	let posterExpanded = $state(false);
 
 	// ── Dock: view / sort / filter / watched toggle ──────────────────────────
+	const SORT_DEFAULT_DIR: Record<SortKey, 'asc' | 'desc'> = { added: 'desc', title: 'asc', runtime: 'asc' };
+
 	let sortBy       = $state<SortKey>('added');
+	let sortDir      = $state<'asc' | 'desc'>('desc');
 	let viewMode     = $state<ViewKey>('grid');
 	let serviceFilter = $state<'all' | 'subscribed' | 'not-subscribed'>('all');
 	let watchedOn    = $state(false);
 	let filterOpen   = $state(false);
 
-	let hasActiveFilters = $derived(sortBy !== 'added' || serviceFilter !== 'all');
+	function setSortBy(key: SortKey) {
+		sortBy = key;
+		sortDir = SORT_DEFAULT_DIR[key];
+	}
+	function toggleSortDir() {
+		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+	}
+	function clearSort() {
+		sortBy = 'added';
+		sortDir = SORT_DEFAULT_DIR.added;
+	}
+
+	let hasActiveFilters = $derived(sortBy !== 'added' || sortDir !== SORT_DEFAULT_DIR[sortBy] || serviceFilter !== 'all');
 
 	function openGanttPopup(e: MouseEvent, item: WatchlistItem) {
 		e.stopPropagation();
@@ -138,12 +153,13 @@
 	});
 
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
+		const mul = sortDir === 'asc' ? 1 : -1;
 		return [...list].sort((a, b) => {
-			if (sortBy === 'title') return a.title.localeCompare(b.title);
+			if (sortBy === 'title') return a.title.localeCompare(b.title) * mul;
 			if (sortBy === 'runtime') {
-				return effectiveRuntime(a) - effectiveRuntime(b);
+				return (effectiveRuntime(a) - effectiveRuntime(b)) * mul;
 			}
-			return b.added_at.localeCompare(a.added_at);
+			return a.added_at.localeCompare(b.added_at) * mul;
 		});
 	}
 
@@ -180,15 +196,16 @@
 			}
 		}
 
+		const laneMul = sortDir === 'asc' ? 1 : -1;
 		const out: Lane[] = [...map.values()]
 			.sort((a, b) => {
-				if (sortBy === 'title') return a.label.localeCompare(b.label);
+				if (sortBy === 'title') return a.label.localeCompare(b.label) * laneMul;
 				if (sortBy === 'added') {
 					const aMax = a.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
 					const bMax = b.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
-					return bMax.localeCompare(aMax);
+					return aMax.localeCompare(bMax) * laneMul;
 				}
-				return b.totalMins - a.totalMins;
+				return (a.totalMins - b.totalMins) * laneMul;
 			})
 			.map((l) => ({ ...l, overMins: Math.max(0, l.totalMins - budgetMins) }));
 
@@ -1023,16 +1040,30 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div class="fixed inset-0 z-40" onclick={() => (filterOpen = false)}></div>
 		<div class="fixed bottom-20 left-1/2 z-[55] w-52 -translate-x-1/2 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-gray-900">
-			<p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Sort by</p>
+			<div class="flex items-center justify-between px-2 py-1">
+				<span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Sort by</span>
+				{#if sortBy !== 'added' || sortDir !== SORT_DEFAULT_DIR.added}
+					<button onclick={clearSort} class="text-[10px] font-medium text-orange-500 hover:text-orange-400">Clear</button>
+				{/if}
+			</div>
 			{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-				<button
-					onclick={() => (sortBy = key)}
-					class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
-						{sortBy === key ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
-				>
-					<span>{label}</span>
-					{#if sortBy === key}<span class="text-orange-500">✓</span>{/if}
-				</button>
+				<div class="flex items-center gap-0.5">
+					<button
+						onclick={() => setSortBy(key)}
+						class="flex flex-1 items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
+							{sortBy === key ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
+					>
+						<span>{label}</span>
+						{#if sortBy === key}<span class="text-orange-500">✓</span>{/if}
+					</button>
+					{#if sortBy === key}
+						<button
+							onclick={toggleSortDir}
+							aria-label={sortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
+							class="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800/50 dark:hover:text-gray-300"
+						>{sortDir === 'asc' ? '↑' : '↓'}</button>
+					{/if}
+				</div>
 			{/each}
 
 			<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
