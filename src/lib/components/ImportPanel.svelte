@@ -3,6 +3,7 @@
 	import { addItem, replaceAll, setServices } from '$lib/db';
 	import { parseImportCSV, parseTextList } from '$lib/import';
 	import { decrypt } from '$lib/crypto';
+	import { parseImportBackup } from '$lib/share-schema';
 	import { theme } from '$lib/theme.svelte';
 	import { setQueueName, setQueueColor } from '$lib/queue-colors';
 	import type { ImportRow } from '$lib/import';
@@ -143,40 +144,41 @@
 		if (!restoreFile || !restorePassphrase) return;
 		restoring = true; restoreError = ''; restoreDone = false;
 		try {
-			const parsed = JSON.parse(await decrypt(await restoreFile.arrayBuffer(), restorePassphrase));
+			const parsed = parseImportBackup(JSON.parse(await decrypt(await restoreFile.arrayBuffer(), restorePassphrase)));
 
-			let items: WatchlistItem[];
-			if (Array.isArray(parsed)) {
-				items = parsed;
-			} else {
-				items = parsed.items ?? [];
-				if (parsed.prefs?.theme) {
-					const dark = parsed.prefs.theme === 'dark';
-					theme.dark = dark;
-					localStorage.setItem('sq:theme', parsed.prefs.theme);
-					document.documentElement.classList.toggle('dark', dark);
-				}
-				if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
-					localStorage.setItem('sq:budget:weekly', JSON.stringify(parsed.prefs.weeklyHours));
-					localStorage.setItem('sq:budget:weeks',  JSON.stringify(parsed.prefs.weeksPerMonth));
-					localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth));
-				} else if (typeof parsed.prefs?.budget === 'number') {
-					localStorage.setItem('sq:budget:weekly', JSON.stringify(Math.round(parsed.prefs.budget / 4)));
-					localStorage.setItem('sq:budget:weeks',  '4');
-					localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.budget));
-				}
-				if (typeof parsed.prefs?.queueName === 'string') setQueueName(parsed.prefs.queueName);
-				if (parsed.prefs?.queueColors && typeof parsed.prefs.queueColors === 'object') {
-					for (const [tag, color] of Object.entries(parsed.prefs.queueColors)) {
-						if (typeof color === 'string') setQueueColor(tag, color);
-					}
-				}
-				if (typeof parsed.prefs?.sort === 'string') localStorage.setItem('sq:sort', parsed.prefs.sort);
-				if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
+			const fullItems: WatchlistItem[] = parsed.items.map((item, idx) => ({
+			...item,
+			id: idx,
+			added_at: new Date().toISOString(),
+			watched_at: null
+		}));
+		const ops: Promise<void>[] = [replaceAll(fullItems)];
+
+			if (parsed.prefs?.theme) {
+				const dark = parsed.prefs.theme === 'dark';
+				theme.dark = dark;
+				localStorage.setItem('sq:theme', parsed.prefs.theme);
+				document.documentElement.classList.toggle('dark', dark);
 			}
+			if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
+				localStorage.setItem('sq:budget:weekly', JSON.stringify(parsed.prefs.weeklyHours));
+				localStorage.setItem('sq:budget:weeks',  JSON.stringify(parsed.prefs.weeksPerMonth));
+				localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth));
+			} else if (typeof parsed.prefs?.budget === 'number') {
+				localStorage.setItem('sq:budget:weekly', JSON.stringify(Math.round(parsed.prefs.budget / 4)));
+				localStorage.setItem('sq:budget:weeks',  '4');
+				localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.budget));
+			}
+			if (typeof parsed.prefs?.queueName === 'string') setQueueName(parsed.prefs.queueName);
+			if (parsed.prefs?.queueColors && typeof parsed.prefs.queueColors === 'object') {
+				for (const [tag, color] of Object.entries(parsed.prefs.queueColors)) {
+					if (typeof color === 'string') setQueueColor(tag, color);
+				}
+			}
+			if (typeof parsed.prefs?.sort === 'string') localStorage.setItem('sq:sort', parsed.prefs.sort);
+			if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
 
-			const ops: Promise<void>[] = [replaceAll(items)];
-			if (Array.isArray(parsed.services)) ops.push(setServices(parsed.services));
+			if (parsed.services) ops.push(setServices(parsed.services));
 			await Promise.all(ops);
 			restoreFile = null; restorePassphrase = ''; restoreDone = true;
 		} catch (e) {

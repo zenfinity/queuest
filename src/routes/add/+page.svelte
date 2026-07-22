@@ -8,6 +8,8 @@
 	import { invalidateAll } from '$app/navigation';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 
+	let isOnboarding = $derived(page.url.searchParams.has('onboarding'));
+
 	let { data }: { data: PageData } = $props();
 
 	// The search form submits as a GET navigation (new ?q= triggers the server load) — the
@@ -77,7 +79,14 @@
 </svelte:head>
 
 <div class="space-y-5 xs:space-y-8">
-	<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Search</h2>
+	<div class="space-y-2">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Search</h2>
+		{#if isOnboarding}
+			<p class="text-xs text-gray-500 dark:text-gray-400">
+				Already have a watchlist elsewhere? Expand <strong>Import</strong> below to add titles from Letterboxd, IMDb, or a backup instead of one by one.
+			</p>
+		{/if}
+	</div>
 
 	<form action="/search" method="GET" class="flex gap-2">
 		<!-- svelte-ignore a11y_autofocus -->

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { ShareItem, SharePayload } from '$lib/types';
+	import type { ShareItem } from '$lib/types';
 	import { decryptWithKey } from '$lib/crypto';
+	import { parseSharePayload } from '$lib/share-schema';
 	import { addItem } from '$lib/db';
 	import { getOrAssignColor } from '$lib/queue-colors';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
@@ -100,7 +101,7 @@
 
 			const buf = await res.arrayBuffer();
 			const json = await decryptWithKey(buf, key);
-			const payload = JSON.parse(json) as SharePayload;
+			const payload = parseSharePayload(JSON.parse(json));
 			items = payload.items ?? [];
 			queueName = payload.queue_name ?? '';
 			pageState = 'ready';

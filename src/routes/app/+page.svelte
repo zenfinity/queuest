@@ -4,7 +4,7 @@
 	import type { WatchlistItem } from '$lib/types';
 	import { reloadQueue, toggleWatched, removeQueueItem, toggleSeasonProgress, type QueueActionDeps } from '$lib/queue-actions';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
+	import { laneColors, providerHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
 	import { remainingRuntime, releaseChip, cancelCandidates } from '$lib/progress';
 	import { getQueueColors } from '$lib/queue-colors';
@@ -58,15 +58,8 @@
 	let budgetHours = $state(40); // user-adjustable month budget
 
 
-	// logo-derived hues: logo_path → extracted hue (populated async)
-	let logoHues = $state(new Map<string, number>());
-
 	// helper: best available hue for a provider
-	function resolvedHue(providerId: number | null, logoPath: string | null): number | null {
-		if (logoPath && logoHues.has(logoPath)) {
-			const h = logoHues.get(logoPath)!;
-			return h >= 0 ? h : (providerId !== null ? providerHue(providerId) : null);
-		}
+	function resolvedHue(providerId: number | null, _logoPath: string | null): number | null {
 		return providerId !== null ? providerHue(providerId) : null;
 	}
 
@@ -253,21 +246,6 @@
 	// Lets the nav know whether the dock has anything to show, for the lg+ inline placement.
 	$effect(() => {
 		queueControls.hasItems = loaded && items.length > 0;
-	});
-
-	// Extract logo hues for all providers in view (runs whenever baseItems changes)
-	$effect(() => {
-		const logos = new Set<string>();
-		for (const item of baseItems) {
-			for (const p of item.providers) {
-				if (p.logo_path && !logoHues.has(p.logo_path)) logos.add(p.logo_path);
-			}
-		}
-		for (const logoPath of logos) {
-			extractLogoHue(logoPath, TMDB_IMG).then((hue) => {
-				logoHues = new Map(logoHues).set(logoPath, hue);
-			});
-		}
 	});
 
 	// ── Actions ───────────────────────────────────────────────────────────────
