@@ -192,8 +192,6 @@
 <svelte:head><title>Queuest — Settings</title></svelte:head>
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
-	<h1 class="text-xl font-bold xs:text-2xl">Settings</h1>
-
 	<!-- Appearance -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Appearance</h2>

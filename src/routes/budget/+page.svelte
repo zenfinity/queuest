@@ -83,8 +83,6 @@
 <svelte:head><title>Queuest — Budget</title></svelte:head>
 
 <div class="mx-auto max-w-md space-y-8">
-	<h1 class="text-xl font-bold xs:text-2xl">Budget</h1>
-
 	<!-- Viewing Budget -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Viewing Budget</h2>

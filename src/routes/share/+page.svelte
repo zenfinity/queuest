@@ -143,7 +143,7 @@
 <svelte:head><title>Queuest — Share</title></svelte:head>
 
 <div class="space-y-5 xs:space-y-8">
-	<h1 class="text-xl font-bold xs:text-2xl">Share Your Queue</h1>
+	<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Share Your Queue</h2>
 
 	{#if !loaded}
 		<p class="text-sm text-gray-500">Loading…</p>

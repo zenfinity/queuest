@@ -127,7 +127,6 @@
 		if (serviceFilter === 'all' || services.ids.size === 0) return baseItems;
 		if (serviceFilter === 'subscribed') {
 			return baseItems.filter(item =>
-				item.providers.length === 0 ||
 				item.providers.some(p => services.ids.has(p.provider_id))
 			);
 		}
@@ -237,6 +236,11 @@
 			localStorage.setItem('sq:view', viewMode);
 			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
 		} catch {}
+	});
+
+	// "Subscribed" filter is meaningless with zero subscribed services — fall back to "All".
+	$effect(() => {
+		if (serviceFilter === 'subscribed' && services.ids.size === 0) serviceFilter = 'all';
 	});
 
 	// Extract logo hues for all providers in view (runs whenever baseItems changes)
@@ -1035,13 +1039,16 @@
 
 			<p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Services</p>
 			{#each ([['all','All'],['subscribed','Subscribed'],['not-subscribed','Not Subscribed']] as const) as [key, label] (key)}
+				{@const isDisabled = key === 'subscribed' && services.ids.size === 0}
 				<button
-					onclick={() => (serviceFilter = key)}
+					onclick={() => { if (!isDisabled) serviceFilter = key; }}
+					disabled={isDisabled}
+					title={isDisabled ? 'Select services on the Budget page first' : undefined}
 					class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
-						{serviceFilter === key ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
+						{isDisabled ? 'cursor-not-allowed text-gray-300 dark:text-gray-700' : serviceFilter === key ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
 				>
 					<span>{label}</span>
-					{#if serviceFilter === key}<span class="text-orange-500">✓</span>{/if}
+					{#if serviceFilter === key && !isDisabled}<span class="text-orange-500">✓</span>{/if}
 				</button>
 			{/each}
 		</div>
