@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.5.2] — 2026-07-22
+
+### Bug fixes
+
+- **Card/List click opens detail panel**: root cause finally found — a global click-outside-closes-popups listener was resetting `detailItem` back to null on the very same click that opened it, for any click except directly on the poster image. Fixed with `stopPropagation`; List view rows are now fully clickable too (previously only the title text was wired up). (#64)
+- **Subscribed filter** no longer includes titles with no streaming provider at all — it now only shows items actually on a subscribed service. The option grays out when zero services are selected. (#83)
+- **iOS zoom-on-focus**: the Add page search input was under the 16px font-size threshold that triggers Safari's auto-zoom on focus, hiding the right side of the app. (#82)
+
+### Navigation & UI
+
+- **Responsive filter dock**: inline in the nav (right-justified) at `lg:` and above, floating pill at the bottom below that — same component and state either way. (#84)
+- **Sort direction + Clear**: an ascending/descending arrow next to the active sort option, and a Clear action that resets sort back to Recent. (#85)
+- **Add page**: "Search" is now a subheading matching the Budget page's style; Import (CSV/URL/text-list/backup restore) is now a collapsible section on the same page instead of a separate link, sharing its logic with the standalone `/import` route via a new `ImportPanel` component. (#86)
+- **Redundant page headers removed** — "Budget" and "Settings" duplicated what the nav already showed. "What to Subscribe to Next" and "Share Your Queue" are now subheadings instead of large titles. (#87, #88)
+
+### Security
+
+- **`/api/share` hardening**: same-origin guard on POST, a minimum-payload-size check (anything under 28 bytes can't be a valid encrypted blob), and `nosniff`/`Content-Disposition: attachment` on GET responses. (#68)
+
+### Resilience
+
+- **Add page**: a TMDB outage no longer crashes the whole page — shows an inline error with Retry instead, and a loading skeleton distinguishes "searching" from "no results found." (#48)
+- **Queue page**: IndexedDB failures on toggle/remove/season-progress now show a dismissable error instead of failing silently — and no longer leave the button stuck in a disabled "busy" state forever. (#48)
+
+### Infrastructure
+
+- **Vitest test harness**: 41 initial tests covering `progress.ts`, `crypto.ts` (including the PBKDF2 legacy-iteration fallback), and `db.ts` (watchlist CRUD + subscribed services). (#47)
+
+---
+
 ## [0.5.1] — 2026-07-02
 
 ### Security
