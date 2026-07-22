@@ -5,6 +5,7 @@
 	import { addItem } from '$lib/db';
 	import { releaseChip } from '$lib/progress';
 	import { page } from '$app/state';
+	import ImportPanel from '$lib/components/ImportPanel.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -71,15 +72,7 @@
 </svelte:head>
 
 <div class="space-y-5 xs:space-y-8">
-	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-bold xs:text-2xl">Search</h1>
-		<a href="/import" class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white">
-			<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0" aria-hidden="true">
-				<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-10.707a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V16a1 1 0 11-2 0V9.414L7.707 10.707a1 1 0 01-1.414-1.414l3-3z" clip-rule="evenodd"/>
-			</svg>
-			Import
-		</a>
-	</div>
+	<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Search</h2>
 
 	<form action="/search" method="GET" class="flex gap-2">
 		<!-- svelte-ignore a11y_autofocus -->
@@ -201,6 +194,24 @@
 			<p class="text-sm xs:text-base">Search for movies and TV shows to add to your queue</p>
 		</div>
 	{/if}
+
+	<!-- Import (collapsible) -->
+	<details class="group rounded-lg border border-gray-200 dark:border-gray-800">
+		<summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+			<span class="flex items-center gap-2">
+				<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true">
+					<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-10.707a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V16a1 1 0 11-2 0V9.414L7.707 10.707a1 1 0 01-1.414-1.414l3-3z" clip-rule="evenodd"/>
+				</svg>
+				Import from Letterboxd, IMDb, or a backup
+			</span>
+			<svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+				<path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+			</svg>
+		</summary>
+		<div class="border-t border-gray-200 px-4 py-4 dark:border-gray-800">
+			<ImportPanel />
+		</div>
+	</details>
 </div>
 
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->
