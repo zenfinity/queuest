@@ -4,9 +4,15 @@
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { addItem } from '$lib/db';
 	import { releaseChip } from '$lib/progress';
-	import { page } from '$app/state';
+	import { page, navigating } from '$app/state';
+	import { invalidateAll } from '$app/navigation';
+	import ImportPanel from '$lib/components/ImportPanel.svelte';
 
 	let { data }: { data: PageData } = $props();
+
+	// The search form submits as a GET navigation (new ?q= triggers the server load) — the
+	// only navigation that normally fires while sitting on this page is that search itself.
+	let searching = $derived(!!navigating.to);
 
 	let query = $state(page.url.searchParams.get('q') ?? '');
 	let adding = $state(new Set<number>());
@@ -71,15 +77,7 @@
 </svelte:head>
 
 <div class="space-y-5 xs:space-y-8">
-	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-bold xs:text-2xl">Search</h1>
-		<a href="/import" class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white">
-			<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0" aria-hidden="true">
-				<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-10.707a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V16a1 1 0 11-2 0V9.414L7.707 10.707a1 1 0 01-1.414-1.414l3-3z" clip-rule="evenodd"/>
-			</svg>
-			Import
-		</a>
-	</div>
+	<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Search</h2>
 
 	<form action="/search" method="GET" class="flex gap-2">
 		<!-- svelte-ignore a11y_autofocus -->
@@ -88,7 +86,7 @@
 			type="search"
 			bind:value={query}
 			placeholder="Search movies and TV shows…"
-			class="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 transition-shadow focus:ring-orange-500 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:ring-gray-800 dark:focus:ring-orange-500"
+			class="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 transition-shadow focus:ring-orange-500 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:ring-gray-800 dark:focus:ring-orange-500"
 			autofocus
 		/>
 		<button
@@ -99,7 +97,13 @@
 		</button>
 	</form>
 
-	{#if data.results.length > 0}
+	{#if searching}
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
+			{#each { length: 8 } as _, i (i)}
+				<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>
+			{/each}
+		</div>
+	{:else if data.results.length > 0}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
 			{#each data.results as result (result.id)}
 				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
@@ -190,6 +194,15 @@
 				</div>
 			{/each}
 		</div>
+	{:else if data.error}
+		<div class="py-12 text-center xs:py-20">
+			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">⚠️</p>
+			<p class="text-base text-gray-700 dark:text-gray-300 xs:text-lg">{data.error}</p>
+			<button
+				onclick={() => invalidateAll()}
+				class="mt-3 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+			>Retry</button>
+		</div>
 	{:else if data.query}
 		<div class="py-12 text-center text-gray-500 xs:py-20">
 			<p class="text-base xs:text-lg">No results for "{data.query}"</p>
@@ -201,6 +214,24 @@
 			<p class="text-sm xs:text-base">Search for movies and TV shows to add to your queue</p>
 		</div>
 	{/if}
+
+	<!-- Import (collapsible) -->
+	<details class="group rounded-lg border border-gray-200 dark:border-gray-800">
+		<summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+			<span class="flex items-center gap-2">
+				<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true">
+					<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-10.707a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V16a1 1 0 11-2 0V9.414L7.707 10.707a1 1 0 01-1.414-1.414l3-3z" clip-rule="evenodd"/>
+				</svg>
+				Import from Letterboxd, IMDb, or a backup
+			</span>
+			<svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+				<path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+			</svg>
+		</summary>
+		<div class="border-t border-gray-200 px-4 py-4 dark:border-gray-800">
+			<ImportPanel />
+		</div>
+	</details>
 </div>
 
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->

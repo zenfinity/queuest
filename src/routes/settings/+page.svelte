@@ -192,8 +192,6 @@
 <svelte:head><title>Queuest — Settings</title></svelte:head>
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
-	<h1 class="text-xl font-bold xs:text-2xl">Settings</h1>
-
 	<!-- Appearance -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Appearance</h2>
@@ -222,7 +220,7 @@
 			bind:value={myQueueName}
 			oninput={saveQueueName}
 			maxlength="40"
-			class="w-full rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+			class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 		/>
 	</section>
 
@@ -303,7 +301,7 @@
 				type="password"
 				placeholder="Passphrase"
 				bind:value={exportPassphrase}
-				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 				onkeydown={(e) => e.key === 'Enter' && doExport()}
 			/>
 			<button
@@ -454,13 +452,13 @@
 					type="text"
 					placeholder="Title (required)"
 					bind:value={feedbackTitle}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 				/>
 				<textarea
 					placeholder="Details (optional)"
 					bind:value={feedbackBody}
 					rows="4"
-					class="w-full resize-none rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="w-full resize-none rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 				></textarea>
 			</div>
 

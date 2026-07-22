@@ -47,7 +47,7 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-2xl font-bold">What to Subscribe to Next</h1>
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">What to Subscribe to Next</h2>
 		<p class="mt-1 text-sm text-gray-500">
 			Based on your {totalUnwatched} unwatched title{totalUnwatched === 1 ? '' : 's'}
 		</p>
