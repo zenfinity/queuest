@@ -195,8 +195,14 @@
 	let lanes = $derived(rawLanes);
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
+	let dbError = $state('');
+
 	async function reload() {
-		items = await getAll();
+		try {
+			items = await getAll();
+		} catch (e) {
+			dbError = e instanceof Error ? e.message : 'Could not read your queue from local storage.';
+		}
 	}
 
 	onMount(() => {
@@ -261,17 +267,27 @@
 	// ── Actions ───────────────────────────────────────────────────────────────
 	async function toggle(item: WatchlistItem) {
 		busy = new Set(busy).add(item.id);
-		await setWatched(item.id, !item.watched_at);
-		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
-		await reload();
-		const next = new Set(busy); next.delete(item.id); busy = next;
+		try {
+			await setWatched(item.id, !item.watched_at);
+			if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
+			await reload();
+		} catch (e) {
+			dbError = e instanceof Error ? e.message : 'Could not update this title.';
+		} finally {
+			const next = new Set(busy); next.delete(item.id); busy = next;
+		}
 	}
 	async function remove(item: WatchlistItem) {
 		busy = new Set(busy).add(item.id);
-		await removeItem(item.id);
-		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
-		await reload();
-		const next = new Set(busy); next.delete(item.id); busy = next;
+		try {
+			await removeItem(item.id);
+			if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
+			await reload();
+		} catch (e) {
+			dbError = e instanceof Error ? e.message : 'Could not remove this title.';
+		} finally {
+			const next = new Set(busy); next.delete(item.id); busy = next;
+		}
 	}
 
 	// ── Season progress ───────────────────────────────────────────────────────
@@ -280,8 +296,12 @@
 		const next = current.includes(seasonNum)
 			? current.filter((s) => s !== seasonNum)
 			: [...current, seasonNum];
-		await updateShowProgress(item.id, next, item.current_season, item.current_episode);
-		await reload();
+		try {
+			await updateShowProgress(item.id, next, item.current_season, item.current_episode);
+			await reload();
+		} catch (e) {
+			dbError = e instanceof Error ? e.message : 'Could not update season progress.';
+		}
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
@@ -348,6 +368,22 @@
 {/snippet}
 
 <div class="space-y-4 xs:space-y-6 {loaded && items.length > 0 ? 'pb-24 lg:pb-0' : ''}">
+	<!-- Storage error -->
+	{#if dbError}
+		<div class="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800/40 dark:bg-red-950/20">
+			<p class="min-w-0 flex-1 text-sm text-red-700 dark:text-red-400">{dbError}</p>
+			<button
+				onclick={() => (dbError = '')}
+				aria-label="Dismiss"
+				class="shrink-0 text-red-400 transition-colors hover:text-red-600 dark:hover:text-red-200"
+			>
+				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+				</svg>
+			</button>
+		</div>
+	{/if}
+
 	<!-- Cancellation alert -->
 	{#if cancelAlert}
 		{@const a = cancelAlert}

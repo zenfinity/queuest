@@ -4,10 +4,15 @@
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { addItem } from '$lib/db';
 	import { releaseChip } from '$lib/progress';
-	import { page } from '$app/state';
+	import { page, navigating } from '$app/state';
+	import { invalidateAll } from '$app/navigation';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 
 	let { data }: { data: PageData } = $props();
+
+	// The search form submits as a GET navigation (new ?q= triggers the server load) — the
+	// only navigation that normally fires while sitting on this page is that search itself.
+	let searching = $derived(!!navigating.to);
 
 	let query = $state(page.url.searchParams.get('q') ?? '');
 	let adding = $state(new Set<number>());
@@ -92,7 +97,13 @@
 		</button>
 	</form>
 
-	{#if data.results.length > 0}
+	{#if searching}
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
+			{#each { length: 8 } as _, i (i)}
+				<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>
+			{/each}
+		</div>
+	{:else if data.results.length > 0}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
 			{#each data.results as result (result.id)}
 				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
@@ -182,6 +193,15 @@
 					</div>
 				</div>
 			{/each}
+		</div>
+	{:else if data.error}
+		<div class="py-12 text-center xs:py-20">
+			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">⚠️</p>
+			<p class="text-base text-gray-700 dark:text-gray-300 xs:text-lg">{data.error}</p>
+			<button
+				onclick={() => invalidateAll()}
+				class="mt-3 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+			>Retry</button>
 		</div>
 	{:else if data.query}
 		<div class="py-12 text-center text-gray-500 xs:py-20">
