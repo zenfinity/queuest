@@ -1,9 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { getAll, getServices, toggleService } from '$lib/db';
 	import { services, setSubscribedIds } from '$lib/services.svelte';
 	import { TMDB_IMG } from '$lib/tmdb';
 	import type { Provider } from '$lib/types';
+
+	// ── Onboarding ────────────────────────────────────────────────────────────
+	let isOnboarding = $state(false);
 
 	// ── Budget ────────────────────────────────────────────────────────────────
 	let hoursPerWeek  = $state(10);
@@ -20,6 +25,7 @@
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	let queueProviders = $state<Provider[]>([]);
+	let majorProviders = $state<Provider[]>([]);
 	let loaded         = $state(false);
 	let toggleError    = $state('');
 
@@ -51,6 +57,8 @@
 	}
 
 	onMount(async () => {
+		isOnboarding = page.url.searchParams.has('onboarding');
+
 		try {
 			const weekly = localStorage.getItem('sq:budget:weekly');
 			const weeks  = localStorage.getItem('sq:budget:weeks');
@@ -76,6 +84,15 @@
 		queueProviders = [...providerMap.values()].sort((a, b) =>
 			a.provider_name.localeCompare(b.provider_name)
 		);
+
+		// Fetch majors for empty-queue onboarding state
+		if (queueProviders.length === 0) {
+			try {
+				const res = await fetch('/api/major-providers');
+				if (res.ok) majorProviders = await res.json();
+			} catch {}
+		}
+
 		loaded = true;
 	});
 </script>
@@ -86,9 +103,15 @@
 	<!-- Viewing Budget -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Viewing Budget</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Your estimated monthly watch time. Used to normalise bar widths across all views.
-		</p>
+		{#if isOnboarding}
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				This calibrates how full your queue bars look. Set it now or adjust later in Settings.
+			</p>
+		{:else}
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				Your estimated monthly watch time. Used to normalise bar widths across all views.
+			</p>
+		{/if}
 		<div class="flex flex-wrap items-center gap-2 text-sm">
 			<input
 				type="number" min="1" max="24" step="0.5"
@@ -117,37 +140,52 @@
 
 		{#if !loaded}
 			<p class="text-sm text-gray-400 dark:text-gray-600">Loading…</p>
-		{:else if queueProviders.length === 0}
-			<p class="text-sm text-gray-400 dark:text-gray-600">
-				Add titles to your queue and their streaming services will appear here.
-			</p>
 		{:else}
-			<div class="flex flex-wrap gap-3">
-				{#each queueProviders as provider (provider.provider_id)}
-					<button
-						onclick={() => handleToggle(provider)}
-						style:border-color={subscribedIds.has(provider.provider_id) ? '#22c55e' : 'transparent'}
-						style:border-style="solid"
-						class="flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors
-							{subscribedIds.has(provider.provider_id)
-								? 'bg-white dark:bg-gray-900'
-								: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
-					>
-						<img
-							src="{TMDB_IMG}/original{provider.logo_path}"
-							alt=""
-							class="h-6 w-6 rounded-md object-cover"
-						/>
-						<span class="{subscribedIds.has(provider.provider_id) ? 'text-gray-900 dark:text-white' : ''}">{provider.provider_name}</span>
-					</button>
-				{/each}
-			</div>
-			<p class="text-xs text-gray-400 dark:text-gray-500">
-				{subscribedIds.size} service{subscribedIds.size === 1 ? '' : 's'} selected
-			</p>
-			{#if toggleError}
-				<p class="text-xs text-red-500">{toggleError}</p>
+			{@const providers = queueProviders.length > 0 ? queueProviders : majorProviders}
+			{#if providers.length === 0}
+				<p class="text-sm text-gray-400 dark:text-gray-600">
+					{#if queueProviders.length === 0 && !majorProviders.length}
+						Add titles to your queue and their streaming services will appear here.
+					{/if}
+				</p>
+			{:else}
+				<div class="flex flex-wrap gap-3">
+					{#each providers as provider (provider.provider_id)}
+						<button
+							onclick={() => handleToggle(provider)}
+							style:border-color={subscribedIds.has(provider.provider_id) ? '#22c55e' : 'transparent'}
+							style:border-style="solid"
+							class="flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors
+								{subscribedIds.has(provider.provider_id)
+									? 'bg-white dark:bg-gray-900'
+									: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
+						>
+							<img
+								src="{TMDB_IMG}/original{provider.logo_path}"
+								alt=""
+								class="h-6 w-6 rounded-md object-cover"
+							/>
+							<span class="{subscribedIds.has(provider.provider_id) ? 'text-gray-900 dark:text-white' : ''}">{provider.provider_name}</span>
+						</button>
+					{/each}
+				</div>
+				<p class="text-xs text-gray-400 dark:text-gray-500">
+					{subscribedIds.size} service{subscribedIds.size === 1 ? '' : 's'} selected
+				</p>
+				{#if toggleError}
+					<p class="text-xs text-red-500">{toggleError}</p>
+				{/if}
 			{/if}
 		{/if}
 	</section>
+
+	{#if isOnboarding}
+		<div class="border-t border-gray-200 dark:border-gray-800"></div>
+		<button
+			onclick={() => goto('/add?onboarding=1')}
+			class="w-full rounded-lg bg-orange-500 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+		>
+			Next: Add titles →
+		</button>
+	{/if}
 </div>

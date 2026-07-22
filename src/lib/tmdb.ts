@@ -22,7 +22,7 @@ const DISNEY_PLUS_COMPANY_IDS = new Set([
 	6125  // Walt Disney Animation → Frozen, Moana, Encanto, etc.
 ]);
 
-const DISNEY_PLUS_PROVIDER: Provider = {
+export const DISNEY_PLUS_PROVIDER: Provider = {
 	provider_id: 337,
 	provider_name: 'Disney Plus',
 	logo_path: '/97yvRBw1GzX7fXprcF80er19ot.jpg'
@@ -380,4 +380,23 @@ export async function getWatchProviders(
 	const rentable = (us.rent?.length ?? 0) > 0 || (us.buy?.length ?? 0) > 0;
 	// Return raw flatrate — augmentProviders() applies all filtering with network context
 	return { providers: flatrate, rentable };
+}
+
+export async function getMajorProviders(apiKey: string): Promise<Provider[]> {
+	const res = await tmdbFetch(`${BASE}/watch/providers/movie?api_key=${apiKey}&watch_region=US`);
+	if (!res.ok) return [];
+	const data = (await res.json()) as {
+		results?: Array<{ provider_id: number; provider_name: string; logo_path: string }>;
+	};
+	const all = data.results ?? [];
+	const majorIds = [8, 337, 9, 1899, 15, 531, 386, 350]; // Netflix, Disney+, Prime, Max, Hulu, Paramount+, Peacock, Apple TV+
+	const byId = new Map(all.map((p) => [p.provider_id, p]));
+	const majors: Provider[] = [];
+	for (const id of majorIds) {
+		const p = byId.get(id);
+		if (p) majors.push(p);
+	}
+	// Ensure Disney+ is in the list (it may be missing from TMDB's directory)
+	if (!majors.some((p) => p.provider_id === 337)) majors.push(DISNEY_PLUS_PROVIDER);
+	return majors;
 }

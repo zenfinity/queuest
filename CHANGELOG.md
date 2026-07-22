@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.3] — 2026-07-22
+
+### Security
+
+- **Share payload validation** — runtime schema validators for all untrusted input (share links, `.queuest` backup files). Payloads are rebuilt field-by-field from an allowlist, clamping strings (title ≤500, overview ≤5000, paths validated), numbers (runtime ≤100k), and array lengths (items ≤500, seasons ≤100 per title). Prevents oversized payloads from breaking queue views or budget math, and closes off prototype-pollution vectors. (#70)
+
+### Bug fixes & cleanup
+
+- **CORS console spam eliminated** — removed the doomed `extractLogoHue()` call that tried to extract logo colors from TMDB's CDN (which never sends CORS headers). Lane colors now rely entirely on the existing `providerHue()` brand-hue table + hash fallback, which was already working as the extraction always failed. (#81)
+
+### Onboarding & UX
+
+- **Guided new-user flow** — "Get Started" from the landing page now routes through `/budget?onboarding=1` (with introductory copy and a curated list of major streaming services fetched from TMDB) → `/add?onboarding=1` (with a callout to the Import section for users who already have a watchlist elsewhere). Returning users navigating directly to `/budget` or `/add` see the normal UI without onboarding scaffolding. (#80)
+
+### Testing & maintainability
+
+- **Extracted testable business logic** — refactored 5 route/component files (`settings`, `add`, `ImportPanel`, `share`, `share/[token]`) to follow the `queue-actions.ts` pattern: plain, dependency-injected async functions in `$lib/*-actions.ts` with full unit test coverage (72 tests total across 6 test files). Svelte components now stay slim, wiring their own state to the logic functions with no other changes. (#90)
+
+---
+
 ## [0.5.2] — 2026-07-22
 
 ### Bug fixes

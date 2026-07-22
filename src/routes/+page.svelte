@@ -58,7 +58,7 @@
 
 	function start() {
 		try { localStorage.setItem('sq:welcomed', '1'); } catch {}
-		goto('/app');
+		goto('/budget?onboarding=1');
 	}
 </script>
 
