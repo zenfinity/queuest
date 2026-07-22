@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import type { WatchlistItem } from '$lib/types';
-	import { getAll, removeItem, setWatched, updateShowProgress } from '$lib/db';
+	import { reloadQueue, toggleWatched, removeQueueItem, toggleSeasonProgress, type QueueActionDeps } from '$lib/queue-actions';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, providerHue, extractLogoHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
@@ -197,12 +197,18 @@
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	let dbError = $state('');
 
+	const actionDeps: QueueActionDeps = {
+		setItems: (next) => { items = next; },
+		setBusy: (id, isBusy) => {
+			const next = new Set(busy);
+			if (isBusy) next.add(id); else next.delete(id);
+			busy = next;
+		},
+		setError: (message) => { dbError = message; }
+	};
+
 	async function reload() {
-		try {
-			items = await getAll();
-		} catch (e) {
-			dbError = e instanceof Error ? e.message : 'Could not read your queue from local storage.';
-		}
+		await reloadQueue(actionDeps);
 	}
 
 	onMount(() => {
@@ -265,43 +271,20 @@
 	});
 
 	// ── Actions ───────────────────────────────────────────────────────────────
+	function closeGanttPopupFor(item: WatchlistItem) {
+		if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
+	}
+
 	async function toggle(item: WatchlistItem) {
-		busy = new Set(busy).add(item.id);
-		try {
-			await setWatched(item.id, !item.watched_at);
-			if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
-			await reload();
-		} catch (e) {
-			dbError = e instanceof Error ? e.message : 'Could not update this title.';
-		} finally {
-			const next = new Set(busy); next.delete(item.id); busy = next;
-		}
+		await toggleWatched(item, actionDeps, () => closeGanttPopupFor(item));
 	}
 	async function remove(item: WatchlistItem) {
-		busy = new Set(busy).add(item.id);
-		try {
-			await removeItem(item.id);
-			if (activeItem?.id === item.id) { activeItem = null; ganttPopupAnchor = null; }
-			await reload();
-		} catch (e) {
-			dbError = e instanceof Error ? e.message : 'Could not remove this title.';
-		} finally {
-			const next = new Set(busy); next.delete(item.id); busy = next;
-		}
+		await removeQueueItem(item, actionDeps, () => closeGanttPopupFor(item));
 	}
 
 	// ── Season progress ───────────────────────────────────────────────────────
 	async function toggleSeason(item: WatchlistItem, seasonNum: number) {
-		const current = item.watched_seasons ?? [];
-		const next = current.includes(seasonNum)
-			? current.filter((s) => s !== seasonNum)
-			: [...current, seasonNum];
-		try {
-			await updateShowProgress(item.id, next, item.current_season, item.current_episode);
-			await reload();
-		} catch (e) {
-			dbError = e instanceof Error ? e.message : 'Could not update season progress.';
-		}
+		await toggleSeasonProgress(item, seasonNum, actionDeps);
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
