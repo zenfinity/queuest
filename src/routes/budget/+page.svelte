@@ -93,13 +93,13 @@
 			<input
 				type="number" min="1" max="24" step="0.5"
 				bind:value={hoursPerWeek}
-				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center text-base sm:text-sm font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 			/>
 			<span class="text-gray-600 dark:text-gray-400">hrs ×</span>
 			<input
 				type="number" min="1" max="6" step="0.5"
 				bind:value={weeksPerMonth}
-				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				class="w-16 rounded-lg bg-gray-100 px-3 py-2 text-center text-base sm:text-sm font-medium text-gray-900 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 			/>
 			<span class="text-gray-600 dark:text-gray-400">weeks =</span>
 			<span class="font-semibold text-gray-900 dark:text-white">{budgetHours} hrs/month</span>

@@ -415,12 +415,12 @@
 			<div class="flex flex-wrap items-center gap-2 text-sm">
 				<input type="number" min="1" max="24" step="0.5"
 					bind:value={calloutHoursPerWeek}
-					class="w-14 rounded-lg bg-white px-2 py-1.5 text-center font-medium text-gray-900 outline-none ring-1 ring-orange-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-orange-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+					class="w-14 rounded-lg bg-white px-2 py-1.5 text-center text-base sm:text-sm font-medium text-gray-900 outline-none ring-1 ring-orange-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-orange-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 				/>
 				<span class="text-orange-700 dark:text-orange-400">hrs ×</span>
 				<input type="number" min="1" max="6" step="0.5"
 					bind:value={calloutWeeksPerMonth}
-					class="w-14 rounded-lg bg-white px-2 py-1.5 text-center font-medium text-gray-900 outline-none ring-1 ring-orange-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-orange-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+					class="w-14 rounded-lg bg-white px-2 py-1.5 text-center text-base sm:text-sm font-medium text-gray-900 outline-none ring-1 ring-orange-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:ring-orange-700 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 				/>
 				<span class="text-orange-700 dark:text-orange-400">weeks/mo</span>
 			</div>

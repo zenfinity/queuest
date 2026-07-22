@@ -232,7 +232,7 @@
 				placeholder="https://… (IMDb export link)"
 				bind:value={csvUrl}
 				onkeydown={(e) => e.key === 'Enter' && fetchCsvUrl()}
-				class="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				class="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 			/>
 			<button
 				onclick={fetchCsvUrl}
@@ -274,7 +274,7 @@
 			bind:value={textInput}
 			placeholder={"The Bear\n- Severance (2022)\n1. Andor\n• Slow Horses"}
 			rows="6"
-			class="w-full rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+			class="w-full rounded-lg bg-gray-100 px-3 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 		></textarea>
 
 		{#if textRows.length > 0}
@@ -353,7 +353,7 @@
 				type="password"
 				placeholder="Passphrase"
 				bind:value={restorePassphrase}
-				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 				onkeydown={(e) => e.key === 'Enter' && doRestore()}
 			/>
 			<button
