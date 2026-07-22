@@ -10,6 +10,8 @@
 	import { getQueueColors } from '$lib/queue-colors';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 	import { motion } from '$lib/motion.svelte';
+	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
+	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 
 	// ── Constants ─────────────────────────────────────────────────────────────
 	const BAR_H = 32; // px — compact chip height
@@ -20,9 +22,6 @@
 	}
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
-	type SortKey = 'added' | 'title' | 'runtime';
-	type ViewKey = 'grid' | 'list' | 'lanes';
-
 	function loadPref<T extends string>(key: string, fallback: T): T {
 		try { return (localStorage.getItem(key) as T) ?? fallback; } catch { return fallback; }
 	}
@@ -44,30 +43,6 @@
 	let detailItem: WatchlistItem | null = $state(null);
 	let overviewExpanded = $state(false);
 	let posterExpanded = $state(false);
-
-	// ── Dock: view / sort / filter / watched toggle ──────────────────────────
-	const SORT_DEFAULT_DIR: Record<SortKey, 'asc' | 'desc'> = { added: 'desc', title: 'asc', runtime: 'asc' };
-
-	let sortBy       = $state<SortKey>('added');
-	let sortDir      = $state<'asc' | 'desc'>('desc');
-	let viewMode     = $state<ViewKey>('grid');
-	let serviceFilter = $state<'all' | 'subscribed' | 'not-subscribed'>('all');
-	let watchedOn    = $state(false);
-	let filterOpen   = $state(false);
-
-	function setSortBy(key: SortKey) {
-		sortBy = key;
-		sortDir = SORT_DEFAULT_DIR[key];
-	}
-	function toggleSortDir() {
-		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-	}
-	function clearSort() {
-		sortBy = 'added';
-		sortDir = SORT_DEFAULT_DIR.added;
-	}
-
-	let hasActiveFilters = $derived(sortBy !== 'added' || sortDir !== SORT_DEFAULT_DIR[sortBy] || serviceFilter !== 'all');
 
 	function openGanttPopup(e: MouseEvent, item: WatchlistItem) {
 		e.stopPropagation();
@@ -136,11 +111,11 @@
 	let queued = $derived(items.filter((i) => !i.watched_at));
 
 	// Watched toggle is inclusive: off shows only unwatched titles, on mixes in watched titles too.
-	let baseItems = $derived(watchedOn ? items : queued);
+	let baseItems = $derived(queueControls.watchedOn ? items : queued);
 
 	let visibleItems = $derived.by(() => {
-		if (serviceFilter === 'all' || services.ids.size === 0) return baseItems;
-		if (serviceFilter === 'subscribed') {
+		if (queueControls.serviceFilter === 'all' || services.ids.size === 0) return baseItems;
+		if (queueControls.serviceFilter === 'subscribed') {
 			return baseItems.filter(item =>
 				item.providers.some(p => services.ids.has(p.provider_id))
 			);
@@ -153,10 +128,10 @@
 	});
 
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
-		const mul = sortDir === 'asc' ? 1 : -1;
+		const mul = queueControls.sortDir === 'asc' ? 1 : -1;
 		return [...list].sort((a, b) => {
-			if (sortBy === 'title') return a.title.localeCompare(b.title) * mul;
-			if (sortBy === 'runtime') {
+			if (queueControls.sortBy === 'title') return a.title.localeCompare(b.title) * mul;
+			if (queueControls.sortBy === 'runtime') {
 				return (effectiveRuntime(a) - effectiveRuntime(b)) * mul;
 			}
 			return a.added_at.localeCompare(b.added_at) * mul;
@@ -196,11 +171,11 @@
 			}
 		}
 
-		const laneMul = sortDir === 'asc' ? 1 : -1;
+		const laneMul = queueControls.sortDir === 'asc' ? 1 : -1;
 		const out: Lane[] = [...map.values()]
 			.sort((a, b) => {
-				if (sortBy === 'title') return a.label.localeCompare(b.label) * laneMul;
-				if (sortBy === 'added') {
+				if (queueControls.sortBy === 'title') return a.label.localeCompare(b.label) * laneMul;
+				if (queueControls.sortBy === 'added') {
 					const aMax = a.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
 					const bMax = b.items.reduce((m, i) => (i.added_at > m ? i.added_at : m), '');
 					return aMax.localeCompare(bMax) * laneMul;
@@ -225,8 +200,10 @@
 	}
 
 	onMount(() => {
-		sortBy      = loadPref<SortKey>('sq:sort', 'added');
-		viewMode    = loadPref<ViewKey>('sq:view', 'grid');
+		queueControls.sortBy      = loadPref<SortKey>('sq:sort', 'added');
+		queueControls.sortDir     = loadPref<'asc' | 'desc'>('sq:sortDir', SORT_DEFAULT_DIR[queueControls.sortBy]);
+		queueControls.viewMode    = loadPref<ViewKey>('sq:view', 'grid');
+		queueControls.ready       = true;
 		budgetHours = loadJSON<number>('sq:budget', 40);
 		queueColors = getQueueColors();
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
@@ -249,15 +226,21 @@
 
 	$effect(() => {
 		try {
-			localStorage.setItem('sq:sort', sortBy);
-			localStorage.setItem('sq:view', viewMode);
+			localStorage.setItem('sq:sort', queueControls.sortBy);
+			localStorage.setItem('sq:sortDir', queueControls.sortDir);
+			localStorage.setItem('sq:view', queueControls.viewMode);
 			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
 		} catch {}
 	});
 
 	// "Subscribed" filter is meaningless with zero subscribed services — fall back to "All".
 	$effect(() => {
-		if (serviceFilter === 'subscribed' && services.ids.size === 0) serviceFilter = 'all';
+		if (queueControls.serviceFilter === 'subscribed' && services.ids.size === 0) queueControls.serviceFilter = 'all';
+	});
+
+	// Lets the nav know whether the dock has anything to show, for the lg+ inline placement.
+	$effect(() => {
+		queueControls.hasItems = loaded && items.length > 0;
 	});
 
 	// Extract logo hues for all providers in view (runs whenever baseItems changes)
@@ -364,7 +347,7 @@
 	{/if}
 {/snippet}
 
-<div class="space-y-4 xs:space-y-6 {loaded && items.length > 0 ? 'pb-24' : ''}">
+<div class="space-y-4 xs:space-y-6 {loaded && items.length > 0 ? 'pb-24 lg:pb-0' : ''}">
 	<!-- Cancellation alert -->
 	{#if cancelAlert}
 		{@const a = cancelAlert}
@@ -415,7 +398,7 @@
 	<!-- Summary line -->
 	{#if loaded && items.length > 0}
 		<p class="text-xs text-gray-500 dark:text-gray-500">
-			{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(visibleItems.reduce((s, i) => s + effectiveRuntime(i), 0))} remaining{watchedOn ? ' · showing watched' : ''}
+			{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(visibleItems.reduce((s, i) => s + effectiveRuntime(i), 0))} remaining{queueControls.watchedOn ? ' · showing watched' : ''}
 		</p>
 	{/if}
 
@@ -442,7 +425,7 @@
 		</div>
 
 	<!-- ── GRID ──────────────────────────────────────────────────────────────── -->
-	{:else if viewMode === 'grid'}
+	{:else if queueControls.viewMode === 'grid'}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each flatItems as item (item.id)}
 				{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null, item.providers[0]?.logo_path ?? null)}
@@ -469,7 +452,7 @@
 						{:else}
 							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
 						{/if}
-						{#if watchedOn && item.watched_at}
+						{#if queueControls.watchedOn && item.watched_at}
 							<span class="absolute top-2 left-2 rounded bg-teal-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-teal-400">✓ Watched</span>
 						{/if}
 					</button>
@@ -539,7 +522,7 @@
 		</div>
 
 	<!-- ── LIST ─────────────────────────────────────────────────────────────── -->
-	{:else if viewMode === 'list'}
+	{:else if queueControls.viewMode === 'list'}
 		<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
 			{#each flatItems as item (item.id)}
 				{@const rt = effectiveRuntime(item)}
@@ -570,7 +553,7 @@
 							onclick={(e) => { e.stopPropagation(); detailItem = item; overviewExpanded = false; }}
 							data-detail-trigger
 						>{item.title}</button>
-						{#if watchedOn && item.watched_at}
+						{#if queueControls.watchedOn && item.watched_at}
 							<span class="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900/60 dark:text-teal-400">✓</span>
 						{/if}
 						<div class="flex shrink-0 gap-1">
@@ -970,121 +953,8 @@
 	{/if}
 {/if}
 
-<!-- ── Filter dock ────────────────────────────────────────────────────────── -->
-{#if loaded && items.length > 0}
-	<div class="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
-		<div class="flex items-center gap-2.5 rounded-full border border-gray-200 bg-white/90 px-2 py-1.5 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-gray-900/90">
-			<!-- View switcher -->
-			<div class="flex gap-0.5 rounded-full bg-gray-100 p-[3px] dark:bg-white/5">
-				<button
-					aria-label="Card view"
-					onclick={() => (viewMode = 'grid')}
-					class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {viewMode === 'grid' ? 'bg-orange-500 text-white' : 'text-gray-500 dark:text-gray-400'}"
-				>
-					<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
-						<rect x="1" y="1" width="5" height="5" rx="1" /><rect x="8" y="1" width="5" height="5" rx="1" />
-						<rect x="1" y="8" width="5" height="5" rx="1" /><rect x="8" y="8" width="5" height="5" rx="1" />
-					</svg>
-				</button>
-				<button
-					aria-label="List view"
-					onclick={() => (viewMode = 'list')}
-					class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {viewMode === 'list' ? 'bg-orange-500 text-white' : 'text-gray-500 dark:text-gray-400'}"
-				>
-					<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
-						<rect x="1" y="2" width="12" height="2" rx="1" /><rect x="1" y="6" width="12" height="2" rx="1" /><rect x="1" y="10" width="12" height="2" rx="1" />
-					</svg>
-				</button>
-				<button
-					aria-label="Timeline view"
-					onclick={() => (viewMode = 'lanes')}
-					class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {viewMode === 'lanes' ? 'bg-orange-500 text-white' : 'text-gray-500 dark:text-gray-400'}"
-				>
-					<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
-						<rect x="1" y="2" width="7" height="2.5" rx="1.2" /><rect x="4" y="6" width="9" height="2.5" rx="1.2" /><rect x="2" y="10" width="6" height="2.5" rx="1.2" />
-					</svg>
-				</button>
-			</div>
-
-			<span class="h-4.5 w-px bg-gray-200 dark:bg-white/10"></span>
-
-			<!-- Watched toggle -->
-			<button
-				onclick={() => (watchedOn = !watchedOn)}
-				class="rounded-full px-3 py-1.5 text-xs font-semibold transition-colors
-					{watchedOn ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/70 dark:text-teal-400' : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400'}"
-			>{watchedOn ? '✓ Watched' : 'Watched'}</button>
-
-			<span class="h-4.5 w-px bg-gray-200 dark:bg-white/10"></span>
-
-			<!-- Filter button -->
-			<button
-				aria-label="Sort and filter"
-				onclick={() => (filterOpen = !filterOpen)}
-				class="relative flex items-center rounded-full px-2.5 py-1.5 text-gray-500 dark:text-gray-400"
-			>
-				<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-					<rect x="1" y="3" width="12" height="1.6" rx=".8" fill="currentColor" />
-					<circle cx="9" cy="3.8" r="2" fill="none" stroke="currentColor" stroke-width="1.4" />
-					<rect x="1" y="9" width="12" height="1.6" rx=".8" fill="currentColor" />
-					<circle cx="5" cy="9.8" r="2" fill="none" stroke="currentColor" stroke-width="1.4" />
-				</svg>
-				{#if hasActiveFilters}
-					<span class="absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full bg-orange-500"></span>
-				{/if}
-			</button>
-		</div>
-	</div>
-
-	{#if filterOpen}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="fixed inset-0 z-40" onclick={() => (filterOpen = false)}></div>
-		<div class="fixed bottom-20 left-1/2 z-[55] w-52 -translate-x-1/2 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-gray-900">
-			<div class="flex items-center justify-between px-2 py-1">
-				<span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Sort by</span>
-				{#if sortBy !== 'added' || sortDir !== SORT_DEFAULT_DIR.added}
-					<button onclick={clearSort} class="text-[10px] font-medium text-orange-500 hover:text-orange-400">Clear</button>
-				{/if}
-			</div>
-			{#each ([['added','Recent'],['title','A–Z'],['runtime','Runtime']] as const) as [key, label] (key)}
-				<div class="flex items-center gap-0.5">
-					<button
-						onclick={() => setSortBy(key)}
-						class="flex flex-1 items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
-							{sortBy === key ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
-					>
-						<span>{label}</span>
-						{#if sortBy === key}<span class="text-orange-500">✓</span>{/if}
-					</button>
-					{#if sortBy === key}
-						<button
-							onclick={toggleSortDir}
-							aria-label={sortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
-							class="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800/50 dark:hover:text-gray-300"
-						>{sortDir === 'asc' ? '↑' : '↓'}</button>
-					{/if}
-				</div>
-			{/each}
-
-			<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
-
-			<p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Services</p>
-			{#each ([['all','All'],['subscribed','Subscribed'],['not-subscribed','Not Subscribed']] as const) as [key, label] (key)}
-				{@const isDisabled = key === 'subscribed' && services.ids.size === 0}
-				<button
-					onclick={() => { if (!isDisabled) serviceFilter = key; }}
-					disabled={isDisabled}
-					title={isDisabled ? 'Select services on the Budget page first' : undefined}
-					class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
-						{isDisabled ? 'cursor-not-allowed text-gray-300 dark:text-gray-700' : serviceFilter === key ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
-				>
-					<span>{label}</span>
-					{#if serviceFilter === key && !isDisabled}<span class="text-orange-500">✓</span>{/if}
-				</button>
-			{/each}
-		</div>
-	{/if}
-{/if}
+<!-- Filter dock now lives in src/routes/+layout.svelte (shared between the
+     nav-inline lg+ placement and the fixed floating placement below lg). -->
 
 <!-- ── Gantt detail popup (fixed-position, escapes overflow:hidden) ──────── -->
 {#if activeItem && ganttPopupAnchor}

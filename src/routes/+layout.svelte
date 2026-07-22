@@ -4,6 +4,8 @@
 	import { onMount } from 'svelte';
 	import { initTheme } from '$lib/theme.svelte';
 	import '$lib/motion.svelte';
+	import { queueControls } from '$lib/queue-controls.svelte';
+	import QueueDock from '$lib/components/QueueDock.svelte';
 
 	let { children } = $props();
 
@@ -20,6 +22,7 @@
 	}
 
 	let isLanding = $derived(page.url.pathname === '/');
+	let isQueue   = $derived(page.url.pathname === '/app');
 
 	onMount(() => {
 		initTheme();
@@ -34,6 +37,11 @@
 		return () => window.removeEventListener('resize', fixViewport);
 	});
 </script>
+
+<svelte:document onclick={(e) => {
+	const t = e.target as Element;
+	if (queueControls.filterOpen && !t.closest('[data-queue-dock]')) queueControls.filterOpen = false;
+}} />
 
 <div class="min-h-screen w-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
 	<nav class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
@@ -61,6 +69,15 @@
 
 			<div class="flex-1"></div>
 
+			{#if isQueue && queueControls.ready && queueControls.hasItems}
+				<!-- Inline nav placement (lg+ only) — the mobile/tablet floating placement lives
+				     outside <nav> below, since backdrop-filter on <nav> would otherwise confine a
+				     fixed-position dock to the nav's own box (see QueueDock.svelte). -->
+				<div class="hidden lg:block">
+					<QueueDock floating={false} />
+				</div>
+			{/if}
+
 			{#if !isLanding}
 			<a
 				class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
@@ -78,6 +95,14 @@
 			{/if}
 		</div>
 	</nav>
+
+	{#if isQueue && queueControls.ready && queueControls.hasItems}
+		<!-- Floating placement (below lg:) — deliberately outside <nav>, see the comment
+		     on the inline instance above for why. -->
+		<div class="lg:hidden">
+			<QueueDock floating={true} />
+		</div>
+	{/if}
 
 	<main class="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-8">
 		{@render children()}
