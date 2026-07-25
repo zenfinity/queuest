@@ -105,7 +105,7 @@
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Viewing Budget</h2>
 		{#if isOnboarding}
 			<p class="text-sm text-gray-600 dark:text-gray-400">
-				This calibrates how full your queue bars look. Set it now or adjust later in Settings.
+				This calibrates how full your queue bars look. Set it now or adjust later on this page.
 			</p>
 		{:else}
 			<p class="text-sm text-gray-600 dark:text-gray-400">
