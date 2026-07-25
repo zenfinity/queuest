@@ -1,8 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getAll, replaceAll, patchProviders, getServices, setServices } from '$lib/db';
-	import { encrypt } from '$lib/crypto';
+	import { getAll } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
+	import {
+		buildExportBlob,
+		refreshProviders,
+		submitFeedback as submitFeedbackAction,
+		resetEverything
+	} from '$lib/settings-actions';
 
 	import { getQueueName, setQueueName, getQueueColors, setQueueColor } from '$lib/queue-colors';
 	import pkg from '../../../package.json';
@@ -20,27 +25,10 @@
 		exporting = true;
 		exportDone = false;
 		try {
-			const [items, services] = await Promise.all([getAll(), getServices()]);
-			const _weeklyHours = JSON.parse(localStorage.getItem('sq:budget:weekly') ?? '10');
-			const _weeksPerMonth = JSON.parse(localStorage.getItem('sq:budget:weeks') ?? '4');
-			// Wrap items + preferences so a restore is complete
-			const payload = {
-				version: 1,
-				prefs: {
-					theme: theme.dark ? 'dark' : 'light',
-					weeklyHours: _weeklyHours,
-					weeksPerMonth: _weeksPerMonth,
-					budget: _weeklyHours * _weeksPerMonth, // kept for backwards compat
-					queueName: getQueueName(),
-					queueColors: getQueueColors(),
-					sort: localStorage.getItem('sq:sort') ?? 'added',
-					view: localStorage.getItem('sq:view') ?? 'grid'
-				},
-				items,
-				services
-			};
-			const buf = await encrypt(JSON.stringify(payload), exportPassphrase);
-			const url = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
+			const weeklyHours = JSON.parse(localStorage.getItem('sq:budget:weekly') ?? '10');
+			const weeksPerMonth = JSON.parse(localStorage.getItem('sq:budget:weeks') ?? '4');
+			const blob = await buildExportBlob(exportPassphrase, weeklyHours, weeksPerMonth);
+			const url = URL.createObjectURL(blob);
 			Object.assign(document.createElement('a'), {
 				href: url,
 				download: `queuest-${new Date().toISOString().slice(0, 10)}.queuest`
@@ -61,63 +49,15 @@
 	let refreshSuccess = $state(false);
 
 	async function doRefresh() {
-		refreshing = true;
-		refreshError = '';
-		refreshSuccess = false;
-		try {
-			const items = await getAll();
-			const payload = items.map(({ id, tmdb_id, media_type }) => ({ id, tmdb_id, media_type }));
-			refreshTotal = payload.length;
-			refreshDone = 0;
-
-			if (!payload.length) {
-				refreshSuccess = true;
-				return;
-			}
-
-			const res = await fetch('/api/refresh-providers', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload)
-			});
-
-			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-
-			const results = (await res.json()) as Array<{
-				id: number;
-				providers: import('$lib/types').Provider[];
-				rentable?: boolean;
-				release: import('$lib/types').ReleaseInfo | null;
-				seasons?: import('$lib/types').WatchlistItem['seasons'];
-				runtime_minutes?: number | null;
-				genres?: string[];
-				cast?: import('$lib/types').CastMember[];
-				director?: string | null;
-				creator?: string | null;
-			}>;
-
-			// Write back to IndexedDB one by one
-			for (const r of results) {
-				await patchProviders(
-					r.id,
-					r.providers,
-					r.rentable ?? false,
-					r.release,
-					r.seasons,
-					r.runtime_minutes,
-					r.genres,
-					r.cast,
-					r.director,
-					r.creator
-				);
-				refreshDone++;
-			}
-			refreshSuccess = true;
-		} catch (e) {
-			refreshError = e instanceof Error ? e.message : 'Refresh failed.';
-		} finally {
-			refreshing = false;
-		}
+		await refreshProviders({
+			setRefreshing: (v) => (refreshing = v),
+			setRefreshError: (v) => (refreshError = v),
+			setRefreshSuccess: (v) => (refreshSuccess = v),
+			setRefreshTotal: (v) => (refreshTotal = v),
+			setRefreshDone: (v) => (refreshDone = v),
+			setFeedbackError: () => {},
+			setFeedbackIssueUrl: () => {}
+		});
 	}
 
 	// ── Feedback ──────────────────────────────────────────────────────────────
@@ -142,25 +82,22 @@
 	async function submitFeedback() {
 		if (!feedbackTitle.trim()) return;
 		feedbackSending = true;
-		feedbackError = '';
-		feedbackIssueUrl = '';
 		try {
-			const res = await fetch('/api/feedback', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ title: feedbackTitle, body: feedbackBody })
+			await submitFeedbackAction(feedbackTitle, feedbackBody, {
+				setRefreshing: () => {},
+				setRefreshError: () => {},
+				setRefreshSuccess: () => {},
+				setRefreshTotal: () => {},
+				setRefreshDone: () => {},
+				setFeedbackError: (v) => (feedbackError = v),
+				setFeedbackIssueUrl: (v) => {
+					feedbackIssueUrl = v;
+					if (v) {
+						feedbackTitle = '';
+						feedbackBody = '';
+					}
+				}
 			});
-			if (!res.ok) {
-				const msg = await res.text().catch(() => res.statusText);
-				feedbackError = msg || 'Something went wrong.';
-			} else {
-				const data = await res.json();
-				feedbackIssueUrl = data.url;
-				feedbackTitle = '';
-				feedbackBody = '';
-			}
-		} catch (e) {
-			feedbackError = e instanceof Error ? e.message : 'Network error.';
 		} finally {
 			feedbackSending = false;
 		}
@@ -177,25 +114,7 @@
 		}
 		resetting = true;
 		try {
-			await Promise.all([replaceAll([]), setServices([])]);
-			const keys = [
-				'sq:theme',
-				'sq:budget',
-				'sq:budget:weekly',
-				'sq:budget:weeks',
-				'sq:sort',
-				'sq:view',
-				'sq:queue-name',
-				'sq:queue-colors',
-				'sq:welcomed',
-				'sq:import-missed'
-			];
-			for (const k of keys) {
-				try {
-					localStorage.removeItem(k);
-				} catch {}
-			}
-			window.location.href = '/';
+			await resetEverything();
 		} finally {
 			resetting = false;
 		}

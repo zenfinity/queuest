@@ -1,12 +1,14 @@
-import type { ImportRow } from './import';
+import type { ImportFormat, ImportRow } from './import';
 import type { WatchlistItem } from './types';
 import { addItem, replaceAll, setServices } from './db';
 import { decrypt } from './crypto';
 import { parseImportBackup } from './share-schema';
 import { setQueueName, setQueueColor } from './queue-colors';
+import { parseImportCSV } from './import';
 
 export interface ImportActionDeps {
 	setImporting: (importing: boolean) => void;
+	setImportTotal: (total: number) => void;
 	setImportDone: (done: number) => void;
 	setImportAdded: (added: number) => void;
 	setImportError: (error: string) => void;
@@ -24,6 +26,7 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 	if (!rows.length) return;
 	deps.setImporting(true);
 	deps.setImportError('');
+	deps.setImportTotal(rows.length);
 	let importDone = 0;
 	let importAdded = 0;
 	let missedTitles: string[] = [];
@@ -140,20 +143,24 @@ export async function restoreBackup(
 	}
 }
 
-export async function fetchCsvFromUrl(url: string): Promise<{ rows: any[]; format: string }> {
-	if (!url.trim()) return { rows: [], format: '' };
+export async function fetchCsvFromUrl(
+	url: string
+): Promise<{ rows: ImportRow[]; format: ImportFormat }> {
+	if (!url.trim()) return { rows: [], format: 'unknown' };
 	try {
 		try {
 			const direct = await fetch(url.trim());
-			if (direct.ok) return { rows: [], format: 'csv' };
-		} catch {}
+			if (direct.ok) return parseImportCSV(await direct.text());
+		} catch {
+			// CORS blocked — fall through to server proxy
+		}
 		const res = await fetch('/api/import-fetch', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ url: url.trim() })
 		});
 		if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-		return { rows: [], format: 'csv' };
+		return parseImportCSV(await res.text());
 	} catch (e) {
 		throw e instanceof Error ? e : new Error('Failed to fetch URL.');
 	}

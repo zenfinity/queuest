@@ -7,6 +7,7 @@ export interface SettingsActionDeps {
 	setRefreshing: (refreshing: boolean) => void;
 	setRefreshError: (error: string) => void;
 	setRefreshSuccess: (success: boolean) => void;
+	setRefreshTotal: (total: number) => void;
 	setRefreshDone: (done: number) => void;
 	setFeedbackError: (error: string) => void;
 	setFeedbackIssueUrl: (url: string) => void;
@@ -53,6 +54,8 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 	try {
 		const items = await getAll();
 		const payload = items.map(({ id, tmdb_id, media_type }) => ({ id, tmdb_id, media_type }));
+		deps.setRefreshTotal(payload.length);
+		deps.setRefreshDone(0);
 
 		if (!payload.length) {
 			deps.setRefreshSuccess(true);

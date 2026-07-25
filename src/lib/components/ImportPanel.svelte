@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { addItem, replaceAll, setServices } from '$lib/db';
 	import { parseImportCSV, parseTextList } from '$lib/import';
-	import { decrypt } from '$lib/crypto';
-	import { parseImportBackup } from '$lib/share-schema';
 	import { theme } from '$lib/theme.svelte';
-	import { setQueueName, setQueueColor } from '$lib/queue-colors';
+	import {
+		importRows,
+		restoreBackup,
+		fetchCsvFromUrl,
+		type RestoreDeps,
+		type ImportActionDeps
+	} from '$lib/import-actions';
 	import type { ImportRow } from '$lib/import';
-	import type { WatchlistItem } from '$lib/types';
 
 	// ── CSV import (Letterboxd / IMDb) ────────────────────────────────────────
 	let csvRows = $state<ImportRow[]>([]);
@@ -26,12 +28,6 @@
 	let missedTitles = $state<string[]>([]);
 	let importError = $state('');
 	let importDoneOnce = $state(false);
-
-	function saveMissed() {
-		try {
-			localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles));
-		} catch {}
-	}
 
 	function clearMissedTitles() {
 		missedTitles = [];
@@ -70,22 +66,13 @@
 		textInput = '';
 		csvUrlLoading = true;
 		try {
-			try {
-				const direct = await fetch(csvUrl.trim());
-				if (direct.ok) {
-					applyCsvText(await direct.text());
-					return;
-				}
-			} catch {
-				// CORS blocked — fall through to server proxy
+			const { rows, format } = await fetchCsvFromUrl(csvUrl);
+			if (format === 'unknown') {
+				importError = 'Unrecognised format. Expected a Letterboxd or IMDb watchlist CSV.';
+				return;
 			}
-			const res = await fetch('/api/import-fetch', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ url: csvUrl.trim() })
-			});
-			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-			applyCsvText(await res.text());
+			csvRows = rows;
+			csvFormat = format === 'letterboxd' ? 'Letterboxd' : 'IMDb';
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Failed to fetch URL.';
 		} finally {
@@ -93,56 +80,20 @@
 		}
 	}
 
-	const BATCH = 10;
-
 	async function doImport(rows: ImportRow[], source: 'csv' | 'text') {
 		if (!rows.length || importing) return;
-		importing = true;
 		importSource = source;
-		importTotal = rows.length;
-		importDone = 0;
-		importAdded = 0;
-		missedTitles = [];
-		importError = '';
+		const deps: ImportActionDeps = {
+			setImporting: (v) => (importing = v),
+			setImportTotal: (v) => (importTotal = v),
+			setImportDone: (v) => (importDone = v),
+			setImportAdded: (v) => (importAdded = v),
+			setImportError: (v) => (importError = v),
+			setMissedTitles: (v) => (missedTitles = v),
+			setImportDoneOnce: (v) => (importDoneOnce = v)
+		};
 		importDoneOnce = false;
-		try {
-			for (let i = 0; i < rows.length; i += BATCH) {
-				const batch = rows.slice(i, i + BATCH);
-				const res = await fetch('/api/import-search', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(batch)
-				});
-				if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-				const matched = (await res.json()) as Array<{
-					title: string;
-					result: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> | null;
-				}>;
-				for (const { title, result } of matched) {
-					if (result) {
-						try {
-							await addItem(result);
-							importAdded++;
-						} catch (e) {
-							if (e instanceof DOMException && e.name === 'ConstraintError') {
-								importAdded++; // already in queue — counts as success
-							} else {
-								throw e;
-							}
-						}
-					} else {
-						missedTitles = [...missedTitles, title];
-					}
-					importDone++;
-				}
-			}
-			importDoneOnce = true;
-			saveMissed();
-		} catch (e) {
-			importError = e instanceof Error ? e.message : 'Import failed.';
-		} finally {
-			importing = false;
-		}
+		await importRows(rows, deps);
 	}
 
 	// ── Backup restore (.queuest) ─────────────────────────────────────────────
@@ -160,66 +111,23 @@
 
 	async function doRestore() {
 		if (!restoreFile || !restorePassphrase) return;
-		restoring = true;
-		restoreError = '';
+		const file = restoreFile;
+		const passphrase = restorePassphrase;
 		restoreDone = false;
-		try {
-			const parsed = parseImportBackup(
-				JSON.parse(await decrypt(await restoreFile.arrayBuffer(), restorePassphrase))
-			);
-
-			const fullItems: WatchlistItem[] = parsed.items.map((item, idx) => ({
-				...item,
-				id: idx,
-				added_at: new Date().toISOString(),
-				watched_at: null
-			}));
-			const ops: Promise<void>[] = [replaceAll(fullItems)];
-
-			if (parsed.prefs?.theme) {
-				const dark = parsed.prefs.theme === 'dark';
-				theme.dark = dark;
-				localStorage.setItem('sq:theme', parsed.prefs.theme);
-				document.documentElement.classList.toggle('dark', dark);
-			}
-			if (
-				typeof parsed.prefs?.weeklyHours === 'number' &&
-				typeof parsed.prefs?.weeksPerMonth === 'number'
-			) {
-				localStorage.setItem('sq:budget:weekly', JSON.stringify(parsed.prefs.weeklyHours));
-				localStorage.setItem('sq:budget:weeks', JSON.stringify(parsed.prefs.weeksPerMonth));
-				localStorage.setItem(
-					'sq:budget',
-					JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth)
-				);
-			} else if (typeof parsed.prefs?.budget === 'number') {
-				localStorage.setItem(
-					'sq:budget:weekly',
-					JSON.stringify(Math.round(parsed.prefs.budget / 4))
-				);
-				localStorage.setItem('sq:budget:weeks', '4');
-				localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.budget));
-			}
-			if (typeof parsed.prefs?.queueName === 'string') setQueueName(parsed.prefs.queueName);
-			if (parsed.prefs?.queueColors && typeof parsed.prefs.queueColors === 'object') {
-				for (const [tag, color] of Object.entries(parsed.prefs.queueColors)) {
-					if (typeof color === 'string') setQueueColor(tag, color);
-				}
-			}
-			if (typeof parsed.prefs?.sort === 'string')
-				localStorage.setItem('sq:sort', parsed.prefs.sort);
-			if (typeof parsed.prefs?.view === 'string')
-				localStorage.setItem('sq:view', parsed.prefs.view);
-
-			if (parsed.services) ops.push(setServices(parsed.services));
-			await Promise.all(ops);
+		const deps: RestoreDeps = {
+			setImporting: (v) => (restoring = v),
+			setImportTotal: () => {},
+			setImportDone: () => {},
+			setImportAdded: () => {},
+			setImportError: (v) => (restoreError = v),
+			setMissedTitles: () => {},
+			setImportDoneOnce: (v) => (restoreDone = v),
+			setThemeDark: (dark) => (theme.dark = dark)
+		};
+		await restoreBackup(file, passphrase, deps);
+		if (restoreDone) {
 			restoreFile = null;
 			restorePassphrase = '';
-			restoreDone = true;
-		} catch (e) {
-			restoreError = e instanceof Error ? e.message : 'Import failed.';
-		} finally {
-			restoring = false;
 		}
 	}
 
