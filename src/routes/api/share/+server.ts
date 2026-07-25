@@ -1,4 +1,5 @@
 import type { RequestHandler } from './$types';
+import { b64urlEncode } from '$lib/base64url';
 
 const TOKEN_BYTES = 9; // → 12 base64url chars
 const MAX_BYTES = 512_000;
@@ -10,11 +11,7 @@ const TTL = 30 * 24 * 60 * 60; // 30 days
 const MIN_BYTES = 12 + 16;
 
 function makeToken(): string {
-	const bytes = crypto.getRandomValues(new Uint8Array(TOKEN_BYTES));
-	return btoa(String.fromCharCode(...bytes))
-		.replace(/\+/g, '-')
-		.replace(/\//g, '_')
-		.replace(/=/g, '');
+	return b64urlEncode(crypto.getRandomValues(new Uint8Array(TOKEN_BYTES)));
 }
 
 export const POST: RequestHandler = async ({ request, platform }) => {

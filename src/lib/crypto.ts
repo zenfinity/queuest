@@ -1,23 +1,9 @@
+import { b64urlEncode, b64urlDecode } from './base64url';
+
 const SALT_LEN = 16;
 const IV_LEN = 12;
 const PBKDF2_ITERATIONS = 600_000;
 const PBKDF2_LEGACY_ITERATIONS = 200_000;
-
-function b64urlEncode(bytes: Uint8Array<ArrayBuffer>): string {
-	let bin = '';
-	for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-	return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
-	const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
-	const pad = (4 - (b64.length % 4)) % 4;
-	const str = atob(b64 + '='.repeat(pad));
-	const buf = new ArrayBuffer(str.length);
-	const out = new Uint8Array(buf);
-	for (let i = 0; i < str.length; i++) out[i] = str.charCodeAt(i);
-	return out;
-}
 
 async function deriveKey(
 	passphrase: string,

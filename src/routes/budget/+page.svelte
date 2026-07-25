@@ -5,6 +5,7 @@
 	import { getAll, getServices, toggleService } from '$lib/db';
 	import { services, setSubscribedIds } from '$lib/services.svelte';
 	import { TMDB_IMG } from '$lib/tmdb';
+	import { aggregateByProvider, saveBudgetPrefs } from '$lib/progress';
 	import type { Provider } from '$lib/types';
 
 	// ── Onboarding ────────────────────────────────────────────────────────────
@@ -16,11 +17,7 @@
 	let budgetHours = $derived(hoursPerWeek * weeksPerMonth);
 
 	$effect(() => {
-		try {
-			localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
-			localStorage.setItem('sq:budget:weeks', JSON.stringify(weeksPerMonth));
-			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
-		} catch {}
+		saveBudgetPrefs(hoursPerWeek, weeksPerMonth);
 	});
 
 	// ── Services ──────────────────────────────────────────────────────────────
@@ -76,15 +73,13 @@
 		const [items, svcs] = await Promise.all([getAll(), getServices()]);
 		setSubscribedIds(new Set(svcs.map((s) => s.provider_id)));
 
-		const providerMap = new Map<number, Provider>();
-		for (const item of items) {
-			for (const p of item.providers) {
-				if (!providerMap.has(p.provider_id)) providerMap.set(p.provider_id, p);
-			}
-		}
-		queueProviders = [...providerMap.values()].sort((a, b) =>
-			a.provider_name.localeCompare(b.provider_name)
-		);
+		queueProviders = aggregateByProvider(items)
+			.map((p): Provider => ({
+				provider_id: p.provider_id,
+				provider_name: p.provider_name,
+				logo_path: p.logo_path
+			}))
+			.sort((a, b) => a.provider_name.localeCompare(b.provider_name));
 
 		// Fetch majors for empty-queue onboarding state
 		if (queueProviders.length === 0) {

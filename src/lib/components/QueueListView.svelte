@@ -4,17 +4,9 @@
 	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
-	import { remainingRuntime, releaseChip } from '$lib/progress';
+	import { remainingRuntime, releaseChip, hms, DEFAULT_RUNTIME } from '$lib/progress';
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
-
-	const DEFAULT_RUNTIME: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
-
-	function hms(mins: number): string {
-		const h = Math.floor(mins / 60),
-			m = mins % 60;
-		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
-	}
 
 	let {
 		items,

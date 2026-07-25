@@ -1,6 +1,7 @@
 import type { ShareItem } from './types';
 import { addItem } from './db';
 import { getOrAssignColor } from './queue-colors';
+import { isConstraintError } from './http';
 
 export interface ShareTokenActionDeps {
 	setAddingAll: (adding: boolean) => void;
@@ -51,7 +52,7 @@ export async function addAllToQueue(
 				});
 				added++;
 			} catch (err) {
-				if (err instanceof DOMException && err.name === 'ConstraintError') {
+				if (isConstraintError(err)) {
 					dupes++;
 				} else {
 					const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);

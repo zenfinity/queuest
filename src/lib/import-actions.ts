@@ -5,6 +5,8 @@ import { decrypt } from './crypto';
 import { parseImportBackup } from './share-schema';
 import { setQueueName, setQueueColor } from './queue-colors';
 import { parseImportCSV } from './import';
+import { saveBudgetPrefs } from './progress';
+import { throwIfNotOk, isConstraintError } from './http';
 
 export interface ImportActionDeps {
 	setImporting: (importing: boolean) => void;
@@ -39,7 +41,7 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(batch)
 			});
-			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+			await throwIfNotOk(res);
 			const matched = (await res.json()) as Array<{
 				title: string;
 				result: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> | null;
@@ -50,7 +52,7 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 						await addItem(result);
 						importAdded++;
 					} catch (e) {
-						if (e instanceof DOMException && e.name === 'ConstraintError') {
+						if (isConstraintError(e)) {
 							importAdded++;
 						} else {
 							throw e;
@@ -126,13 +128,11 @@ export async function restoreBackup(
 			typeof parsed.prefs?.weeklyHours === 'number' &&
 			typeof parsed.prefs?.weeksPerMonth === 'number'
 		) {
-			localStorage.setItem('sq:budget:weekly', JSON.stringify(parsed.prefs.weeklyHours));
-			localStorage.setItem('sq:budget:weeks', JSON.stringify(parsed.prefs.weeksPerMonth));
-			localStorage.setItem(
-				'sq:budget',
-				JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth)
-			);
+			saveBudgetPrefs(parsed.prefs.weeklyHours, parsed.prefs.weeksPerMonth);
 		} else if (typeof parsed.prefs?.budget === 'number') {
+			// Legacy backups only stored the derived total, not the weekly/weeks pair —
+			// write sq:budget as the exact original value rather than saveBudgetPrefs'
+			// weeklyHours * weeksPerMonth, which would introduce rounding drift.
 			localStorage.setItem('sq:budget:weekly', JSON.stringify(Math.round(parsed.prefs.budget / 4)));
 			localStorage.setItem('sq:budget:weeks', '4');
 			localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.budget));

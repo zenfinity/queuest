@@ -325,24 +325,9 @@ const BUNDLE_NAME_RE = /bundle|with hulu|with disney|with max|\bvia\b|amazon cha
 //   1899 Max
 
 /**
- * Clean a raw flatrate provider list from TMDB/JustWatch:
- *  1. Drop entries whose name contains bundle/add-on wording.
- *  2. Deduplicate tier variants (e.g. "Peacock Premium" vs "Peacock Premium Plus").
- *
- * Disney+/Hulu pair disambiguation is handled upstream in augmentProviders(),
- * which has network/company context to determine which service is canonical.
+ * Deduplicate tier variants: if one name is a prefix of another (e.g.
+ * "Peacock Premium" vs "Peacock Premium Plus"), keep only the base.
  */
-function filterProviders(providers: Provider[]): Provider[] {
-	const named = providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name));
-
-	// Deduplicate tier variants: if one name is a prefix of another
-	// (e.g. "Peacock Premium" vs "Peacock Premium Plus"), keep only the base.
-	return named.filter(
-		(p) =>
-			!named.some((other) => other !== p && p.provider_name.startsWith(other.provider_name + ' '))
-	);
-}
-
 function dedupTiers(providers: Provider[]): Provider[] {
 	return providers.filter(
 		(p) =>
@@ -350,6 +335,18 @@ function dedupTiers(providers: Provider[]): Provider[] {
 				(other) => other !== p && p.provider_name.startsWith(other.provider_name + ' ')
 			)
 	);
+}
+
+/**
+ * Clean a raw flatrate provider list from TMDB/JustWatch:
+ *  1. Drop entries whose name contains bundle/add-on wording.
+ *  2. Deduplicate tier variants via dedupTiers().
+ *
+ * Disney+/Hulu pair disambiguation is handled upstream in augmentProviders(),
+ * which has network/company context to determine which service is canonical.
+ */
+function filterProviders(providers: Provider[]): Provider[] {
+	return dedupTiers(providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name)));
 }
 
 /**

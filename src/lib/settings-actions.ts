@@ -2,6 +2,7 @@ import type { Provider } from './types';
 import { getAll, replaceAll, patchProviders, getServices, setServices } from './db';
 import { encrypt } from './crypto';
 import { getQueueName, getQueueColors } from './queue-colors';
+import { throwIfNotOk } from './http';
 
 export interface SettingsActionDeps {
 	setRefreshing: (refreshing: boolean) => void;
@@ -68,7 +69,7 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 			body: JSON.stringify(payload)
 		});
 
-		if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+		await throwIfNotOk(res);
 
 		const results = (await res.json()) as Array<{
 			id: number;

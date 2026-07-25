@@ -9,7 +9,13 @@
 		type QueueActionDeps
 	} from '$lib/queue-actions';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { remainingRuntime, releaseChip, cancelCandidates } from '$lib/progress';
+	import {
+		remainingRuntime,
+		releaseChip,
+		cancelCandidates,
+		hms,
+		saveBudgetPrefs
+	} from '$lib/progress';
 	import { getQueueColors } from '$lib/queue-colors';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
@@ -18,10 +24,6 @@
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
-
-	function effectiveRuntime(item: WatchlistItem): number {
-		return remainingRuntime(item);
-	}
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	function loadPref<T extends string>(key: string, fallback: T): T {
@@ -57,12 +59,8 @@
 	let calloutWeeksPerMonth = $state(4);
 
 	function saveBudgetCallout() {
-		try {
-			localStorage.setItem('sq:budget:weekly', JSON.stringify(calloutHoursPerWeek));
-			localStorage.setItem('sq:budget:weeks', JSON.stringify(calloutWeeksPerMonth));
-			localStorage.setItem('sq:budget', JSON.stringify(calloutHoursPerWeek * calloutWeeksPerMonth));
-			budgetHours = calloutHoursPerWeek * calloutWeeksPerMonth;
-		} catch {}
+		saveBudgetPrefs(calloutHoursPerWeek, calloutWeeksPerMonth);
+		budgetHours = calloutHoursPerWeek * calloutWeeksPerMonth;
 		showBudgetCallout = false;
 	}
 
@@ -120,7 +118,7 @@
 		return [...list].sort((a, b) => {
 			if (queueControls.sortBy === 'title') return a.title.localeCompare(b.title) * mul;
 			if (queueControls.sortBy === 'runtime') {
-				return (effectiveRuntime(a) - effectiveRuntime(b)) * mul;
+				return (remainingRuntime(a) - remainingRuntime(b)) * mul;
 			}
 			return a.added_at.localeCompare(b.added_at) * mul;
 		});
@@ -213,13 +211,6 @@
 	// ── Season progress ───────────────────────────────────────────────────────
 	async function toggleSeason(item: WatchlistItem, seasonNum: number) {
 		await toggleSeasonProgress(item, seasonNum, actionDeps);
-	}
-
-	// ── Helpers ───────────────────────────────────────────────────────────────
-	function hms(mins: number): string {
-		const h = Math.floor(mins / 60),
-			m = mins % 60;
-		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
 	}
 </script>
 
@@ -396,7 +387,7 @@
 	{#if loaded && items.length > 0}
 		<p class="text-xs text-gray-500 dark:text-gray-500">
 			{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(
-				visibleItems.reduce((s, i) => s + effectiveRuntime(i), 0)
+				visibleItems.reduce((s, i) => s + remainingRuntime(i), 0)
 			)} remaining{queueControls.watchedOn ? ' · showing watched' : ''}
 		</p>
 	{/if}

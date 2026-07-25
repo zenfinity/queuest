@@ -3,7 +3,7 @@
 	import type { WatchlistItem } from '$lib/types';
 	import { getAll } from '$lib/db';
 	import { TMDB_IMG } from '$lib/tmdb';
-	import { remainingRuntime } from '$lib/progress';
+	import { remainingRuntime, aggregateByProvider, hms } from '$lib/progress';
 	import { getQueueColors } from '$lib/queue-colors';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 	import { createShareLink as createShareLinkAction } from '$lib/share-create-actions';
@@ -14,18 +14,12 @@
 
 	let shareStatus = $state<'queue' | 'watched' | 'both'>('queue');
 	let shareType = $state<'all' | 'movie' | 'tv'>('all');
-	let shareProviderNames = $state(new Set<string>());
+	let shareProviderIds = $state(new Set<number>());
 	let shareQueueNames = $state(new Set<string>());
 	let shareCreating = $state(false);
 	let shareUrl = $state('');
 	let shareCopied = $state(false);
 	let shareError = $state('');
-
-	function hms(mins: number): string {
-		const h = Math.floor(mins / 60),
-			m = mins % 60;
-		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
-	}
 
 	let allShareQueues = $derived.by(() => {
 		const names = new Set<string>();
@@ -35,29 +29,16 @@
 		return [...names].sort();
 	});
 
-	let shareAllProviders = $derived.by(() => {
-		const map = new Map<string, { provider_id: number; logo_path: string; count: number }>();
-		for (const item of items) {
-			for (const p of item.providers) {
-				if (!map.has(p.provider_name)) {
-					map.set(p.provider_name, {
-						provider_id: p.provider_id,
-						logo_path: p.logo_path,
-						count: 0
-					});
-				}
-				map.get(p.provider_name)!.count++;
-			}
-		}
-		return [...map.entries()]
-			.sort((a, b) => b[1].count - a[1].count)
-			.map(([name, { provider_id, logo_path, count }]) => ({
-				name,
-				provider_id,
-				logo_path,
-				count
-			}));
-	});
+	let shareAllProviders = $derived.by(() =>
+		aggregateByProvider(items)
+			.sort((a, b) => b.count - a.count)
+			.map((p) => ({
+				name: p.provider_name,
+				provider_id: p.provider_id,
+				logo_path: p.logo_path,
+				count: p.count
+			}))
+	);
 
 	let shareFiltered = $derived.by(() => {
 		let base = items;
@@ -67,28 +48,29 @@
 		if (allShareQueues.length > 0 && shareQueueNames.size < allShareQueues.length) {
 			base = base.filter((i) => !i.queue_tag || shareQueueNames.has(i.queue_tag));
 		}
-		const allChecked = shareProviderNames.size === shareAllProviders.length;
+		const allChecked = shareProviderIds.size === shareAllProviders.length;
 		return base.filter((i) => {
 			if (!i.providers.length) return allChecked;
-			return i.providers.some((p) => shareProviderNames.has(p.provider_name));
+			return i.providers.some((p) => shareProviderIds.has(p.provider_id));
 		});
 	});
 
 	let shareTotal = $derived(shareFiltered.reduce((s, i) => s + remainingRuntime(i), 0));
 
-	function toggleShareProvider(name: string) {
-		const next = new Set(shareProviderNames);
-		if (next.has(name)) next.delete(name);
-		else next.add(name);
-		shareProviderNames = next;
+	function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
+		const next = new Set(set);
+		if (next.has(value)) next.delete(value);
+		else next.add(value);
+		return next;
+	}
+
+	function toggleShareProvider(id: number) {
+		shareProviderIds = toggleInSet(shareProviderIds, id);
 		shareUrl = '';
 	}
 
 	function toggleShareQueue(name: string) {
-		const next = new Set(shareQueueNames);
-		if (next.has(name)) next.delete(name);
-		else next.add(name);
-		shareQueueNames = next;
+		shareQueueNames = toggleInSet(shareQueueNames, name);
 		shareUrl = '';
 	}
 
@@ -116,16 +98,18 @@
 		Promise.all([getAll(), ensureSubscribedLoaded()]).then(([all]) => {
 			items = all;
 			shareQueueNames = new Set(allShareQueues);
-			const subscribedProviderNames =
+			const subscribedProviderIds =
 				services.ids.size > 0
 					? new Set(
-							shareAllProviders.filter((p) => services.ids.has(p.provider_id)).map((p) => p.name)
+							shareAllProviders
+								.filter((p) => services.ids.has(p.provider_id))
+								.map((p) => p.provider_id)
 						)
-					: new Set<string>();
-			shareProviderNames =
-				subscribedProviderNames.size > 0
-					? subscribedProviderNames
-					: new Set(shareAllProviders.map((p) => p.name));
+					: new Set<number>();
+			shareProviderIds =
+				subscribedProviderIds.size > 0
+					? subscribedProviderIds
+					: new Set(shareAllProviders.map((p) => p.provider_id));
 			loaded = true;
 		});
 	});
@@ -211,10 +195,10 @@
 						Providers
 					</p>
 					<div class="flex flex-wrap gap-1.5">
-						{#each shareAllProviders as p (p.name)}
-							{@const on = shareProviderNames.has(p.name)}
+						{#each shareAllProviders as p (p.provider_id)}
+							{@const on = shareProviderIds.has(p.provider_id)}
 							<button
-								onclick={() => toggleShareProvider(p.name)}
+								onclick={() => toggleShareProvider(p.provider_id)}
 								class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors
 									{on
 									? 'bg-orange-50 text-orange-700 ring-orange-300 dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-800'

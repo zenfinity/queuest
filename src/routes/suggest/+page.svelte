@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { getAll } from '$lib/db';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { remainingRuntime } from '$lib/progress';
+	import { aggregateByProvider } from '$lib/progress';
 	import type { Suggestion } from '$lib/types';
 
 	let suggestions = $state<Suggestion[]>([]);
@@ -14,29 +14,15 @@
 		const unwatched = raw.filter((i) => !i.watched_at);
 		totalUnwatched = unwatched.length;
 
-		const byProvider = new Map<string, Suggestion>();
-		for (const item of unwatched) {
-			const mins = remainingRuntime(item);
-			for (const p of item.providers) {
-				const existing = byProvider.get(p.provider_name);
-				if (existing) {
-					existing.runtime_minutes += mins;
-					existing.title_count++;
-				} else {
-					byProvider.set(p.provider_name, {
-						provider_id: p.provider_id,
-						name: p.provider_name,
-						logo_path: p.logo_path,
-						runtime_minutes: mins,
-						title_count: 1
-					});
-				}
-			}
-		}
-
-		suggestions = Array.from(byProvider.values()).sort(
-			(a, b) => b.runtime_minutes - a.runtime_minutes
-		);
+		suggestions = aggregateByProvider(unwatched)
+			.map((agg): Suggestion => ({
+				provider_id: agg.provider_id,
+				name: agg.provider_name,
+				logo_path: agg.logo_path,
+				runtime_minutes: agg.totalMins,
+				title_count: agg.count
+			}))
+			.sort((a, b) => b.runtime_minutes - a.runtime_minutes);
 		loaded = true;
 	});
 

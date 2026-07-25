@@ -4,6 +4,7 @@
 	import { decryptWithKey } from '$lib/crypto';
 	import { parseSharePayload } from '$lib/share-schema';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
+	import { hms, DEFAULT_RUNTIME } from '$lib/progress';
 	import { addAllToQueue as addAllToQueueAction } from '$lib/share-token-actions';
 
 	let { data }: { data: { token: string } } = $props();
@@ -30,19 +31,13 @@
 		});
 	}
 
-	const DEFAULT: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
-
+	// Unlike remainingRuntime() (lib/progress.ts), ShareItem carries no
+	// watched_seasons for the recipient — every season counts toward the total.
 	function itemRuntime(item: ShareItem): number {
 		if (item.media_type === 'movie' || !item.seasons.length) {
-			return item.runtime_minutes ?? DEFAULT[item.media_type];
+			return item.runtime_minutes ?? DEFAULT_RUNTIME[item.media_type];
 		}
 		return item.seasons.reduce((s: number, season) => s + season.runtime_minutes, 0);
-	}
-
-	function hms(mins: number): string {
-		const h = Math.floor(mins / 60),
-			m = mins % 60;
-		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
 	}
 
 	let totalMins = $derived(items.reduce((s, i) => s + itemRuntime(i), 0));

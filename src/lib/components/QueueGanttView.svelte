@@ -5,7 +5,7 @@
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, resolvedHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
-	import { remainingRuntime } from '$lib/progress';
+	import { remainingRuntime, hms } from '$lib/progress';
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 
@@ -43,12 +43,6 @@
 		const h = mins / 60;
 		return `+${h % 1 === 0 ? h : h.toFixed(1)}h over`;
 	}
-	function hms(mins: number): string {
-		const h = Math.floor(mins / 60),
-			m = mins % 60;
-		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
-	}
-
 	let lanes = $derived.by((): Lane[] => {
 		const budgetMins = budgetHours * 60;
 		const map = new Map<string, Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }>();
