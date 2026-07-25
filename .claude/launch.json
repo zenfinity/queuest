@@ -3,14 +3,14 @@
   "configurations": [
     {
       "name": "Vite Dev",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd /Users/ianmoore/dev/streamq && npm run dev"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 5173
     },
     {
       "name": "Wrangler Preview",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd /Users/ianmoore/dev/streamq && npm run preview"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview"],
       "port": 8788
     }
   ]
