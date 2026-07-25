@@ -1,8 +1,6 @@
 import type { WatchlistItem, SharePayload } from './types';
-import { getAll } from './db';
 import { generateShareKey, encryptWithKey } from './crypto';
 import { getQueueName } from './queue-colors';
-import { remainingRuntime } from './progress';
 
 export interface ShareCreateActionDeps {
 	setShareCreating: (creating: boolean) => void;

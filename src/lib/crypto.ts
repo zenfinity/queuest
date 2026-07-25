@@ -69,7 +69,6 @@ export async function encrypt(data: string, passphrase: string): Promise<ArrayBu
  * files encrypted before the iteration bump.
  */
 export async function decrypt(buffer: ArrayBuffer, passphrase: string): Promise<string> {
-	const bytes = new Uint8Array(buffer);
 	const salt = new Uint8Array(buffer, 0, SALT_LEN);
 	const iv = new Uint8Array(buffer, SALT_LEN, IV_LEN);
 	const ciphertext = new Uint8Array(buffer, SALT_LEN + IV_LEN);

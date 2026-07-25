@@ -66,7 +66,7 @@ export async function toggleSeasonProgress(
 		? current.filter((s) => s !== seasonNum)
 		: [...current, seasonNum];
 	try {
-		await updateShowProgress(item.id, next, item.current_season, item.current_episode);
+		await updateShowProgress(item.id, next);
 		await reloadQueue(deps);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not update season progress.');

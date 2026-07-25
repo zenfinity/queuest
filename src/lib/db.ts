@@ -84,12 +84,7 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 	});
 }
 
-export async function updateShowProgress(
-	id: number,
-	watchedSeasons: number[],
-	currentSeason: number | null,
-	currentEpisode: number | null
-): Promise<void> {
+export async function updateShowProgress(id: number, watchedSeasons: number[]): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
@@ -98,8 +93,6 @@ export async function updateShowProgress(
 		get.onsuccess = () => {
 			const item = get.result as WatchlistItem;
 			item.watched_seasons = watchedSeasons;
-			item.current_season = currentSeason;
-			item.current_episode = currentEpisode;
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
 			put.onerror = () => reject(put.error);
@@ -115,7 +108,6 @@ export async function patchProviders(
 	release: WatchlistItem['release'],
 	seasons?: WatchlistItem['seasons'],
 	runtime_minutes?: number | null,
-	backdrop_path?: string | null,
 	genres?: string[],
 	cast?: WatchlistItem['cast'],
 	director?: string | null,
@@ -133,7 +125,6 @@ export async function patchProviders(
 			item.release = release;
 			if (seasons && seasons.length > 0) item.seasons = seasons;
 			if (runtime_minutes != null) item.runtime_minutes = runtime_minutes;
-			if (backdrop_path !== undefined) item.backdrop_path = backdrop_path;
 			if (genres !== undefined) item.genres = genres;
 			if (cast !== undefined) item.cast = cast;
 			if (director !== undefined) item.director = director;

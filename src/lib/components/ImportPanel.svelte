@@ -7,7 +7,7 @@
 	import { theme } from '$lib/theme.svelte';
 	import { setQueueName, setQueueColor } from '$lib/queue-colors';
 	import type { ImportRow } from '$lib/import';
-	import type { WatchlistItem, Provider } from '$lib/types';
+	import type { WatchlistItem } from '$lib/types';
 
 	// ── CSV import (Letterboxd / IMDb) ────────────────────────────────────────
 	let csvRows = $state<ImportRow[]>([]);

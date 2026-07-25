@@ -67,7 +67,6 @@ interface RuntimeResult {
 	/** Production company IDs from the TMDB response (movies; empty for TV) */
 	companyIds: number[];
 	release: import('./types').ReleaseInfo | null;
-	backdrop_path: string | null;
 	genres: string[];
 	cast: import('./types').CastMember[];
 	director: string | null;
@@ -92,7 +91,6 @@ export async function getRuntime(
 			networkIds: [],
 			companyIds: [],
 			release: null,
-			backdrop_path: null,
 			genres: [],
 			cast: [],
 			director: null,
@@ -104,7 +102,6 @@ export async function getRuntime(
 			runtime?: number;
 			status?: string;
 			release_date?: string;
-			backdrop_path?: string | null;
 			genres?: Array<{ id: number; name: string }>;
 			production_companies?: Array<{ id: number }>;
 			release_dates?: {
@@ -142,7 +139,6 @@ export async function getRuntime(
 			networkIds: [],
 			companyIds,
 			release,
-			backdrop_path: data.backdrop_path ?? null,
 			genres: (data.genres ?? []).map((g) => g.name),
 			cast,
 			director,
@@ -158,7 +154,6 @@ export async function getRuntime(
 		networks?: Array<{ id: number }>;
 		status?: string;
 		next_episode_to_air?: { air_date?: string; season_number?: number } | null;
-		backdrop_path?: string | null;
 		genres?: Array<{ id: number; name: string }>;
 		created_by?: Array<{ name: string }>;
 		credits?: {
@@ -204,7 +199,6 @@ export async function getRuntime(
 		networkIds,
 		companyIds: [],
 		release,
-		backdrop_path: data.backdrop_path ?? null,
 		genres: (data.genres ?? []).map((g) => g.name),
 		cast,
 		director: null,
@@ -338,7 +332,7 @@ const BUNDLE_NAME_RE = /bundle|with hulu|with disney|with max|\bvia\b|amazon cha
  * Disney+/Hulu pair disambiguation is handled upstream in augmentProviders(),
  * which has network/company context to determine which service is canonical.
  */
-export function filterProviders(providers: Provider[]): Provider[] {
+function filterProviders(providers: Provider[]): Provider[] {
 	const named = providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name));
 
 	// Deduplicate tier variants: if one name is a prefix of another

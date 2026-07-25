@@ -24,7 +24,6 @@ export const load: PageServerLoad = async ({ url }) => {
 						networkIds,
 						companyIds,
 						release,
-						backdrop_path,
 						genres,
 						cast,
 						director,
@@ -48,7 +47,6 @@ export const load: PageServerLoad = async ({ url }) => {
 					runtime_minutes,
 					seasons,
 					release,
-					backdrop_path,
 					genres,
 					cast,
 					director,
@@ -58,7 +56,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		);
 
 		return { results, query, error: null };
-	} catch (e) {
+	} catch {
 		// Never let a TMDB hiccup take down the whole page — surface it inline with a retry instead.
 		return {
 			results: [] as SearchResult[],

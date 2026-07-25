@@ -77,7 +77,7 @@
 	let budgetHours = $state(40); // user-adjustable month budget
 
 	// helper: best available hue for a provider
-	function resolvedHue(providerId: number | null, _logoPath: string | null): number | null {
+	function resolvedHue(providerId: number | null): number | null {
 		return providerId !== null ? providerHue(providerId) : null;
 	}
 
@@ -168,7 +168,7 @@
 		overMins: number;
 	};
 
-	let rawLanes = $derived.by((): Lane[] => {
+	let lanes = $derived.by((): Lane[] => {
 		const budgetMins = budgetHours * 60;
 		const list = sorted(visibleItems);
 		const map = new Map<string, Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }>();
@@ -222,8 +222,6 @@
 		}
 		return out;
 	});
-
-	let lanes = $derived(rawLanes);
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	let dbError = $state('');
@@ -552,10 +550,7 @@
 	{:else if queueControls.viewMode === 'grid'}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each flatItems as item (item.id)}
-				{@const cardHue = resolvedHue(
-					item.providers[0]?.provider_id ?? null,
-					item.providers[0]?.logo_path ?? null
-				)}
+				{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null)}
 				{@const cardPct = Math.min(100, (effectiveRuntime(item) / (budgetHours * 60)) * 100)}
 				{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 				{@const cardDot = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
@@ -730,10 +725,7 @@
 			{#each flatItems as item (item.id)}
 				{@const rt = effectiveRuntime(item)}
 				{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
-				{@const hue = resolvedHue(
-					item.providers[0]?.provider_id ?? null,
-					item.providers[0]?.logo_path ?? null
-				)}
+				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null)}
 				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 				{@const dotColor = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
@@ -931,7 +923,7 @@
 
 		<div class="space-y-1.5">
 			{#each lanes as lane (lane.key)}
-				{@const colors = laneColors(resolvedHue(lane.providerId, lane.logo), theme.dark)}
+				{@const colors = laneColors(resolvedHue(lane.providerId), theme.dark)}
 				{@const budgetMins = budgetHours * 60}
 
 				<div
@@ -1046,15 +1038,13 @@
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->
 {#if detailItem}
 	{@const di = detailItem}
-	{@const diHue = resolvedHue(
-		di.providers[0]?.provider_id ?? null,
-		di.providers[0]?.logo_path ?? null
-	)}
+	{@const diHue = resolvedHue(di.providers[0]?.provider_id ?? null)}
 	{@const diPct = Math.min(100, (effectiveRuntime(di) / (budgetHours * 60)) * 100)}
 	{@const diLine = diHue !== null ? `hsl(${diHue} 60% 52%)` : '#374151'}
 	{@const diDot = diHue !== null ? `hsl(${diHue} 70% 62%)` : '#4b5563'}
 	<!-- Scrim -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
 		onclick={() => {
@@ -1358,7 +1348,8 @@
 
 	<!-- Poster lightbox -->
 	{#if posterExpanded && di.poster_path}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
 			onclick={() => (posterExpanded = false)}

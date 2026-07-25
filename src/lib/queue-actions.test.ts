@@ -28,8 +28,6 @@ function makeItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
 		runtime_minutes: 100,
 		seasons: [],
 		watched_seasons: [],
-		current_season: null,
-		current_episode: null,
 		added_at: '2026-01-01T00:00:00.000Z',
 		watched_at: null,
 		...overrides
@@ -163,20 +161,18 @@ describe('removeQueueItem', () => {
 
 describe('toggleSeasonProgress', () => {
 	it('adds a season to watched_seasons and reloads', async () => {
-		const { state, deps } = makeDeps();
+		const { deps } = makeDeps();
 		const item = makeItem({
 			id: 2,
 			media_type: 'tv',
-			watched_seasons: [1],
-			current_season: 2,
-			current_episode: 3
+			watched_seasons: [1]
 		});
 		updateShowProgress.mockResolvedValue(undefined);
 		getAll.mockResolvedValue([]);
 
 		await toggleSeasonProgress(item, 2, deps);
 
-		expect(updateShowProgress).toHaveBeenCalledWith(2, [1, 2], 2, 3);
+		expect(updateShowProgress).toHaveBeenCalledWith(2, [1, 2]);
 	});
 
 	it('removes an already-watched season (toggles off)', async () => {
@@ -184,16 +180,14 @@ describe('toggleSeasonProgress', () => {
 		const item = makeItem({
 			id: 2,
 			media_type: 'tv',
-			watched_seasons: [1, 2],
-			current_season: null,
-			current_episode: null
+			watched_seasons: [1, 2]
 		});
 		updateShowProgress.mockResolvedValue(undefined);
 		getAll.mockResolvedValue([]);
 
 		await toggleSeasonProgress(item, 2, deps);
 
-		expect(updateShowProgress).toHaveBeenCalledWith(2, [1], null, null);
+		expect(updateShowProgress).toHaveBeenCalledWith(2, [1]);
 	});
 
 	it('surfaces a failure as an error message', async () => {

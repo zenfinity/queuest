@@ -2,10 +2,14 @@ import type { ReleaseInfo, WatchlistItem } from './types';
 
 // ── Release chip ──────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string, includeYear = true): string {
+function fmtDate(iso: string): string {
 	const d = new Date(iso + 'T00:00:00Z');
-	const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', timeZone: 'UTC' };
-	if (includeYear) opts.year = 'numeric';
+	const opts: Intl.DateTimeFormatOptions = {
+		month: 'short',
+		day: 'numeric',
+		year: 'numeric',
+		timeZone: 'UTC'
+	};
 	return d.toLocaleDateString('en-US', opts);
 }
 
@@ -88,22 +92,10 @@ export function remainingRuntime(item: WatchlistItem): number {
 
 	for (const season of item.seasons) {
 		if (watched.has(season.season_number)) continue;
-
-		if (
-			season.season_number === item.current_season &&
-			item.current_episode != null &&
-			item.current_episode > 0
-		) {
-			const perEp = season.episode_count > 0 ? season.runtime_minutes / season.episode_count : 0;
-			const episodesLeft = Math.max(0, season.episode_count - item.current_episode);
-			remaining += episodesLeft * perEp;
-		} else {
-			remaining += season.runtime_minutes;
-		}
+		remaining += season.runtime_minutes;
 	}
 
 	// If everything is marked watched, remaining is 0 — that's correct.
-	// But if seasons array is there but all empty for some reason, fall back.
 	return Math.round(remaining);
 }
 
@@ -150,16 +142,4 @@ export function cancelCandidates(
 			return !d || (now - new Date(d).getTime()) / 86400000 > 30;
 		})
 		.sort((a, b) => a.totalMins - b.totalMins);
-}
-
-/**
- * Returns a compact progress label for TV shows, e.g. "S1–S3 done · S4 E2"
- * Returns null for movies or items with no progress recorded.
- */
-export function progressLabel(item: WatchlistItem): string | null {
-	if (item.media_type !== 'tv') return null;
-	const watched = item.watched_seasons ?? [];
-	if (!watched.length) return null;
-	const sorted = [...watched].sort((a, b) => a - b);
-	return 'S' + sorted.join(' S') + ' done';
 }

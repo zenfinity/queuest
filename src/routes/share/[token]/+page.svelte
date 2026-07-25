@@ -52,8 +52,6 @@
 						runtime_minutes: s.runtime_minutes
 					})),
 					watched_seasons: [],
-					current_season: null,
-					current_episode: null,
 					release: null,
 					queue_tag: tag
 				});

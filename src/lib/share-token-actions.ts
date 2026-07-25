@@ -1,4 +1,4 @@
-import type { ShareItem, WatchlistItem } from './types';
+import type { ShareItem } from './types';
 import { addItem } from './db';
 import { getOrAssignColor } from './queue-colors';
 
@@ -46,8 +46,6 @@ export async function addAllToQueue(
 						runtime_minutes: s.runtime_minutes
 					})),
 					watched_seasons: [],
-					current_season: null,
-					current_episode: null,
 					release: null,
 					queue_tag: tag
 				});

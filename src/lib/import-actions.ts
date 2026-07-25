@@ -1,5 +1,5 @@
 import type { ImportRow } from './import';
-import type { WatchlistItem, Provider } from './types';
+import type { WatchlistItem } from './types';
 import { addItem, replaceAll, setServices } from './db';
 import { decrypt } from './crypto';
 import { parseImportBackup } from './share-schema';
@@ -24,7 +24,6 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 	if (!rows.length) return;
 	deps.setImporting(true);
 	deps.setImportError('');
-	const importTotal = rows.length;
 	let importDone = 0;
 	let importAdded = 0;
 	let missedTitles: string[] = [];

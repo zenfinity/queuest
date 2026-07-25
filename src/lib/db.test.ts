@@ -23,8 +23,6 @@ function makeItem(overrides: Partial<Omit<WatchlistItem, 'id' | 'added_at' | 'wa
 		runtime_minutes: 100,
 		seasons: [],
 		watched_seasons: [],
-		current_season: null,
-		current_episode: null,
 		...overrides
 	};
 }
@@ -77,11 +75,9 @@ describe('db: watchlist items', () => {
 	it('updates show progress', async () => {
 		await db.addItem(makeItem({ media_type: 'tv' }));
 		const [{ id }] = await db.getAll();
-		await db.updateShowProgress(id, [1, 2], 3, 5);
+		await db.updateShowProgress(id, [1, 2]);
 		const item = (await db.getAll())[0];
 		expect(item.watched_seasons).toEqual([1, 2]);
-		expect(item.current_season).toBe(3);
-		expect(item.current_episode).toBe(5);
 	});
 
 	it('replaceAll clears existing items and inserts the given ones', async () => {
@@ -97,8 +93,6 @@ describe('db: watchlist items', () => {
 			runtime_minutes: 90,
 			seasons: [],
 			watched_seasons: [],
-			current_season: null,
-			current_episode: null,
 			added_at: new Date().toISOString(),
 			watched_at: null
 		};

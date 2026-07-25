@@ -186,8 +186,6 @@ describe('parseImportBackup', () => {
 				runtime_minutes: 100,
 				seasons: [],
 				watched_seasons: [],
-				current_season: null,
-				current_episode: null,
 				added_at: '2026-01-01T00:00:00Z',
 				watched_at: null
 			}
@@ -211,8 +209,6 @@ describe('parseImportBackup', () => {
 					runtime_minutes: 2000,
 					seasons: [],
 					watched_seasons: [],
-					current_season: null,
-					current_episode: null,
 					added_at: '2026-01-01T00:00:00Z',
 					watched_at: null
 				}

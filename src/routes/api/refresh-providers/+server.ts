@@ -22,7 +22,6 @@ interface RefreshResult {
 		runtime_minutes: number;
 	}[];
 	runtime_minutes: number | null;
-	backdrop_path: string | null;
 	genres: string[];
 	cast: CastMember[];
 	director: string | null;
@@ -64,7 +63,6 @@ export const POST: RequestHandler = async ({ request }) => {
 						networkIds,
 						companyIds,
 						release,
-						backdrop_path,
 						genres,
 						cast,
 						director,
@@ -82,7 +80,6 @@ export const POST: RequestHandler = async ({ request }) => {
 					release: release ?? null,
 					seasons,
 					runtime_minutes,
-					backdrop_path,
 					genres,
 					cast,
 					director,
@@ -97,7 +94,6 @@ export const POST: RequestHandler = async ({ request }) => {
 					release: null,
 					seasons: [],
 					runtime_minutes: null,
-					backdrop_path: null,
 					genres: [],
 					cast: [],
 					director: null,

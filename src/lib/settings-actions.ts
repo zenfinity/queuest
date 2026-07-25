@@ -1,4 +1,4 @@
-import type { WatchlistItem, Provider } from './types';
+import type { Provider } from './types';
 import { getAll, replaceAll, patchProviders, getServices, setServices } from './db';
 import { encrypt } from './crypto';
 import { getQueueName, getQueueColors } from './queue-colors';
@@ -53,7 +53,6 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 	try {
 		const items = await getAll();
 		const payload = items.map(({ id, tmdb_id, media_type }) => ({ id, tmdb_id, media_type }));
-		const refreshTotal = payload.length;
 
 		if (!payload.length) {
 			deps.setRefreshSuccess(true);
@@ -75,7 +74,6 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 			release: any;
 			seasons?: any;
 			runtime_minutes?: number | null;
-			backdrop_path?: string | null;
 			genres?: string[];
 			cast?: any[];
 			director?: string | null;
@@ -90,7 +88,6 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 				r.release,
 				r.seasons,
 				r.runtime_minutes,
-				r.backdrop_path,
 				r.genres,
 				r.cast,
 				r.director,

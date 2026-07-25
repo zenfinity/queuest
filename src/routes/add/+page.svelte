@@ -42,10 +42,7 @@
 				runtime_minutes: result.runtime_minutes,
 				seasons: result.seasons,
 				watched_seasons: [],
-				current_season: null,
-				current_episode: null,
 				release: result.release,
-				backdrop_path: result.backdrop_path,
 				genres: result.genres,
 				cast: result.cast,
 				director: result.director,
@@ -284,7 +281,8 @@
 {#if detailItem}
 	{@const di = detailItem}
 	<!-- Scrim -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
 		onclick={() => {
@@ -509,7 +507,8 @@
 
 	<!-- Poster lightbox -->
 	{#if posterExpanded && di.poster_path}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
 			onclick={() => (posterExpanded = false)}

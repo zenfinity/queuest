@@ -5,7 +5,6 @@
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 
 	import { getQueueName, setQueueName, getQueueColors, setQueueColor } from '$lib/queue-colors';
-	import type { WatchlistItem, Provider } from '$lib/types';
 	import pkg from '../../../package.json';
 
 	const VERSION = pkg.version;
@@ -91,7 +90,6 @@
 				release: import('$lib/types').ReleaseInfo | null;
 				seasons?: import('$lib/types').WatchlistItem['seasons'];
 				runtime_minutes?: number | null;
-				backdrop_path?: string | null;
 				genres?: string[];
 				cast?: import('$lib/types').CastMember[];
 				director?: string | null;
@@ -107,7 +105,6 @@
 					r.release,
 					r.seasons,
 					r.runtime_minutes,
-					r.backdrop_path,
 					r.genres,
 					r.cast,
 					r.director,
@@ -505,12 +502,14 @@
 
 <!-- ── Feedback modal ─────────────────────────────────────────────────────── -->
 {#if feedbackOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
 		onclick={closeFeedback}
 	>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900"
 			onclick={(e) => e.stopPropagation()}
