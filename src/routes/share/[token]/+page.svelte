@@ -3,9 +3,8 @@
 	import type { ShareItem } from '$lib/types';
 	import { decryptWithKey } from '$lib/crypto';
 	import { parseSharePayload } from '$lib/share-schema';
-	import { addItem } from '$lib/db';
-	import { getOrAssignColor } from '$lib/queue-colors';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
+	import { addAllToQueue as addAllToQueueAction } from '$lib/share-token-actions';
 
 	let { data }: { data: { token: string } } = $props();
 
@@ -22,54 +21,13 @@
 
 	async function addAllToQueue() {
 		if (addingAll) return;
-		addingAll = true;
-		addError = '';
-		const fallbackTag = queueName || 'Shared List';
-		getOrAssignColor(fallbackTag);
-		let added = 0;
-		let dupes = 0;
-		for (const item of items) {
-			const tag = item.queue_tag || fallbackTag;
-			if (tag !== fallbackTag) getOrAssignColor(tag);
-			try {
-				await addItem({
-					tmdb_id: item.tmdb_id,
-					media_type: item.media_type,
-					title: item.title,
-					poster_path: item.poster_path,
-					overview: null,
-					providers: item.providers.map((p) => ({
-						provider_id: p.provider_id,
-						provider_name: p.provider_name,
-						logo_path: p.logo_path
-					})),
-					rentable: false,
-					runtime_minutes: item.runtime_minutes,
-					seasons: (item.seasons ?? []).map((s) => ({
-						season_number: s.season_number,
-						episode_count: 0,
-						name: '',
-						runtime_minutes: s.runtime_minutes
-					})),
-					watched_seasons: [],
-					release: null,
-					queue_tag: tag
-				});
-				added++;
-			} catch (err) {
-				if (err instanceof DOMException && err.name === 'ConstraintError') {
-					dupes++;
-				} else {
-					const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-					console.error('addItem failed for', item.title, err);
-					if (!addError) addError = msg;
-				}
-			}
-		}
-		addedCount = added;
-		skipCount = dupes;
-		addDone = true;
-		addingAll = false;
+		await addAllToQueueAction(items, queueName, {
+			setAddingAll: (v) => (addingAll = v),
+			setAddedCount: (v) => (addedCount = v),
+			setSkipCount: (v) => (skipCount = v),
+			setAddDone: (v) => (addDone = v),
+			setAddError: (v) => (addError = v)
+		});
 	}
 
 	const DEFAULT: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };

@@ -2,11 +2,11 @@
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { addItem } from '$lib/db';
 	import { releaseChip } from '$lib/progress';
 	import { page, navigating } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
+	import { addSearchResultToQueue } from '$lib/add-actions';
 
 	let isOnboarding = $derived(page.url.searchParams.has('onboarding'));
 
@@ -25,42 +25,26 @@
 	let posterExpanded = $state(false);
 
 	async function addToQueue(result: SearchResult) {
-		adding = new Set(adding).add(result.id);
-		const nextErrors = new Map(errors);
-		nextErrors.delete(result.id);
-		errors = nextErrors;
-
-		try {
-			await addItem({
-				tmdb_id: result.id,
-				media_type: result.media_type,
-				title: result.title,
-				poster_path: result.poster_path,
-				overview: result.overview,
-				providers: result.providers,
-				rentable: result.rentable,
-				runtime_minutes: result.runtime_minutes,
-				seasons: result.seasons,
-				watched_seasons: [],
-				release: result.release,
-				genres: result.genres,
-				cast: result.cast,
-				director: result.director,
-				creator: result.creator
-			});
-			added = new Set(added).add(result.id);
-		} catch (e) {
-			if (e instanceof DOMException && e.name === 'ConstraintError') {
-				added = new Set(added).add(result.id);
-			} else {
-				const msg = e instanceof Error ? e.message : 'Failed to add';
-				errors = new Map(errors).set(result.id, msg);
+		await addSearchResultToQueue(result, {
+			setAdding: (id, isAdding) => {
+				const next = new Set(adding);
+				if (isAdding) next.add(id);
+				else next.delete(id);
+				adding = next;
+			},
+			setAdded: (id, isAdded) => {
+				const next = new Set(added);
+				if (isAdded) next.add(id);
+				else next.delete(id);
+				added = next;
+			},
+			setError: (id, message) => {
+				const next = new Map(errors);
+				if (message) next.set(id, message);
+				else next.delete(id);
+				errors = next;
 			}
-		} finally {
-			const nextAdding = new Set(adding);
-			nextAdding.delete(result.id);
-			adding = nextAdding;
-		}
+		});
 	}
 </script>
 

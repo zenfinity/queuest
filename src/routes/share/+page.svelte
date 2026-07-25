@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { WatchlistItem, SharePayload } from '$lib/types';
+	import type { WatchlistItem } from '$lib/types';
 	import { getAll } from '$lib/db';
 	import { TMDB_IMG } from '$lib/tmdb';
 	import { remainingRuntime } from '$lib/progress';
-	import { generateShareKey, encryptWithKey } from '$lib/crypto';
-	import { getQueueName, getQueueColors } from '$lib/queue-colors';
+	import { getQueueColors } from '$lib/queue-colors';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
+	import { createShareLink as createShareLinkAction } from '$lib/share-create-actions';
 
 	let items = $state<WatchlistItem[]>([]);
 	let loaded = $state(false);
@@ -94,43 +94,11 @@
 
 	async function createShareLink() {
 		if (!shareFiltered.length || shareCreating) return;
-		shareCreating = true;
-		shareUrl = '';
-		shareError = '';
-		try {
-			const activeQueues = allShareQueues.filter((q) => shareQueueNames.has(q));
-			const payload: SharePayload = {
-				v: 1,
-				queue_name: activeQueues.length === 1 ? activeQueues[0] : getQueueName(),
-				items: shareFiltered.map((item) => ({
-					tmdb_id: item.tmdb_id,
-					media_type: item.media_type,
-					title: item.title,
-					poster_path: item.poster_path,
-					providers: item.providers,
-					runtime_minutes: item.runtime_minutes,
-					seasons: (item.seasons ?? []).map((s) => ({
-						season_number: s.season_number,
-						runtime_minutes: s.runtime_minutes
-					})),
-					queue_tag: item.queue_tag ?? null
-				}))
-			};
-			const key = await generateShareKey();
-			const blob = await encryptWithKey(JSON.stringify(payload), key);
-			const res = await fetch('/api/share', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/octet-stream' },
-				body: blob
-			});
-			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-			const { token } = (await res.json()) as { token: string };
-			shareUrl = `${window.location.origin}/share/${token}#${key}`;
-		} catch (e) {
-			shareError = e instanceof Error ? e.message : 'Failed to create share link.';
-		} finally {
-			shareCreating = false;
-		}
+		await createShareLinkAction(shareFiltered, shareQueueNames, allShareQueues, {
+			setShareCreating: (v) => (shareCreating = v),
+			setShareUrl: (v) => (shareUrl = v),
+			setShareError: (v) => (shareError = v)
+		});
 	}
 
 	async function copyShareUrl() {
