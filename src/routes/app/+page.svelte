@@ -19,9 +19,7 @@
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
-
-	// ── Constants ─────────────────────────────────────────────────────────────
-	const DEFAULT_RUNTIME: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
+	import QueueListView from '$lib/components/QueueListView.svelte';
 
 	function effectiveRuntime(item: WatchlistItem): number {
 		return remainingRuntime(item);
@@ -606,190 +604,16 @@
 
 		<!-- ── LIST ─────────────────────────────────────────────────────────────── -->
 	{:else if queueControls.viewMode === 'list'}
-		<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
-			{#each flatItems as item (item.id)}
-				{@const rt = effectiveRuntime(item)}
-				{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
-				{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null)}
-				{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
-				{@const dotColor = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
-				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div
-					animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-					class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer"
-					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
-					onclick={(e) => {
-						e.stopPropagation();
-						detailItem = item;
-					}}
-					role="button"
-					tabindex="0"
-					aria-label="View details for {item.title}"
-					onkeydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							detailItem = item;
-						}
-					}}
-				>
-					<!-- Row 1: poster · title · actions -->
-					<div class="flex items-center gap-3">
-						<div
-							class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800"
-						>
-							{#if item.poster_path}
-								<img
-									src="{TMDB_IMG}/w92{item.poster_path}"
-									alt={item.title}
-									class="h-full w-full object-cover"
-								/>
-							{:else}
-								<div
-									class="flex h-full w-full items-center justify-center text-sm text-gray-400 dark:text-gray-600"
-								>
-									🎬
-								</div>
-							{/if}
-						</div>
-						<button
-							class="min-w-0 flex-1 text-left text-sm font-medium leading-tight hover:text-orange-500 transition-colors"
-							onclick={(e) => {
-								e.stopPropagation();
-								detailItem = item;
-							}}
-							data-detail-trigger>{item.title}</button
-						>
-						{#if queueControls.watchedOn && item.watched_at}
-							<span
-								class="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900/60 dark:text-teal-400"
-								>✓</span
-							>
-						{/if}
-						<div class="flex shrink-0 gap-1">
-							<button
-								class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-								disabled={busy.has(item.id)}
-								onclick={(e) => {
-									e.stopPropagation();
-									toggle(item);
-								}}
-							>
-								{item.watched_at ? 'Unwatch' : '✓'}
-							</button>
-							<button
-								class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-								disabled={busy.has(item.id)}
-								onclick={(e) => {
-									e.stopPropagation();
-									remove(item);
-								}}
-								aria-label="Remove">✕</button
-							>
-						</div>
-					</div>
-
-					<!-- Row 2: type chip · provider icons · sparkline · runtime -->
-					<div class="ml-11 mt-1.5 flex items-center gap-2">
-						<span
-							class="shrink-0 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-						>
-							{item.media_type === 'movie' ? '🎬' : '📺'}
-						</span>
-						{#if item.providers.length > 0}
-							<div class="flex shrink-0 gap-0.5">
-								{#each item.providers.slice(0, 3) as p (p.provider_id)}
-									<img
-										src="{TMDB_IMG}/w92{p.logo_path}"
-										alt={p.provider_name}
-										title={p.provider_name}
-										class="h-3.5 w-3.5 rounded"
-									/>
-								{/each}
-								{#if item.providers.length > 3}
-									<span class="text-[9px] text-gray-400 dark:text-gray-600"
-										>+{item.providers.length - 3}</span
-									>
-								{/if}
-							</div>
-						{:else if item.rentable}
-							<span class="shrink-0 text-xs leading-none" title="Rent/Buy only">💲</span>
-						{:else}
-							{@const isOpen = libraryPopupId === item.id}
-							<div class="relative shrink-0" data-library-popup>
-								<button
-									class="text-xs leading-none transition-opacity hover:opacity-60"
-									onclick={(e) => {
-										e.stopPropagation();
-										libraryPopupId = isOpen ? null : item.id;
-									}}
-									title="Not on streaming services">🚫</button
-								>
-								{#if isOpen}
-									<div
-										class="absolute top-full left-0 z-20 mt-1 w-max rounded-lg bg-white px-3 py-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-700"
-									>
-										<p class="mb-1.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500">
-											Check your library
-										</p>
-										<div class="flex flex-col gap-1">
-											<a
-												href="https://www.kanopy.com/en/search?query={encodeURIComponent(
-													item.title
-												)}"
-												target="_blank"
-												rel="noopener noreferrer"
-												class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400"
-												>Kanopy →</a
-											>
-											<a
-												href="https://www.hoopladigital.com/search?q={encodeURIComponent(
-													item.title
-												)}"
-												target="_blank"
-												rel="noopener noreferrer"
-												class="text-[11px] text-gray-600 hover:text-orange-500 dark:text-gray-400 dark:hover:text-orange-400"
-												>Hoopla →</a
-											>
-										</div>
-									</div>
-								{/if}
-							</div>
-						{/if}
-						<div class="relative min-w-0 flex-1">
-							<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
-							<div
-								class="absolute top-0 left-0 h-px transition-all duration-300"
-								style="width:{pct}%; background:{lineColor}; opacity:0.7;"
-							></div>
-							<div
-								class="absolute top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full transition-all duration-300"
-								style="left:{pct}%; margin-left:-3px; background:{dotColor};"
-							></div>
-						</div>
-						<span class="shrink-0 w-12 text-right text-[10px] tabular-nums text-gray-500">
-							{#if item.runtime_minutes}
-								{formatRuntime(effectiveRuntime(item), item.media_type)}
-							{:else}
-								<span class="italic">~{hms(DEFAULT_RUNTIME[item.media_type])}</span>
-							{/if}
-						</span>
-					</div>
-
-					<!-- Row 3: release chip (movies only; TV shows it in the season chip row) -->
-					{#if item.media_type === 'movie' && releaseChip(item.release)}
-						<p class="ml-11 mt-0.5 text-[10px] leading-snug text-amber-500 dark:text-amber-400">
-							{releaseChip(item.release)}
-						</p>
-					{/if}
-
-					<!-- Row 4: season picker -->
-					{#if item.media_type === 'tv' && (item.seasons?.length || releaseChip(item.release))}
-						<div class="ml-11 mt-1">
-							{@render seasonPicker(item)}
-						</div>
-					{/if}
-				</div>
-			{/each}
-		</div>
+		<QueueListView
+			items={flatItems}
+			{budgetHours}
+			{busy}
+			{queueColors}
+			onToggle={toggle}
+			onRemove={remove}
+			onOpenDetail={(item) => (detailItem = item)}
+			{seasonPicker}
+		/>
 
 		<!-- ── GANTT LANES ────────────────────────────────────────────────────────── -->
 	{:else}
