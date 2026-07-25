@@ -137,7 +137,9 @@ export async function patchProviders(
 	});
 }
 
-export async function replaceAll(items: WatchlistItem[]): Promise<void> {
+export async function replaceAll(
+	items: (Omit<WatchlistItem, 'id'> & { id?: number })[]
+): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');

@@ -79,12 +79,25 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 export async function replaceAllItems(
 	items: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>[]
 ): Promise<void> {
-	const fullItems: WatchlistItem[] = items.map((item, idx) => ({
-		...item,
-		id: idx,
-		added_at: new Date().toISOString(),
-		watched_at: null
-	}));
+	// parseImportBackup's declared type omits id/added_at/watched_at, but at
+	// runtime it passes the raw object through unmodified (see share-schema.ts),
+	// so a backup produced by buildExportBlob still carries the real values here.
+	// Preserve them when present rather than stamping every item as "added just
+	// now, never watched" — and never reuse the exported id: ids are IndexedDB
+	// autoIncrement, so they're device-local and would collide with (or
+	// silently shadow) whatever this device already assigned to other items.
+	const fullItems = items.map((item) => {
+		const { added_at, watched_at } = item as unknown as {
+			added_at?: unknown;
+			watched_at?: unknown;
+		};
+		const { id: _id, ...rest } = item as unknown as Partial<WatchlistItem>;
+		return {
+			...(rest as Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>),
+			added_at: typeof added_at === 'string' ? added_at : new Date().toISOString(),
+			watched_at: typeof watched_at === 'string' ? watched_at : null
+		};
+	});
 	await replaceAll(fullItems);
 }
 

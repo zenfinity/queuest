@@ -179,14 +179,38 @@ describe('importRows', () => {
 });
 
 describe('replaceAllItems', () => {
-	it('renumbers ids sequentially and delegates to replaceAll', async () => {
+	it('drops ids (device-local, must not round-trip) and delegates to replaceAll', async () => {
 		replaceAll.mockResolvedValue(undefined);
 		await replaceAllItems([makeItem({ title: 'A' }), makeItem({ title: 'B' })]);
 
 		expect(replaceAll).toHaveBeenCalledTimes(1);
 		const [written] = replaceAll.mock.calls[0];
-		expect(written.map((i: WatchlistItem) => i.id)).toEqual([0, 1]);
-		expect(written.every((i: WatchlistItem) => i.watched_at === null)).toBe(true);
+		expect(written.every((i: WatchlistItem) => !('id' in i))).toBe(true);
+	});
+
+	it('preserves added_at and watched_at from the payload instead of stamping them fresh', async () => {
+		replaceAll.mockResolvedValue(undefined);
+		const original = {
+			...makeItem({ title: 'Arrival' }),
+			id: 7,
+			added_at: '2024-03-01T00:00:00.000Z',
+			watched_at: '2024-04-01T00:00:00.000Z'
+		};
+
+		await replaceAllItems([original as unknown as ReturnType<typeof makeItem>]);
+
+		const [written] = replaceAll.mock.calls[0];
+		expect(written[0].added_at).toBe('2024-03-01T00:00:00.000Z');
+		expect(written[0].watched_at).toBe('2024-04-01T00:00:00.000Z');
+	});
+
+	it('falls back to a fresh added_at and unwatched state when the payload has neither', async () => {
+		replaceAll.mockResolvedValue(undefined);
+		await replaceAllItems([makeItem({ title: 'A' })]);
+
+		const [written] = replaceAll.mock.calls[0];
+		expect(typeof written[0].added_at).toBe('string');
+		expect(written[0].watched_at).toBeNull();
 	});
 });
 

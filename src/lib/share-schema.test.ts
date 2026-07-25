@@ -230,6 +230,16 @@ describe('parseImportBackup', () => {
 		expect(result.services).toHaveLength(1);
 	});
 
+	it('accepts "lanes" as a valid view (ViewKey, not the pre-rename "gantt")', () => {
+		const result = parseImportBackup({ items: [], prefs: { view: 'lanes' } });
+		expect(result.prefs?.view).toBe('lanes');
+	});
+
+	it('rejects the stale pre-rename "gantt" view value', () => {
+		const result = parseImportBackup({ items: [], prefs: { view: 'gantt' } });
+		expect(result.prefs?.view).toBeUndefined();
+	});
+
 	it('filters out invalid items', () => {
 		const backup = {
 			items: [

@@ -191,7 +191,7 @@ export function parseImportBackup(raw: unknown): {
 		...(typeof prefs.sort === 'string' && ['added', 'runtime', 'title'].includes(prefs.sort)
 			? { sort: prefs.sort }
 			: {}),
-		...(typeof prefs.view === 'string' && ['grid', 'list', 'gantt'].includes(prefs.view)
+		...(typeof prefs.view === 'string' && ['grid', 'list', 'lanes'].includes(prefs.view)
 			? { view: prefs.view }
 			: {})
 	};

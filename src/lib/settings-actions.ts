@@ -139,12 +139,16 @@ export async function resetEverything(): Promise<void> {
 		'sq:budget',
 		'sq:budget:weekly',
 		'sq:budget:weeks',
+		'sq:budget-callout-dismissed',
 		'sq:sort',
+		'sq:sortDir',
 		'sq:view',
-		'sq:queue-name',
-		'sq:queue-colors',
+		'sq:queue:name',
+		'sq:queue:colors',
 		'sq:welcomed',
-		'sq:import-missed'
+		'sq:import-missed',
+		'sq:cancel-alerts',
+		'sq:dismiss-cancel'
 	];
 	for (const k of keys) {
 		try {

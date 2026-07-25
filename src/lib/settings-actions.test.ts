@@ -250,4 +250,27 @@ describe('resetEverything', () => {
 		expect(replaceAll).toHaveBeenCalledWith([]);
 		expect(setServices).toHaveBeenCalledWith([]);
 	});
+
+	it('removes the actual localStorage keys the app writes, not stale hyphenated names', async () => {
+		replaceAll.mockResolvedValue(undefined);
+		setServices.mockResolvedValue(undefined);
+		const removeItem = vi.fn();
+		vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem });
+
+		await resetEverything();
+
+		const removed = removeItem.mock.calls.map((c) => c[0]);
+		// queue-colors.ts writes these with colons, not hyphens — asserting the
+		// real names guards against the sq:queue-name / sq:queue-colors typo
+		// that let "Reset everything" leave the queue name and colors behind.
+		expect(removed).toContain('sq:queue:name');
+		expect(removed).toContain('sq:queue:colors');
+		expect(removed).not.toContain('sq:queue-name');
+		expect(removed).not.toContain('sq:queue-colors');
+		// Previously missing from the reset list entirely.
+		expect(removed).toContain('sq:sortDir');
+		expect(removed).toContain('sq:cancel-alerts');
+		expect(removed).toContain('sq:dismiss-cancel');
+		expect(removed).toContain('sq:budget-callout-dismissed');
+	});
 });
