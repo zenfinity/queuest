@@ -24,6 +24,11 @@ export function providerHue(providerId: number): number {
 	return BRAND_HUES[providerId] ?? Math.round((providerId * 137.508) % 360);
 }
 
+// ── Best available hue for a provider id, or null if there isn't one ──────
+export function resolvedHue(providerId: number | null): number | null {
+	return providerId !== null ? providerHue(providerId) : null;
+}
+
 // ── Lane colour palette from a known hue ─────────────────────────────────
 export function laneColors(
 	hue: number | null,
