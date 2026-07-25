@@ -6,6 +6,7 @@
 	import { page, navigating } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
+	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import { addSearchResultToQueue } from '$lib/add-actions';
 
 	let isOnboarding = $derived(page.url.searchParams.has('onboarding'));
@@ -21,8 +22,13 @@
 	let added = $state(new Set<number>());
 	let errors = $state(new Map<number, string>());
 	let detailItem: SearchResult | null = $state(null);
-	let overviewExpanded = $state(false);
-	let posterExpanded = $state(false);
+
+	// DetailPanel's runtime lollipop is relative to the monthly budget, same as
+	// the queue page — read once rather than making this page track budget state.
+	let budgetHours = $state(40);
+	try {
+		budgetHours = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
+	} catch {}
 
 	async function addToQueue(result: SearchResult) {
 		await addSearchResultToQueue(result, {
@@ -47,17 +53,6 @@
 		});
 	}
 </script>
-
-<svelte:document
-	onclick={(e) => {
-		const t = e.target as HTMLElement;
-		if (!t.closest('[data-detail-panel]') && !t.closest('[data-detail-trigger]')) {
-			detailItem = null;
-			overviewExpanded = false;
-			posterExpanded = false;
-		}
-	}}
-/>
 
 <svelte:head>
 	<title>Queuest — Add</title>
@@ -108,10 +103,7 @@
 					<!-- svelte-ignore a11y_consider_explicit_label -->
 					<button
 						class="relative aspect-[2/3] overflow-hidden bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
-						onclick={() => {
-							detailItem = result;
-							overviewExpanded = false;
-						}}
+						onclick={() => (detailItem = result)}
 						data-detail-trigger
 						aria-label="View details for {result.title}"
 					>
@@ -264,244 +256,29 @@
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->
 {#if detailItem}
 	{@const di = detailItem}
-	<!-- Scrim -->
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-		onclick={() => {
-			detailItem = null;
-			overviewExpanded = false;
-			posterExpanded = false;
-		}}
-	></div>
-
-	<!-- Panel: bottom sheet on mobile, right drawer on sm+ -->
-	<div
-		class="fixed bottom-0 inset-x-0 z-50 flex max-h-[90vh] flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-gray-900 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[22rem] sm:max-h-none sm:rounded-t-none sm:rounded-l-2xl"
-		data-detail-panel
-	>
-		<!-- Title bar -->
-		<div
-			class="shrink-0 flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800"
-		>
-			<h2 class="truncate pr-2 text-sm font-semibold text-gray-900 dark:text-white">{di.title}</h2>
-			<button
-				onclick={() => {
-					detailItem = null;
-					overviewExpanded = false;
-					posterExpanded = false;
-				}}
-				class="shrink-0 rounded-full p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-				aria-label="Close"
-			>
-				<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"
-					><path
-						d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
-					/></svg
+	<DetailPanel item={di} {budgetHours} showSeasons={false} onClose={() => (detailItem = null)}>
+		{#snippet footer(item)}
+			<div class="w-full">
+				<button
+					class="w-full rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50
+						{added.has(item.id)
+						? 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400'
+						: 'bg-orange-500 text-white hover:bg-orange-400'}"
+					disabled={adding.has(item.id) || added.has(item.id)}
+					onclick={() => addToQueue(di)}
 				>
-			</button>
-		</div>
-
-		<!-- Scrollable content -->
-		<div class="flex-1 overflow-y-auto">
-			<!-- Hero: poster + meta -->
-			<div class="flex gap-3 px-4 pt-4 pb-3">
-				{#if di.poster_path}
-					<button
-						class="w-20 shrink-0 self-start rounded-lg shadow-md overflow-hidden cursor-zoom-in"
-						onclick={() => (posterExpanded = true)}
-						aria-label="Expand poster"
-					>
-						<img
-							src="{TMDB_IMG}/w185{di.poster_path}"
-							alt={di.title}
-							class="w-full h-full object-cover"
-						/>
-					</button>
-				{/if}
-				<div class="min-w-0">
-					<div
-						class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400"
-					>
-						{#if di.year}<span>{di.year}</span>{/if}
-						<span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-800"
-							>{di.media_type === 'movie' ? '🎬 Movie' : '📺 TV'}</span
-						>
-						{#if di.director}<span>Dir. {di.director}</span>{/if}
-						{#if di.creator}<span>Created by {di.creator}</span>{/if}
-					</div>
-					{#if di.genres?.length}
-						<div class="mt-1.5 flex flex-wrap gap-1">
-							{#each di.genres as g (g)}
-								<span
-									class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-									>{g}</span
-								>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<div class="space-y-4 px-4 pb-4">
-				<!-- Overview -->
-				{#if di.overview}
-					<div>
-						<p
-							class="text-xs leading-relaxed text-gray-600 dark:text-gray-400
-							{overviewExpanded ? '' : 'line-clamp-4'}"
-						>
-							{di.overview}
-						</p>
-						{#if di.overview.length > 200}
-							<button
-								onclick={() => {
-									overviewExpanded = !overviewExpanded;
-								}}
-								class="mt-1 text-[10px] font-medium text-orange-500 hover:text-orange-400"
-								>{overviewExpanded ? 'Less' : 'More'}</button
-							>
-						{/if}
-					</div>
-				{/if}
-
-				<!-- Runtime -->
-				{#if di.runtime_minutes}
-					<div class="text-xs text-gray-500 dark:text-gray-400">
-						🕐 {formatRuntime(di.runtime_minutes, di.media_type)}
-					</div>
-				{/if}
-
-				<!-- Cast -->
-				{#if di.cast?.length}
-					<div>
-						<p
-							class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-						>
-							Cast
-						</p>
-						<div class="flex gap-2 overflow-x-auto pb-1">
-							{#each di.cast as c (c.name)}
-								<div class="flex shrink-0 flex-col items-center gap-1 w-14">
-									<div class="h-12 w-12 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
-										{#if c.profile_path}
-											<img
-												src="{TMDB_IMG}/w185{c.profile_path}"
-												alt={c.name}
-												class="h-full w-full object-cover"
-											/>
-										{:else}
-											<div
-												class="flex h-full w-full items-center justify-center text-lg text-gray-400"
-											>
-												👤
-											</div>
-										{/if}
-									</div>
-									<p
-										class="text-center text-[9px] font-medium leading-tight text-gray-700 dark:text-gray-300 line-clamp-2"
-									>
-										{c.name}
-									</p>
-									<p
-										class="text-center text-[9px] leading-tight text-gray-400 dark:text-gray-600 line-clamp-1"
-									>
-										{c.character}
-									</p>
-								</div>
-							{/each}
-						</div>
-					</div>
-				{/if}
-
-				<!-- Where to watch -->
-				<div>
-					<p
-						class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-					>
-						Where to watch
-					</p>
-					{#if di.providers.length}
-						<div class="flex flex-wrap gap-2">
-							{#each di.providers as p (p.provider_id)}
-								<div class="flex items-center gap-1.5">
-									<img
-										src="{TMDB_IMG}/w92{p.logo_path}"
-										alt={p.provider_name}
-										class="h-6 w-6 rounded-lg"
-									/>
-									<span class="text-xs text-gray-600 dark:text-gray-400">{p.provider_name}</span>
-								</div>
-							{/each}
-						</div>
-					{:else if di.rentable}
-						<p class="text-xs text-gray-500">💲 Available to rent or buy</p>
+					{#if adding.has(item.id)}
+						Adding…
+					{:else if added.has(item.id)}
+						✓ Added to Queue
 					{:else}
-						<div class="space-y-1">
-							<p class="text-xs text-gray-500">🚫 Not on streaming services</p>
-							<div class="flex gap-3">
-								<a
-									href="https://www.kanopy.com/en/search?query={encodeURIComponent(di.title)}"
-									target="_blank"
-									rel="noopener noreferrer"
-									class="text-xs text-orange-500 hover:text-orange-400">Kanopy →</a
-								>
-								<a
-									href="https://www.hoopladigital.com/search?q={encodeURIComponent(di.title)}"
-									target="_blank"
-									rel="noopener noreferrer"
-									class="text-xs text-orange-500 hover:text-orange-400">Hoopla →</a
-								>
-							</div>
-						</div>
+						+ Add to Queue
 					{/if}
-				</div>
-
-				<!-- Release info -->
-				{#if releaseChip(di.release)}
-					<p class="text-xs text-amber-600 dark:text-amber-400">{releaseChip(di.release)}</p>
+				</button>
+				{#if errors.has(item.id)}
+					<p class="mt-1.5 text-center text-xs text-red-500">{errors.get(item.id)}</p>
 				{/if}
 			</div>
-		</div>
-
-		<!-- Sticky footer: add to queue -->
-		<div class="shrink-0 border-t border-gray-100 px-4 py-3 dark:border-gray-800">
-			<button
-				class="w-full rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50
-					{added.has(di.id)
-					? 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400'
-					: 'bg-orange-500 text-white hover:bg-orange-400'}"
-				disabled={adding.has(di.id) || added.has(di.id)}
-				onclick={() => addToQueue(di)}
-			>
-				{#if adding.has(di.id)}
-					Adding…
-				{:else if added.has(di.id)}
-					✓ Added to Queue
-				{:else}
-					+ Add to Queue
-				{/if}
-			</button>
-			{#if errors.has(di.id)}
-				<p class="mt-1.5 text-center text-xs text-red-500">{errors.get(di.id)}</p>
-			{/if}
-		</div>
-	</div>
-
-	<!-- Poster lightbox -->
-	{#if posterExpanded && di.poster_path}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
-			onclick={() => (posterExpanded = false)}
-		>
-			<img
-				src="{TMDB_IMG}/w500{di.poster_path}"
-				alt={di.title}
-				class="max-h-full max-w-full rounded-xl shadow-2xl"
-			/>
-		</div>
-	{/if}
+		{/snippet}
+	</DetailPanel>
 {/if}
