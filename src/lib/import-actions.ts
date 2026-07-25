@@ -172,7 +172,7 @@ export async function fetchCsvFromUrl(
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ url: url.trim() })
 		});
-		if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+		await throwIfNotOk(res);
 		return parseImportCSV(await res.text());
 	} catch (e) {
 		throw e instanceof Error ? e : new Error('Failed to fetch URL.');

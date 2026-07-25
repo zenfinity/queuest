@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { b64urlEncode } from '$lib/base64url';
+import { apiError, checkSameOrigin } from '$lib/server/api';
 
 const TOKEN_BYTES = 9; // → 12 base64url chars
 const MAX_BYTES = 512_000;
@@ -15,18 +16,15 @@ function makeToken(): string {
 }
 
 export const POST: RequestHandler = async ({ request, platform }) => {
-	const fetchSite = request.headers.get('Sec-Fetch-Site');
-	if (fetchSite && fetchSite !== 'same-origin') {
-		return new Response('Forbidden', { status: 403 });
-	}
+	const originError = checkSameOrigin(request);
+	if (originError) return originError;
 
 	const kv = platform?.env?.SHARE_KV;
-	if (!kv) return new Response('Sharing unavailable', { status: 503 });
+	if (!kv) return apiError(503, 'Sharing unavailable');
 
 	const body = await request.arrayBuffer();
-	if (body.byteLength < MIN_BYTES)
-		return new Response('Payload too small to be valid', { status: 400 });
-	if (body.byteLength > MAX_BYTES) return new Response('Payload too large', { status: 413 });
+	if (body.byteLength < MIN_BYTES) return apiError(400, 'Payload too small to be valid');
+	if (body.byteLength > MAX_BYTES) return apiError(413, 'Payload too large');
 
 	const token = makeToken();
 	await kv.put(`s:${token}`, body, { expirationTtl: TTL });
@@ -35,13 +33,13 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 export const GET: RequestHandler = async ({ url, platform }) => {
 	const kv = platform?.env?.SHARE_KV;
-	if (!kv) return new Response('Sharing unavailable', { status: 503 });
+	if (!kv) return apiError(503, 'Sharing unavailable');
 
 	const token = url.searchParams.get('t') ?? '';
-	if (!token || token.length > 20) return new Response('Bad token', { status: 400 });
+	if (!token || token.length > 20) return apiError(400, 'Bad token');
 
 	const blob = await kv.get(`s:${token}`, 'arrayBuffer');
-	if (!blob) return new Response('Not found or expired', { status: 404 });
+	if (!blob) return apiError(404, 'Not found or expired');
 
 	return new Response(blob, {
 		headers: {

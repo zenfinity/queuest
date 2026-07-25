@@ -169,7 +169,11 @@ describe('importRows', () => {
 
 	it('surfaces a non-ok batch response as an error', async () => {
 		const { state, deps } = makeImportDeps();
-		fetchMock.mockResolvedValue({ ok: false, statusText: 'Bad Gateway', text: async () => 'boom' });
+		fetchMock.mockResolvedValue({
+			ok: false,
+			statusText: 'Bad Gateway',
+			json: async () => ({ error: 'boom' })
+		});
 
 		await importRows([{ title: 'Arrival', year: null, mediaTypeHint: 'auto' }], deps);
 
@@ -299,9 +303,11 @@ describe('fetchCsvFromUrl', () => {
 	});
 
 	it('throws when both the direct fetch and the proxy fail', async () => {
-		fetchMock
-			.mockRejectedValueOnce(new Error('CORS blocked'))
-			.mockResolvedValueOnce({ ok: false, statusText: 'Not Found', text: async () => 'no' });
+		fetchMock.mockRejectedValueOnce(new Error('CORS blocked')).mockResolvedValueOnce({
+			ok: false,
+			statusText: 'Not Found',
+			json: async () => ({ error: 'no' })
+		});
 
 		await expect(fetchCsvFromUrl('https://example.com/x.csv')).rejects.toThrow('no');
 	});

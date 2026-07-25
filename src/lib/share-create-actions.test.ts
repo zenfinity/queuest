@@ -117,7 +117,7 @@ describe('createShareLink', () => {
 		fetchMock.mockResolvedValue({
 			ok: false,
 			statusText: 'Payload too large',
-			text: async () => 'boom'
+			json: async () => ({ error: 'boom' })
 		});
 
 		await createShareLink([makeItem()], new Set(), [], deps);

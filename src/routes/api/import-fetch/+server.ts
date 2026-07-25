@@ -1,4 +1,5 @@
-import { text, error } from '@sveltejs/kit';
+import { text } from '@sveltejs/kit';
+import { apiError, checkSameOrigin } from '$lib/server/api';
 import type { RequestHandler } from './$types';
 
 const ALLOWED_HOSTS = new Set([
@@ -23,26 +24,23 @@ function encodeQueryPlus(urlStr: string): string {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	// Same-origin guard — Sec-Fetch-Site is set by all modern browsers
-	const fetchSite = request.headers.get('Sec-Fetch-Site');
-	if (fetchSite && fetchSite !== 'same-origin') {
-		throw error(403, 'Forbidden');
-	}
+	const originError = checkSameOrigin(request);
+	if (originError) return originError;
 
 	const { url } = (await request.json()) as { url: string };
 	if (!url || typeof url !== 'string') {
-		throw error(400, 'Invalid request');
+		return apiError(400, 'Invalid request');
 	}
 
 	let parsed: URL;
 	try {
 		parsed = new URL(url);
 	} catch {
-		throw error(400, 'Invalid URL');
+		return apiError(400, 'Invalid URL');
 	}
 
 	if (parsed.protocol !== 'https:' || !ALLOWED_HOSTS.has(parsed.hostname)) {
-		throw error(400, 'URL not permitted');
+		return apiError(400, 'URL not permitted');
 	}
 
 	let res: Response;
@@ -52,18 +50,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			signal: AbortSignal.timeout(TIMEOUT_MS),
 			redirect: 'follow'
 		});
-	} catch (e) {
-		throw error(502, `Could not reach URL: ${e instanceof Error ? e.message : String(e)}`);
+	} catch {
+		// Don't leak the upstream exception message to the client
+		return apiError(502, 'Could not reach the URL. Please try again.');
 	}
 
 	if (!res.ok) {
-		throw error(502, `HTTP ${res.status}`);
+		return apiError(502, `HTTP ${res.status}`);
 	}
 
 	// Cap response size before reading into memory
 	const contentLength = res.headers.get('content-length');
 	if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_BYTES) {
-		throw error(413, 'Response too large');
+		return apiError(413, 'Response too large');
 	}
 
 	const reader = res.body?.getReader();
@@ -77,7 +76,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		total += value.byteLength;
 		if (total > MAX_RESPONSE_BYTES) {
 			reader.cancel();
-			throw error(413, 'Response too large');
+			return apiError(413, 'Response too large');
 		}
 		chunks.push(value);
 	}

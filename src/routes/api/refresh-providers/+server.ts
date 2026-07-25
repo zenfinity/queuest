@@ -1,8 +1,11 @@
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import { getWatchProviders, getRuntime, augmentProviders } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
+import { apiError, checkSameOrigin } from '$lib/server/api';
 import type { RequestHandler } from './$types';
 import type { Provider, ReleaseInfo, CastMember } from '$lib/types';
+
+const MAX_ITEMS = 100;
 
 interface RefreshRequest {
 	id: number;
@@ -29,28 +32,27 @@ interface RefreshResult {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	// Same-origin guard
-	const fetchSite = request.headers.get('Sec-Fetch-Site');
-	if (fetchSite && fetchSite !== 'same-origin') {
-		throw error(403, 'Forbidden');
-	}
+	const originError = checkSameOrigin(request);
+	if (originError) return originError;
 
 	const apiKey = env.TMDB_API_KEY ?? '';
-	if (!apiKey) throw error(503, 'TMDB API key not configured');
+	if (!apiKey) return apiError(503, 'TMDB API key not configured');
 
 	const items = (await request.json()) as RefreshRequest[];
-	if (!Array.isArray(items) || items.length === 0) {
-		return json([] as RefreshResult[]);
+	if (!Array.isArray(items)) {
+		return apiError(400, 'Expected an array of items');
+	}
+	if (items.length === 0) return json([] as RefreshResult[]);
+	if (items.length > MAX_ITEMS) {
+		return apiError(400, `Too many items (max ${MAX_ITEMS})`);
 	}
 
-	// Validate and cap batch
-	const valid = items.filter(
+	const batch = items.filter(
 		(r) =>
 			Number.isInteger(r?.id) &&
 			Number.isInteger(r?.tmdb_id) &&
 			(r?.media_type === 'movie' || r?.media_type === 'tv')
 	);
-	const batch = valid.slice(0, 100);
 
 	const results: RefreshResult[] = await Promise.all(
 		batch.map(async ({ id, tmdb_id, media_type }) => {

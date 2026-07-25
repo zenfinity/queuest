@@ -122,8 +122,8 @@ export async function submitFeedback(
 			body: JSON.stringify({ title, body })
 		});
 		if (!res.ok) {
-			const msg = await res.text().catch(() => res.statusText);
-			deps.setFeedbackError(msg || 'Something went wrong.');
+			const data = await res.json().catch(() => null);
+			deps.setFeedbackError(data?.error || 'Something went wrong.');
 		} else {
 			const data = await res.json();
 			deps.setFeedbackIssueUrl(data.url);

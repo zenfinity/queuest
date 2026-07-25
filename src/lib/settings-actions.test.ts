@@ -175,7 +175,7 @@ describe('refreshProviders', () => {
 			ok: false,
 			status: 500,
 			statusText: 'Internal Server Error',
-			text: async () => 'boom'
+			json: async () => ({ error: 'boom' })
 		});
 
 		await refreshProviders(deps);
@@ -222,7 +222,7 @@ describe('submitFeedback', () => {
 		fetchMock.mockResolvedValue({
 			ok: false,
 			statusText: 'Bad Request',
-			text: async () => 'Title too long'
+			json: async () => ({ error: 'Title too long' })
 		});
 
 		await submitFeedback('Bug report', 'details', deps);

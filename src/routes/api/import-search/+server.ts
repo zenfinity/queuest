@@ -1,8 +1,9 @@
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { searchMulti, getWatchProviders, getRuntime, augmentProviders } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
 import type { WatchlistItem } from '$lib/types';
+import { apiError, checkSameOrigin } from '$lib/server/api';
 
 const BATCH_LIMIT = 30;
 const CONCURRENCY = 3; // max simultaneous TMDB searches (each uses ~3 API calls)
@@ -23,11 +24,8 @@ async function pooled<T, R>(items: T[], limit: number, fn: (item: T) => Promise<
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	// Same-origin guard
-	const fetchSite = request.headers.get('Sec-Fetch-Site');
-	if (fetchSite && fetchSite !== 'same-origin') {
-		throw error(403, 'Forbidden');
-	}
+	const originError = checkSameOrigin(request);
+	if (originError) return originError;
 
 	const apiKey = env.TMDB_API_KEY ?? '';
 	const body = (await request.json()) as Array<{
@@ -36,8 +34,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		mediaTypeHint: 'movie' | 'tv' | 'auto';
 	}>;
 
-	if (!Array.isArray(body) || body.length > BATCH_LIMIT) {
-		return new Response('Bad request', { status: 400 });
+	if (!Array.isArray(body)) {
+		return apiError(400, 'Expected an array of items');
+	}
+	if (body.length === 0) return json([]);
+	if (body.length > BATCH_LIMIT) {
+		return apiError(400, `Too many items (max ${BATCH_LIMIT})`);
 	}
 
 	const results = await pooled(body, CONCURRENCY, async ({ title, year, mediaTypeHint }) => {
