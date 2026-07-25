@@ -7,7 +7,10 @@ const LEGACY_ITERATIONS = 200_000;
 
 // Mirrors crypto.ts's private deriveKey(), used here only to construct a
 // buffer encrypted at the legacy iteration count for the fallback test.
-async function deriveLegacyKey(passphrase: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+async function deriveLegacyKey(
+	passphrase: string,
+	salt: Uint8Array<ArrayBuffer>
+): Promise<CryptoKey> {
 	const keyMaterial = await crypto.subtle.importKey(
 		'raw',
 		new TextEncoder().encode(passphrase),
@@ -28,7 +31,11 @@ async function encryptLegacy(data: string, passphrase: string): Promise<ArrayBuf
 	const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
 	const iv = crypto.getRandomValues(new Uint8Array(IV_LEN));
 	const key = await deriveLegacyKey(passphrase, salt);
-	const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(data));
+	const ciphertext = await crypto.subtle.encrypt(
+		{ name: 'AES-GCM', iv },
+		key,
+		new TextEncoder().encode(data)
+	);
 	const out = new Uint8Array(SALT_LEN + IV_LEN + ciphertext.byteLength);
 	out.set(salt, 0);
 	out.set(iv, SALT_LEN);

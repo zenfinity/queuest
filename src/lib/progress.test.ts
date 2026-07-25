@@ -32,7 +32,9 @@ describe('remainingRuntime', () => {
 	});
 
 	it('falls back to the TV default when a show has no season data and no runtime_minutes', () => {
-		expect(remainingRuntime(makeItem({ media_type: 'tv', runtime_minutes: null, seasons: [] }))).toBe(45);
+		expect(
+			remainingRuntime(makeItem({ media_type: 'tv', runtime_minutes: null, seasons: [] }))
+		).toBe(45);
 	});
 
 	it('subtracts fully-watched seasons for a TV show', () => {

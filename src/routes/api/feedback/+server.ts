@@ -22,7 +22,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { title, body } = await request.json();
 	if (!title?.trim()) throw error(400, 'Title is required');
 	if (typeof title !== 'string' || title.length > TITLE_MAX) throw error(400, 'Title too long');
-	if (body !== undefined && (typeof body !== 'string' || body.length > BODY_MAX)) throw error(400, 'Body too long');
+	if (body !== undefined && (typeof body !== 'string' || body.length > BODY_MAX))
+		throw error(400, 'Body too long');
 
 	const res = await fetch(GITHUB_API, {
 		method: 'POST',

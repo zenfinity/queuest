@@ -55,7 +55,11 @@ export function releaseChip(r: ReleaseInfo | null | undefined): string | null {
 		if (r.streaming_estimate) {
 			// Show month + year only for estimates
 			const d = new Date(r.streaming_estimate + 'T00:00:00Z');
-			const est = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+			const est = d.toLocaleDateString('en-US', {
+				month: 'short',
+				year: 'numeric',
+				timeZone: 'UTC'
+			});
 			parts.push(`Est. streaming ~${est}`);
 		}
 		return parts.join(' · ') || null;
@@ -90,8 +94,7 @@ export function remainingRuntime(item: WatchlistItem): number {
 			item.current_episode != null &&
 			item.current_episode > 0
 		) {
-			const perEp =
-				season.episode_count > 0 ? season.runtime_minutes / season.episode_count : 0;
+			const perEp = season.episode_count > 0 ? season.runtime_minutes / season.episode_count : 0;
 			const episodesLeft = Math.max(0, season.episode_count - item.current_episode);
 			remaining += episodesLeft * perEp;
 		} else {
@@ -129,7 +132,12 @@ export function cancelCandidates(
 		if (!item.providers.length) continue;
 		const p = item.providers[0];
 		if (!map.has(p.provider_id)) {
-			map.set(p.provider_id, { providerId: p.provider_id, name: p.provider_name, logo: p.logo_path, totalMins: 0 });
+			map.set(p.provider_id, {
+				providerId: p.provider_id,
+				name: p.provider_name,
+				logo: p.logo_path,
+				totalMins: 0
+			});
 		}
 		map.get(p.provider_id)!.totalMins += remainingRuntime(item);
 	}

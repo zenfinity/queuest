@@ -6,7 +6,9 @@ export function openWelcome() {
 
 export function closeWelcome() {
 	welcomeState.show = false;
-	try { localStorage.setItem('sq:welcomed', '1'); } catch {}
+	try {
+		localStorage.setItem('sq:welcomed', '1');
+	} catch {}
 }
 
 export function initWelcome() {

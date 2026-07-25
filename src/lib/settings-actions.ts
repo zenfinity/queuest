@@ -21,14 +21,23 @@ export async function buildExportBlob(
 	const payload = {
 		version: 1,
 		prefs: {
-			theme: typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') ? 'dark' : 'light' : 'light',
+			theme:
+				typeof document !== 'undefined'
+					? document.documentElement.classList.contains('dark')
+						? 'dark'
+						: 'light'
+					: 'light',
 			weeklyHours,
 			weeksPerMonth,
 			budget: weeklyHours * weeksPerMonth,
 			queueName: getQueueName(),
 			queueColors: getQueueColors(),
-			sort: typeof localStorage !== 'undefined' ? localStorage.getItem('sq:sort') ?? 'added' : 'added',
-			view: typeof localStorage !== 'undefined' ? localStorage.getItem('sq:view') ?? 'grid' : 'grid'
+			sort:
+				typeof localStorage !== 'undefined'
+					? (localStorage.getItem('sq:sort') ?? 'added')
+					: 'added',
+			view:
+				typeof localStorage !== 'undefined' ? (localStorage.getItem('sq:view') ?? 'grid') : 'grid'
 		},
 		items,
 		services
@@ -37,9 +46,7 @@ export async function buildExportBlob(
 	return new Blob([buf], { type: 'application/octet-stream' });
 }
 
-export async function refreshProviders(
-	deps: SettingsActionDeps
-): Promise<void> {
+export async function refreshProviders(deps: SettingsActionDeps): Promise<void> {
 	deps.setRefreshing(true);
 	deps.setRefreshError('');
 	deps.setRefreshSuccess(false);
@@ -61,7 +68,7 @@ export async function refreshProviders(
 
 		if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
 
-		const results = await res.json() as Array<{
+		const results = (await res.json()) as Array<{
 			id: number;
 			providers: Provider[];
 			rentable?: boolean;
@@ -76,7 +83,19 @@ export async function refreshProviders(
 		}>;
 
 		for (const r of results) {
-			await patchProviders(r.id, r.providers, r.rentable ?? false, r.release, r.seasons, r.runtime_minutes, r.backdrop_path, r.genres, r.cast, r.director, r.creator);
+			await patchProviders(
+				r.id,
+				r.providers,
+				r.rentable ?? false,
+				r.release,
+				r.seasons,
+				r.runtime_minutes,
+				r.backdrop_path,
+				r.genres,
+				r.cast,
+				r.director,
+				r.creator
+			);
 			deps.setRefreshDone(results.indexOf(r) + 1);
 		}
 		deps.setRefreshSuccess(true);
@@ -115,10 +134,22 @@ export async function submitFeedback(
 
 export async function resetEverything(): Promise<void> {
 	await Promise.all([replaceAll([]), setServices([])]);
-	const keys = ['sq:theme','sq:budget','sq:budget:weekly','sq:budget:weeks',
-	               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed','sq:import-missed'];
+	const keys = [
+		'sq:theme',
+		'sq:budget',
+		'sq:budget:weekly',
+		'sq:budget:weeks',
+		'sq:sort',
+		'sq:view',
+		'sq:queue-name',
+		'sq:queue-colors',
+		'sq:welcomed',
+		'sq:import-missed'
+	];
 	for (const k of keys) {
-		try { localStorage.removeItem(k); } catch {}
+		try {
+			localStorage.removeItem(k);
+		} catch {}
 	}
 	if (typeof window !== 'undefined') {
 		window.location.href = '/';

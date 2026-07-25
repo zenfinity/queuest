@@ -7,7 +7,7 @@ const ALLOWED_HOSTS = new Set([
 	'letterboxd.com',
 	'www.letterboxd.com',
 	'www.imdb.com',
-	'imdb.com',
+	'imdb.com'
 ]);
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -29,7 +29,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const { url } = await request.json() as { url: string };
+	const { url } = (await request.json()) as { url: string };
 	if (!url || typeof url !== 'string') {
 		throw error(400, 'Invalid request');
 	}
@@ -50,7 +50,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		res = await fetch(encodeQueryPlus(url), {
 			headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Queuest/1.0)' },
 			signal: AbortSignal.timeout(TIMEOUT_MS),
-			redirect: 'follow',
+			redirect: 'follow'
 		});
 	} catch (e) {
 		throw error(502, `Could not reach URL: ${e instanceof Error ? e.message : String(e)}`);
@@ -84,6 +84,9 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const merged = new Uint8Array(total);
 	let offset = 0;
-	for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+	for (const chunk of chunks) {
+		merged.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
 	return text(new TextDecoder().decode(merged));
 };

@@ -57,70 +57,85 @@
 	});
 
 	function start() {
-		try { localStorage.setItem('sq:welcomed', '1'); } catch {}
+		try {
+			localStorage.setItem('sq:welcomed', '1');
+		} catch {}
 		goto('/budget?onboarding=1');
 	}
 </script>
 
 <svelte:head><title>Queuest — Know when to cancel</title></svelte:head>
 
-<style>
-	@keyframes qfloat {
-		0%, 100% { transform: translateY(0); }
-		50%       { transform: translateY(-12px); }
-	}
-	.mock-float { animation: qfloat 7s ease-in-out infinite; }
-</style>
-
 <div class="relative overflow-hidden">
-
 	<!-- Ambient glow blobs -->
-	<div data-parallax="0.12" class="pointer-events-none absolute -right-28 -top-44 z-0 h-[520px] w-[520px] rounded-full"
-		style="background:radial-gradient(circle,color-mix(in srgb,#f97316 26%,transparent),transparent 68%);filter:blur(20px)"></div>
-	<div data-parallax="0.06" class="pointer-events-none absolute -left-40 top-[520px] z-0 h-[460px] w-[460px] rounded-full"
-		style="background:radial-gradient(circle,color-mix(in srgb,#14b8a6 18%,transparent),transparent 70%);filter:blur(20px)"></div>
+	<div
+		data-parallax="0.12"
+		class="pointer-events-none absolute -right-28 -top-44 z-0 h-[520px] w-[520px] rounded-full"
+		style="background:radial-gradient(circle,color-mix(in srgb,#f97316 26%,transparent),transparent 68%);filter:blur(20px)"
+	></div>
+	<div
+		data-parallax="0.06"
+		class="pointer-events-none absolute -left-40 top-[520px] z-0 h-[460px] w-[460px] rounded-full"
+		style="background:radial-gradient(circle,color-mix(in srgb,#14b8a6 18%,transparent),transparent 70%);filter:blur(20px)"
+	></div>
 
 	<!-- ─── HERO ─────────────────────────────────────────────────────── -->
 	<section id="top" class="relative z-10 mx-auto max-w-5xl px-6 pb-14 pt-16">
 		<div class="grid grid-cols-1 items-center gap-14 lg:grid-cols-2">
-
 			<!-- Copy -->
 			<div class="max-w-[560px]">
-				<h1 data-reveal class="mb-5 text-[clamp(36px,5.4vw,60px)] font-extrabold leading-[1.04] tracking-[-1.8px]">
+				<h1
+					data-reveal
+					class="mb-5 text-[clamp(36px,5.4vw,60px)] font-extrabold leading-[1.04] tracking-[-1.8px]"
+				>
 					Find out which streaming services are actually worth it.
 				</h1>
-				<p data-reveal class="mb-7 max-w-[480px] text-lg leading-relaxed text-gray-600 dark:text-gray-400">
-					Add the shows and movies you actually want to watch, see which service has them, and cancel everything else.
+				<p
+					data-reveal
+					class="mb-7 max-w-[480px] text-lg leading-relaxed text-gray-600 dark:text-gray-400"
+				>
+					Add the shows and movies you actually want to watch, see which service has them, and
+					cancel everything else.
 				</p>
 				<div data-reveal class="flex flex-wrap items-center gap-3">
-					<button onclick={start}
-						class="rounded-2xl bg-orange-500 px-7 py-3.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110">
+					<button
+						onclick={start}
+						class="rounded-2xl bg-orange-500 px-7 py-3.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
+					>
 						Start your queue
 					</button>
-					<a href="#how"
-						class="rounded-2xl bg-gray-100 px-6 py-3.5 text-[15px] font-semibold text-gray-900 transition-[filter] hover:brightness-95 dark:bg-gray-800 dark:text-gray-100">
+					<a
+						href="#how"
+						class="rounded-2xl bg-gray-100 px-6 py-3.5 text-[15px] font-semibold text-gray-900 transition-[filter] hover:brightness-95 dark:bg-gray-800 dark:text-gray-100"
+					>
 						See how it works
 					</a>
 				</div>
-				<p data-reveal class="mt-5 text-[13px] text-gray-500">No card required · Free while in beta</p>
+				<p data-reveal class="mt-5 text-[13px] text-gray-500">
+					No card required · Free while in beta
+				</p>
 			</div>
 
 			<!-- Product mock — always dark -->
 			<div data-reveal class="relative z-10">
-				<div class="{motion.reduced ? '' : 'mock-float'} overflow-hidden rounded-[20px]"
-					style="background:#0c1117;border:1px solid #1d2535;box-shadow:0 32px 64px -24px rgba(0,0,0,0.55)">
-
+				<div
+					class="{motion.reduced ? '' : 'mock-float'} overflow-hidden rounded-[20px]"
+					style="background:#0c1117;border:1px solid #1d2535;box-shadow:0 32px 64px -24px rgba(0,0,0,0.55)"
+				>
 					<!-- Mock header + tab switcher -->
-					<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #1d2535">
+					<div
+						style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #1d2535"
+					>
 						<span style="font-size:13px;font-weight:700;color:#e5e7eb">Your Queue</span>
 						<div style="display:flex;gap:2px;background:#161d2c;padding:3px;border-radius:8px">
-							{#each ([['cards','Grid'],['list','List'],['timeline','Gantt']] as const) as [t, label] (t)}
+							{#each [['cards', 'Grid'], ['list', 'List'], ['timeline', 'Gantt']] as const as [t, label] (t)}
 								<button
 									onclick={() => (tab = t)}
 									style:background={tab === t ? '#1e2736' : 'transparent'}
 									style:color={tab === t ? '#e5e7eb' : '#6b7280'}
 									style="border:none;cursor:pointer;border-radius:5px;padding:4px 9px;font-size:11px;font-weight:600;transition:background .15s,color .15s"
-								>{label}</button>
+									>{label}</button
+								>
 							{/each}
 						</div>
 					</div>
@@ -128,21 +143,33 @@
 					<!-- GANTT tab -->
 					{#if tab === 'timeline'}
 						<div style="padding:14px 14px 10px">
-							<div style="display:flex;justify-content:space-between;font-size:10px;color:#4b5563;margin-bottom:8px;padding-left:118px">
+							<div
+								style="display:flex;justify-content:space-between;font-size:10px;color:#4b5563;margin-bottom:8px;padding-left:118px"
+							>
 								<span>0</span><span>40h / mo</span>
 							</div>
 							<!-- Hulu -->
-							<div style="background:#0c1a0f;border:1px solid #1a3020;border-radius:11px;margin-bottom:8px;display:flex;overflow:hidden">
+							<div
+								style="background:#0c1a0f;border:1px solid #1a3020;border-radius:11px;margin-bottom:8px;display:flex;overflow:hidden"
+							>
 								<div style="width:108px;flex:none;padding:12px;border-right:1px solid #1a3020">
-									<div style="width:32px;height:32px;border-radius:9px;background:#1ce783;display:flex;align-items:center;justify-content:center;margin-bottom:6px">
+									<div
+										style="width:32px;height:32px;border-radius:9px;background:#1ce783;display:flex;align-items:center;justify-content:center;margin-bottom:6px"
+									>
 										<span style="font-size:9px;font-weight:900;color:#000">hulu</span>
 									</div>
-									<div style="font-size:11px;font-weight:700;color:#1ce783;margin-bottom:2px">Hulu</div>
+									<div style="font-size:11px;font-weight:700;color:#1ce783;margin-bottom:2px">
+										Hulu
+									</div>
 									<div style="font-size:9px;color:#4b5563">2 titles · 27h 43m</div>
 								</div>
 								<div style="flex:1;padding:12px;display:flex;align-items:center">
-									<div style="display:flex;align-items:center;gap:7px;background:#112218;border:1px solid #1c3a24;border-radius:7px;padding:7px 10px;width:62%">
-										<div style="width:22px;height:30px;border-radius:4px;background:#1c3a24;flex:none"></div>
+									<div
+										style="display:flex;align-items:center;gap:7px;background:#112218;border:1px solid #1c3a24;border-radius:7px;padding:7px 10px;width:62%"
+									>
+										<div
+											style="width:22px;height:30px;border-radius:4px;background:#1c3a24;flex:none"
+										></div>
 										<div>
 											<div style="font-size:11px;font-weight:600;color:#e5e7eb">The Bear</div>
 											<div style="font-size:9px;color:#1ce783">~26h</div>
@@ -151,94 +178,169 @@
 								</div>
 							</div>
 							<!-- Apple TV -->
-							<div style="background:#0c1420;border:1px solid #1a2436;border-radius:11px;display:flex;overflow:hidden;position:relative">
+							<div
+								style="background:#0c1420;border:1px solid #1a2436;border-radius:11px;display:flex;overflow:hidden;position:relative"
+							>
 								<div style="width:108px;flex:none;padding:12px;border-right:1px solid #1a2436">
-									<div style="width:32px;height:32px;border-radius:9px;background:#1d1d1f;border:1px solid #333;display:flex;align-items:center;justify-content:center;margin-bottom:6px">
+									<div
+										style="width:32px;height:32px;border-radius:9px;background:#1d1d1f;border:1px solid #333;display:flex;align-items:center;justify-content:center;margin-bottom:6px"
+									>
 										<span style="font-size:13px">📺</span>
 									</div>
-									<div style="font-size:11px;font-weight:700;color:#4da6ff;margin-bottom:2px">Apple TV</div>
+									<div style="font-size:11px;font-weight:700;color:#4da6ff;margin-bottom:2px">
+										Apple TV
+									</div>
 									<div style="font-size:9px;color:#4b5563">2 titles · 41h 38m</div>
 								</div>
-								<div style="flex:1;padding:12px;display:flex;align-items:center;gap:4px;overflow:hidden;position:relative">
-									<div style="display:flex;align-items:center;gap:7px;background:#0e1e30;border:1px solid #1a2e44;border-radius:7px;padding:7px 9px;flex:none;width:30%">
-										<div style="width:22px;height:30px;border-radius:4px;background:#1a2e44;flex:none"></div>
+								<div
+									style="flex:1;padding:12px;display:flex;align-items:center;gap:4px;overflow:hidden;position:relative"
+								>
+									<div
+										style="display:flex;align-items:center;gap:7px;background:#0e1e30;border:1px solid #1a2e44;border-radius:7px;padding:7px 9px;flex:none;width:30%"
+									>
+										<div
+											style="width:22px;height:30px;border-radius:4px;background:#1a2e44;flex:none"
+										></div>
 										<div>
 											<div style="font-size:11px;font-weight:600;color:#e5e7eb">Severance</div>
 											<div style="font-size:9px;color:#4da6ff">~13h</div>
 										</div>
 									</div>
-									<div style="display:flex;align-items:center;gap:7px;background:#0e1e30;border:1px solid #1a2e44;border-radius:7px;padding:7px 9px;flex:none;width:40%">
-										<div style="width:22px;height:30px;border-radius:4px;background:#1a2e44;flex:none"></div>
+									<div
+										style="display:flex;align-items:center;gap:7px;background:#0e1e30;border:1px solid #1a2e44;border-radius:7px;padding:7px 9px;flex:none;width:40%"
+									>
+										<div
+											style="width:22px;height:30px;border-radius:4px;background:#1a2e44;flex:none"
+										></div>
 										<div>
 											<div style="font-size:11px;font-weight:600;color:#e5e7eb">Ted Lasso</div>
 											<div style="font-size:9px;color:#4da6ff">~29h</div>
 										</div>
 									</div>
-									<div style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:#f97316;color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap">+1.6h over</div>
+									<div
+										style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:#f97316;color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap"
+									>
+										+1.6h over
+									</div>
 								</div>
 							</div>
-							<div style="text-align:center;font-size:9px;color:#374151;margin-top:9px">bar width = runtime · budget = 40h / mo</div>
+							<div style="text-align:center;font-size:9px;color:#374151;margin-top:9px">
+								bar width = runtime · budget = 40h / mo
+							</div>
 						</div>
 
-					<!-- LIST tab -->
+						<!-- LIST tab -->
 					{:else if tab === 'list'}
 						<div style="padding:6px 8px 8px">
-							<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #1d2535">
-								<div style="width:30px;height:44px;border-radius:5px;flex:none;background:linear-gradient(145deg,#2a3a1a,#3d5c28)"></div>
+							<div
+								style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #1d2535"
+							>
+								<div
+									style="width:30px;height:44px;border-radius:5px;flex:none;background:linear-gradient(145deg,#2a3a1a,#3d5c28)"
+								></div>
 								<div style="flex:1;min-width:0">
-									<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">The Princess Bride</div>
+									<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">
+										The Princess Bride
+									</div>
 									<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
-										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#1ce783;color:#000">hulu</span>
-										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#e8242d;color:#fff">fubo</span>
+										<span
+											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#1ce783;color:#000"
+											>hulu</span
+										>
+										<span
+											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#e8242d;color:#fff"
+											>fubo</span
+										>
 									</div>
 									<div style="display:flex;align-items:center;gap:7px">
-										<div style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative">
+										<div
+											style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative"
+										>
 											<div style="width:18%;height:100%;border-radius:2px;background:#1ce783"></div>
-											<div style="position:absolute;left:18%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"></div>
+											<div
+												style="position:absolute;left:18%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"
+											></div>
 										</div>
 										<span style="font-size:10px;color:#6b7280;white-space:nowrap">1h 39m</span>
 									</div>
 								</div>
 								<div style="display:flex;gap:3px">
-									<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center">✓</button>
-									<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center">×</button>
+									<button
+										style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
+										>✓</button
+									>
+									<button
+										style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
+										>×</button
+									>
 								</div>
 							</div>
 							<div style="display:flex;align-items:center;gap:10px;padding:10px">
-								<div style="width:30px;height:44px;border-radius:5px;flex:none;background:linear-gradient(145deg,#1a2535,#2a3d55)"></div>
+								<div
+									style="width:30px;height:44px;border-radius:5px;flex:none;background:linear-gradient(145deg,#1a2535,#2a3d55)"
+								></div>
 								<div style="flex:1;min-width:0">
-									<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">The Bear</div>
-									<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px;flex-wrap:wrap">
-										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#1ce783;color:#000">hulu</span>
+									<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">
+										The Bear
+									</div>
+									<div
+										style="display:flex;align-items:center;gap:4px;margin-bottom:5px;flex-wrap:wrap"
+									>
+										<span
+											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#1ce783;color:#000"
+											>hulu</span
+										>
 										<div style="display:flex;gap:2px">
-											{#each ['S1','S2','S3','S4'] as s}
-												<span style="font-size:8px;padding:2px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600">{s}</span>
+											{#each ['S1', 'S2', 'S3', 'S4'] as s (s)}
+												<span
+													style="font-size:8px;padding:2px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600"
+													>{s}</span
+												>
 											{/each}
-											<span style="font-size:8px;padding:2px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600">S5</span>
+											<span
+												style="font-size:8px;padding:2px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600"
+												>S5</span
+											>
 										</div>
 									</div>
 									<div style="display:flex;align-items:center;gap:7px">
-										<div style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative">
+										<div
+											style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative"
+										>
 											<div style="width:82%;height:100%;border-radius:2px;background:#1ce783"></div>
-											<div style="position:absolute;left:82%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"></div>
+											<div
+												style="position:absolute;left:82%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"
+											></div>
 										</div>
 										<span style="font-size:10px;color:#6b7280;white-space:nowrap">~26h</span>
 									</div>
 								</div>
 								<div style="display:flex;gap:3px">
-									<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center">✓</button>
-									<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center">×</button>
+									<button
+										style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
+										>✓</button
+									>
+									<button
+										style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
+										>×</button
+									>
 								</div>
 							</div>
 						</div>
 
-					<!-- CARDS tab -->
+						<!-- CARDS tab -->
 					{:else}
 						<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:11px">
-							<div style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden">
-								<div style="height:110px;background:linear-gradient(160deg,#2a4018,#3d5c28,#1a2a10)"></div>
+							<div
+								style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden"
+							>
+								<div
+									style="height:110px;background:linear-gradient(160deg,#2a4018,#3d5c28,#1a2a10)"
+								></div>
 								<div style="padding:9px">
-									<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">The Princess Bride</div>
+									<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">
+										The Princess Bride
+									</div>
 									<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
 										<div style="flex:1;height:3px;border-radius:2px;background:#1d2535">
 											<div style="width:18%;height:100%;border-radius:2px;background:#1ce783"></div>
@@ -246,19 +348,37 @@
 										<span style="font-size:9px;color:#6b7280">1h 39m</span>
 									</div>
 									<div style="display:flex;gap:3px;margin-bottom:7px">
-										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#1ce783;color:#000">hulu</span>
-										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#e8242d;color:#fff">fubo</span>
+										<span
+											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#1ce783;color:#000"
+											>hulu</span
+										>
+										<span
+											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#e8242d;color:#fff"
+											>fubo</span
+										>
 									</div>
 									<div style="display:flex;gap:3px">
-										<button style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer">✓ Watched</button>
-										<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer">×</button>
+										<button
+											style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer"
+											>✓ Watched</button
+										>
+										<button
+											style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer"
+											>×</button
+										>
 									</div>
 								</div>
 							</div>
-							<div style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden">
-								<div style="height:110px;background:linear-gradient(160deg,#1a2535,#2a3d55,#0d1825)"></div>
+							<div
+								style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden"
+							>
+								<div
+									style="height:110px;background:linear-gradient(160deg,#1a2535,#2a3d55,#0d1825)"
+								></div>
 								<div style="padding:9px">
-									<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">The Bear</div>
+									<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">
+										The Bear
+									</div>
 									<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
 										<div style="flex:1;height:3px;border-radius:2px;background:#1d2535">
 											<div style="width:82%;height:100%;border-radius:2px;background:#1ce783"></div>
@@ -266,23 +386,37 @@
 										<span style="font-size:9px;color:#6b7280">~26h</span>
 									</div>
 									<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:4px">
-										<span style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#1ce783;color:#000">hulu</span>
+										<span
+											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#1ce783;color:#000"
+											>hulu</span
+										>
 									</div>
 									<div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:7px">
-										{#each ['S1','S2','S3','S4'] as s}
-											<span style="font-size:7px;padding:1px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600">{s}</span>
+										{#each ['S1', 'S2', 'S3', 'S4'] as s (s)}
+											<span
+												style="font-size:7px;padding:1px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600"
+												>{s}</span
+											>
 										{/each}
-										<span style="font-size:7px;padding:1px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600">S5</span>
+										<span
+											style="font-size:7px;padding:1px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600"
+											>S5</span
+										>
 									</div>
 									<div style="display:flex;gap:3px">
-										<button style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer">✓ Watched</button>
-										<button style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer">×</button>
+										<button
+											style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer"
+											>✓ Watched</button
+										>
+										<button
+											style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer"
+											>×</button
+										>
 									</div>
 								</div>
 							</div>
 						</div>
 					{/if}
-
 				</div>
 			</div>
 		</div>
@@ -297,56 +431,98 @@
 			</h2>
 		</div>
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-			<div data-reveal class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-				<div class="mb-4 flex h-[46px] w-[46px] flex-col items-center justify-center gap-1 rounded-[13px]"
-					style="background:color-mix(in srgb,#f97316 12%,transparent)">
+			<div
+				data-reveal
+				class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+			>
+				<div
+					class="mb-4 flex h-[46px] w-[46px] flex-col items-center justify-center gap-1 rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)"
+				>
 					<span class="h-1 w-5 rounded-sm bg-orange-500"></span>
 					<span class="h-1 w-5 rounded-sm bg-orange-500 opacity-70"></span>
 					<span class="h-1 w-5 rounded-sm bg-orange-500 opacity-40"></span>
 				</div>
 				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Build your watchlist</h3>
-				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">Drop in shows and movies as you hear about them. Queuest keeps them organized so nothing slips off your radar.</p>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+					Drop in shows and movies as you hear about them. Queuest keeps them organized so nothing
+					slips off your radar.
+				</p>
 			</div>
 
-			<div data-reveal class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-				<div class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
-					style="background:color-mix(in srgb,#f97316 12%,transparent)">
-					<span class="flex h-6 w-6 items-center justify-center rounded-full border-[3.5px] border-orange-500">
+			<div
+				data-reveal
+				class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+			>
+				<div
+					class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)"
+				>
+					<span
+						class="flex h-6 w-6 items-center justify-center rounded-full border-[3.5px] border-orange-500"
+					>
 						<span class="h-[7px] w-[7px] rounded-full bg-orange-500"></span>
 					</span>
 				</div>
 				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">See where it's streaming</h3>
-				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">Every title in your list shows which services carry it right now — so you know exactly which subscription you actually need open.</p>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+					Every title in your list shows which services carry it right now — so you know exactly
+					which subscription you actually need open.
+				</p>
 			</div>
 
-			<div data-reveal class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-				<div class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
-					style="background:color-mix(in srgb,#f97316 12%,transparent)">
-					<span class="h-6 w-6 rounded-full"
-						style="background:conic-gradient(#f97316 0 30%,color-mix(in srgb,#f97316 22%,transparent) 30% 100%)"></span>
+			<div
+				data-reveal
+				class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+			>
+				<div
+					class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)"
+				>
+					<span
+						class="h-6 w-6 rounded-full"
+						style="background:conic-gradient(#f97316 0 30%,color-mix(in srgb,#f97316 22%,transparent) 30% 100%)"
+					></span>
 				</div>
 				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Know what to cancel</h3>
-				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">The Gantt view shows how long it takes to watch through your queue on each service. Thin queues are cancel candidates — thick ones are worth keeping.</p>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+					The Gantt view shows how long it takes to watch through your queue on each service. Thin
+					queues are cancel candidates — thick ones are worth keeping.
+				</p>
 			</div>
 
-			<div data-reveal class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-				<div class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
-					style="background:color-mix(in srgb,#f97316 12%,transparent)">
+			<div
+				data-reveal
+				class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+			>
+				<div
+					class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)"
+				>
 					<div class="flex flex-col items-center">
 						<div class="h-2 w-3 rounded-t-full border-[2.5px] border-b-0 border-orange-500"></div>
 						<div class="flex h-3.5 w-5 items-center justify-center rounded-sm bg-orange-500">
-							<div class="h-1 w-1 rounded-full" style="background:color-mix(in srgb,#f97316 10%,white)"></div>
+							<div
+								class="h-1 w-1 rounded-full"
+								style="background:color-mix(in srgb,#f97316 10%,white)"
+							></div>
 						</div>
 					</div>
 				</div>
 				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Private by design</h3>
-				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">No account, no login. Your queue lives on your device and leaves as an encrypted file you own. Nothing personal ever touches our servers.</p>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+					No account, no login. Your queue lives on your device and leaves as an encrypted file you
+					own. Nothing personal ever touches our servers.
+				</p>
 			</div>
 		</div>
 	</section>
 
 	<!-- ─── HOW IT WORKS ─────────────────────────────────────────────── -->
-	<section id="how" class="relative z-10 scroll-mt-16 border-y border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-gray-900/50">
+	<section
+		id="how"
+		class="relative z-10 scroll-mt-16 border-y border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-gray-900/50"
+	>
 		<div class="mx-auto max-w-5xl px-6 py-16">
 			<div data-reveal class="mb-11 max-w-[560px]">
 				<div class="mb-3 text-[13px] font-bold tracking-[0.4px] text-orange-500">HOW IT WORKS</div>
@@ -358,17 +534,26 @@
 				<div data-reveal>
 					<div class="mb-3.5 text-5xl font-extrabold tracking-[-2px] text-orange-500">01</div>
 					<h3 class="mb-2 text-lg font-bold">Set your watch budget</h3>
-					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">Tell Queuest how many hours a month you want to watch and which services you're paying for. That's your baseline.</p>
+					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+						Tell Queuest how many hours a month you want to watch and which services you're paying
+						for. That's your baseline.
+					</p>
 				</div>
 				<div data-reveal>
 					<div class="mb-3.5 text-5xl font-extrabold tracking-[-2px] text-orange-500">02</div>
 					<h3 class="mb-2 text-lg font-bold">Build your queue</h3>
-					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">Add the shows and movies you actually want to see. Queuest finds where each one is streaming so you always know what to open.</p>
+					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+						Add the shows and movies you actually want to see. Queuest finds where each one is
+						streaming so you always know what to open.
+					</p>
 				</div>
 				<div data-reveal>
 					<div class="mb-3.5 text-5xl font-extrabold tracking-[-2px] text-orange-500">03</div>
 					<h3 class="mb-2 text-lg font-bold">Trim your subscriptions</h3>
-					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">The Gantt view shows how many hours of your queue live on each service. Cancel the ones you'd finish in a weekend — resubscribe when you're ready.</p>
+					<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+						The Gantt view shows how many hours of your queue live on each service. Cancel the ones
+						you'd finish in a weekend — resubscribe when you're ready.
+					</p>
 				</div>
 			</div>
 		</div>
@@ -376,18 +561,30 @@
 
 	<!-- ─── BOTTOM CTA ───────────────────────────────────────────────── -->
 	<section class="relative z-10 mx-auto max-w-5xl px-6 py-20">
-		<div data-reveal class="relative overflow-hidden rounded-[26px] border border-gray-200 bg-white px-10 py-14 text-center dark:border-gray-800 dark:bg-gray-900">
-			<div class="pointer-events-none absolute inset-0"
-				style="background:radial-gradient(circle at 50% -20%,color-mix(in srgb,#f97316 18%,transparent),transparent 60%)"></div>
+		<div
+			data-reveal
+			class="relative overflow-hidden rounded-[26px] border border-gray-200 bg-white px-10 py-14 text-center dark:border-gray-800 dark:bg-gray-900"
+		>
+			<div
+				class="pointer-events-none absolute inset-0"
+				style="background:radial-gradient(circle at 50% -20%,color-mix(in srgb,#f97316 18%,transparent),transparent 60%)"
+			></div>
 			<div class="relative">
-				<h2 class="mb-3.5 text-[clamp(28px,4vw,44px)] font-extrabold leading-[1.08] tracking-[-1.2px]">
-					Stop guessing.<br>Start cancelling.
+				<h2
+					class="mb-3.5 text-[clamp(28px,4vw,44px)] font-extrabold leading-[1.08] tracking-[-1.2px]"
+				>
+					Stop guessing.<br />Start cancelling.
 				</h2>
-				<p class="mx-auto mb-7 max-w-[440px] text-base leading-relaxed text-gray-600 dark:text-gray-400">
-					Add what you want to watch, find out which services have it, and finally know what's worth paying for.
+				<p
+					class="mx-auto mb-7 max-w-[440px] text-base leading-relaxed text-gray-600 dark:text-gray-400"
+				>
+					Add what you want to watch, find out which services have it, and finally know what's worth
+					paying for.
 				</p>
-				<button onclick={start}
-					class="rounded-2xl bg-orange-500 px-9 py-4 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110">
+				<button
+					onclick={start}
+					class="rounded-2xl bg-orange-500 px-9 py-4 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
+				>
 					See what you're paying for — free
 				</button>
 			</div>
@@ -397,14 +594,39 @@
 	<!-- ─── PAGE FOOTER ──────────────────────────────────────────────── -->
 	<div class="relative z-10 border-t border-gray-200 dark:border-gray-800">
 		<div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-6">
-			<span class="text-base font-extrabold tracking-[-0.4px]">Queu<span class="text-orange-500">est</span></span>
+			<span class="text-base font-extrabold tracking-[-0.4px]"
+				>Queu<span class="text-orange-500">est</span></span
+			>
 			<div class="flex gap-5">
-				<a href="#features" class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white">Features</a>
-				<a href="#how" class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white">How it works</a>
-				<button onclick={start} class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white">Get started</button>
+				<a
+					href="#features"
+					class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white">Features</a
+				>
+				<a href="#how" class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white"
+					>How it works</a
+				>
+				<button
+					onclick={start}
+					class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white"
+					>Get started</button
+				>
 			</div>
 			<div class="text-[12px] text-gray-500">© 2026 Queuest</div>
 		</div>
 	</div>
-
 </div>
+
+<style>
+	@keyframes qfloat {
+		0%,
+		100% {
+			transform: translateY(0);
+		}
+		50% {
+			transform: translateY(-12px);
+		}
+	}
+	.mock-float {
+		animation: qfloat 7s ease-in-out infinite;
+	}
+</style>

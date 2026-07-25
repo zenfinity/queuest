@@ -20,10 +20,7 @@ export interface RestoreDeps extends ImportActionDeps {
 
 const BATCH = 10;
 
-export async function importRows(
-	rows: ImportRow[],
-	deps: ImportActionDeps
-): Promise<void> {
+export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Promise<void> {
 	if (!rows.length) return;
 	deps.setImporting(true);
 	deps.setImportError('');
@@ -41,7 +38,7 @@ export async function importRows(
 				body: JSON.stringify(batch)
 			});
 			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-			const matched = await res.json() as Array<{
+			const matched = (await res.json()) as Array<{
 				title: string;
 				result: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> | null;
 			}>;
@@ -66,7 +63,9 @@ export async function importRows(
 		}
 		deps.setImportDoneOnce(true);
 		deps.setMissedTitles(missedTitles);
-		try { localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles)); } catch {}
+		try {
+			localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles));
+		} catch {}
 		deps.setImportAdded(importAdded);
 	} catch (e) {
 		deps.setImportError(e instanceof Error ? e.message : 'Import failed.');
@@ -75,7 +74,9 @@ export async function importRows(
 	}
 }
 
-export async function replaceAllItems(items: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>[]): Promise<void> {
+export async function replaceAllItems(
+	items: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>[]
+): Promise<void> {
 	const fullItems: WatchlistItem[] = items.map((item, idx) => ({
 		...item,
 		id: idx,
@@ -94,7 +95,9 @@ export async function restoreBackup(
 	deps.setImporting(true);
 	deps.setImportError('');
 	try {
-		const parsed = parseImportBackup(JSON.parse(await decrypt(await file.arrayBuffer(), passphrase)));
+		const parsed = parseImportBackup(
+			JSON.parse(await decrypt(await file.arrayBuffer(), passphrase))
+		);
 
 		const ops: Promise<void>[] = [replaceAllItems(parsed.items)];
 
@@ -104,13 +107,19 @@ export async function restoreBackup(
 			localStorage.setItem('sq:theme', parsed.prefs.theme);
 			document.documentElement.classList.toggle('dark', dark);
 		}
-		if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
+		if (
+			typeof parsed.prefs?.weeklyHours === 'number' &&
+			typeof parsed.prefs?.weeksPerMonth === 'number'
+		) {
 			localStorage.setItem('sq:budget:weekly', JSON.stringify(parsed.prefs.weeklyHours));
-			localStorage.setItem('sq:budget:weeks',  JSON.stringify(parsed.prefs.weeksPerMonth));
-			localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth));
+			localStorage.setItem('sq:budget:weeks', JSON.stringify(parsed.prefs.weeksPerMonth));
+			localStorage.setItem(
+				'sq:budget',
+				JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth)
+			);
 		} else if (typeof parsed.prefs?.budget === 'number') {
 			localStorage.setItem('sq:budget:weekly', JSON.stringify(Math.round(parsed.prefs.budget / 4)));
-			localStorage.setItem('sq:budget:weeks',  '4');
+			localStorage.setItem('sq:budget:weeks', '4');
 			localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.budget));
 		}
 		if (typeof parsed.prefs?.queueName === 'string') setQueueName(parsed.prefs.queueName);

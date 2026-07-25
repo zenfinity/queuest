@@ -19,7 +19,11 @@ function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
 	return out;
 }
 
-async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<CryptoKey> {
+async function deriveKey(
+	passphrase: string,
+	salt: Uint8Array<ArrayBuffer>,
+	iterations: number
+): Promise<CryptoKey> {
 	const enc = new TextEncoder();
 	const keyMaterial = await crypto.subtle.importKey(
 		'raw',
@@ -43,8 +47,8 @@ async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>, iter
  */
 export async function encrypt(data: string, passphrase: string): Promise<ArrayBuffer> {
 	const salt = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(SALT_LEN)));
-	const iv   = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(IV_LEN)));
-	const key  = await deriveKey(passphrase, salt, PBKDF2_ITERATIONS);
+	const iv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(IV_LEN)));
+	const key = await deriveKey(passphrase, salt, PBKDF2_ITERATIONS);
 
 	const ciphertext = await crypto.subtle.encrypt(
 		{ name: 'AES-GCM', iv },
@@ -67,7 +71,7 @@ export async function encrypt(data: string, passphrase: string): Promise<ArrayBu
 export async function decrypt(buffer: ArrayBuffer, passphrase: string): Promise<string> {
 	const bytes = new Uint8Array(buffer);
 	const salt = new Uint8Array(buffer, 0, SALT_LEN);
-	const iv   = new Uint8Array(buffer, SALT_LEN, IV_LEN);
+	const iv = new Uint8Array(buffer, SALT_LEN, IV_LEN);
 	const ciphertext = new Uint8Array(buffer, SALT_LEN + IV_LEN);
 
 	for (const iterations of [PBKDF2_ITERATIONS, PBKDF2_LEGACY_ITERATIONS]) {
@@ -85,15 +89,24 @@ export async function decrypt(buffer: ArrayBuffer, passphrase: string): Promise<
 // ── Key-based sharing (random key in URL fragment, no PBKDF2) ─────────────────
 
 export async function generateShareKey(): Promise<string> {
-	const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+	const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+		'encrypt',
+		'decrypt'
+	]);
 	const raw = await crypto.subtle.exportKey('raw', key);
 	return b64urlEncode(new Uint8Array(raw as ArrayBuffer));
 }
 
 export async function encryptWithKey(data: string, keyB64url: string): Promise<ArrayBuffer> {
-	const key = await crypto.subtle.importKey('raw', b64urlDecode(keyB64url), 'AES-GCM', false, ['encrypt']);
-	const iv  = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(IV_LEN)));
-	const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(data));
+	const key = await crypto.subtle.importKey('raw', b64urlDecode(keyB64url), 'AES-GCM', false, [
+		'encrypt'
+	]);
+	const iv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(IV_LEN)));
+	const ciphertext = await crypto.subtle.encrypt(
+		{ name: 'AES-GCM', iv },
+		key,
+		new TextEncoder().encode(data)
+	);
 	const out = new Uint8Array(IV_LEN + ciphertext.byteLength);
 	out.set(iv, 0);
 	out.set(new Uint8Array(ciphertext), IV_LEN);
@@ -101,9 +114,11 @@ export async function encryptWithKey(data: string, keyB64url: string): Promise<A
 }
 
 export async function decryptWithKey(buffer: ArrayBuffer, keyB64url: string): Promise<string> {
-	const iv         = new Uint8Array(buffer, 0, IV_LEN);
+	const iv = new Uint8Array(buffer, 0, IV_LEN);
 	const ciphertext = new Uint8Array(buffer, IV_LEN);
-	const key = await crypto.subtle.importKey('raw', b64urlDecode(keyB64url), 'AES-GCM', false, ['decrypt']);
+	const key = await crypto.subtle.importKey('raw', b64urlDecode(keyB64url), 'AES-GCM', false, [
+		'decrypt'
+	]);
 	let plain: ArrayBuffer;
 	try {
 		plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);

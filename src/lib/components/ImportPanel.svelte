@@ -10,30 +10,34 @@
 	import type { WatchlistItem, Provider } from '$lib/types';
 
 	// ── CSV import (Letterboxd / IMDb) ────────────────────────────────────────
-	let csvRows         = $state<ImportRow[]>([]);
-	let csvFormat       = $state('');
-	let csvUrl          = $state('');
-	let csvUrlLoading   = $state(false);
+	let csvRows = $state<ImportRow[]>([]);
+	let csvFormat = $state('');
+	let csvUrl = $state('');
+	let csvUrlLoading = $state(false);
 
-	let textInput       = $state('');
-	let textRows        = $derived(parseTextList(textInput));
+	let textInput = $state('');
+	let textRows = $derived(parseTextList(textInput));
 
-	let importing       = $state(false);
-	let importSource    = $state<'csv' | 'text' | null>(null);
-	let importTotal     = $state(0);
-	let importDone      = $state(0);
-	let importAdded     = $state(0);
-	let missedTitles    = $state<string[]>([]);
-	let importError     = $state('');
-	let importDoneOnce  = $state(false);
+	let importing = $state(false);
+	let importSource = $state<'csv' | 'text' | null>(null);
+	let importTotal = $state(0);
+	let importDone = $state(0);
+	let importAdded = $state(0);
+	let missedTitles = $state<string[]>([]);
+	let importError = $state('');
+	let importDoneOnce = $state(false);
 
 	function saveMissed() {
-		try { localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles)); } catch {}
+		try {
+			localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles));
+		} catch {}
 	}
 
 	function clearMissedTitles() {
 		missedTitles = [];
-		try { localStorage.removeItem('sq:import-missed'); } catch {}
+		try {
+			localStorage.removeItem('sq:import-missed');
+		} catch {}
 	}
 
 	function applyCsvText(text: string) {
@@ -47,7 +51,9 @@
 	}
 
 	function onCsvFileChange(e: Event) {
-		csvRows = []; csvFormat = ''; importError = '';
+		csvRows = [];
+		csvFormat = '';
+		importError = '';
 		textInput = '';
 		const file = (e.currentTarget as HTMLInputElement).files?.[0];
 		if (!file) return;
@@ -58,13 +64,18 @@
 
 	async function fetchCsvUrl() {
 		if (!csvUrl.trim() || csvUrlLoading) return;
-		csvRows = []; csvFormat = ''; importError = '';
+		csvRows = [];
+		csvFormat = '';
+		importError = '';
 		textInput = '';
 		csvUrlLoading = true;
 		try {
 			try {
 				const direct = await fetch(csvUrl.trim());
-				if (direct.ok) { applyCsvText(await direct.text()); return; }
+				if (direct.ok) {
+					applyCsvText(await direct.text());
+					return;
+				}
 			} catch {
 				// CORS blocked — fall through to server proxy
 			}
@@ -86,8 +97,14 @@
 
 	async function doImport(rows: ImportRow[], source: 'csv' | 'text') {
 		if (!rows.length || importing) return;
-		importing = true; importSource = source; importTotal = rows.length; importDone = 0;
-		importAdded = 0; missedTitles = []; importError = ''; importDoneOnce = false;
+		importing = true;
+		importSource = source;
+		importTotal = rows.length;
+		importDone = 0;
+		importAdded = 0;
+		missedTitles = [];
+		importError = '';
+		importDoneOnce = false;
 		try {
 			for (let i = 0; i < rows.length; i += BATCH) {
 				const batch = rows.slice(i, i + BATCH);
@@ -97,7 +114,7 @@
 					body: JSON.stringify(batch)
 				});
 				if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-				const matched = await res.json() as Array<{
+				const matched = (await res.json()) as Array<{
 					title: string;
 					result: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> | null;
 				}>;
@@ -129,30 +146,35 @@
 	}
 
 	// ── Backup restore (.queuest) ─────────────────────────────────────────────
-	let restoreFile       = $state<File | null>(null);
+	let restoreFile = $state<File | null>(null);
 	let restorePassphrase = $state('');
-	let restoring         = $state(false);
-	let restoreError      = $state('');
-	let restoreDone       = $state(false);
+	let restoring = $state(false);
+	let restoreError = $state('');
+	let restoreDone = $state(false);
 
 	function onRestoreFileChange(e: Event) {
 		restoreFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
-		restoreError = ''; restoreDone = false;
+		restoreError = '';
+		restoreDone = false;
 	}
 
 	async function doRestore() {
 		if (!restoreFile || !restorePassphrase) return;
-		restoring = true; restoreError = ''; restoreDone = false;
+		restoring = true;
+		restoreError = '';
+		restoreDone = false;
 		try {
-			const parsed = parseImportBackup(JSON.parse(await decrypt(await restoreFile.arrayBuffer(), restorePassphrase)));
+			const parsed = parseImportBackup(
+				JSON.parse(await decrypt(await restoreFile.arrayBuffer(), restorePassphrase))
+			);
 
 			const fullItems: WatchlistItem[] = parsed.items.map((item, idx) => ({
-			...item,
-			id: idx,
-			added_at: new Date().toISOString(),
-			watched_at: null
-		}));
-		const ops: Promise<void>[] = [replaceAll(fullItems)];
+				...item,
+				id: idx,
+				added_at: new Date().toISOString(),
+				watched_at: null
+			}));
+			const ops: Promise<void>[] = [replaceAll(fullItems)];
 
 			if (parsed.prefs?.theme) {
 				const dark = parsed.prefs.theme === 'dark';
@@ -160,13 +182,22 @@
 				localStorage.setItem('sq:theme', parsed.prefs.theme);
 				document.documentElement.classList.toggle('dark', dark);
 			}
-			if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
+			if (
+				typeof parsed.prefs?.weeklyHours === 'number' &&
+				typeof parsed.prefs?.weeksPerMonth === 'number'
+			) {
 				localStorage.setItem('sq:budget:weekly', JSON.stringify(parsed.prefs.weeklyHours));
-				localStorage.setItem('sq:budget:weeks',  JSON.stringify(parsed.prefs.weeksPerMonth));
-				localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth));
+				localStorage.setItem('sq:budget:weeks', JSON.stringify(parsed.prefs.weeksPerMonth));
+				localStorage.setItem(
+					'sq:budget',
+					JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth)
+				);
 			} else if (typeof parsed.prefs?.budget === 'number') {
-				localStorage.setItem('sq:budget:weekly', JSON.stringify(Math.round(parsed.prefs.budget / 4)));
-				localStorage.setItem('sq:budget:weeks',  '4');
+				localStorage.setItem(
+					'sq:budget:weekly',
+					JSON.stringify(Math.round(parsed.prefs.budget / 4))
+				);
+				localStorage.setItem('sq:budget:weeks', '4');
 				localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.budget));
 			}
 			if (typeof parsed.prefs?.queueName === 'string') setQueueName(parsed.prefs.queueName);
@@ -175,33 +206,42 @@
 					if (typeof color === 'string') setQueueColor(tag, color);
 				}
 			}
-			if (typeof parsed.prefs?.sort === 'string') localStorage.setItem('sq:sort', parsed.prefs.sort);
-			if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
+			if (typeof parsed.prefs?.sort === 'string')
+				localStorage.setItem('sq:sort', parsed.prefs.sort);
+			if (typeof parsed.prefs?.view === 'string')
+				localStorage.setItem('sq:view', parsed.prefs.view);
 
 			if (parsed.services) ops.push(setServices(parsed.services));
 			await Promise.all(ops);
-			restoreFile = null; restorePassphrase = ''; restoreDone = true;
+			restoreFile = null;
+			restorePassphrase = '';
+			restoreDone = true;
 		} catch (e) {
 			restoreError = e instanceof Error ? e.message : 'Import failed.';
-		} finally { restoring = false; }
+		} finally {
+			restoring = false;
+		}
 	}
 
 	onMount(() => {
-		try { missedTitles = JSON.parse(localStorage.getItem('sq:import-missed') ?? '[]'); } catch {}
+		try {
+			missedTitles = JSON.parse(localStorage.getItem('sq:import-missed') ?? '[]');
+		} catch {}
 	});
 </script>
 
 <div class="space-y-6">
-
 	<!-- Restore backup -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Restore backup</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Restore from a <code class="text-orange-500">.queuest</code> file. Theme and budget preferences are restored too.
+			Restore from a <code class="text-orange-500">.queuest</code> file. Theme and budget
+			preferences are restored too.
 			<span class="font-medium text-red-500">This replaces your current queue.</span>
 		</p>
 		<input
-			type="file" accept=".queuest"
+			type="file"
+			accept=".queuest"
 			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
 			onchange={onRestoreFileChange}
 		/>
@@ -222,7 +262,9 @@
 			</button>
 		</div>
 		{#if restoreError}<p class="text-xs text-red-500">{restoreError}</p>{/if}
-		{#if restoreDone}<p class="text-xs text-teal-600 dark:text-teal-400">✓ Queue restored successfully.</p>{/if}
+		{#if restoreDone}<p class="text-xs text-teal-600 dark:text-teal-400">
+				✓ Queue restored successfully.
+			</p>{/if}
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
@@ -232,7 +274,12 @@
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Letterboxd</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
 			Go to
-			<a href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">Settings → Export your data</a>
+			<a
+				href="https://letterboxd.com/settings/data/"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="text-orange-500 hover:underline">Settings → Export your data</a
+			>
 			and upload the <code class="text-orange-500">watchlist.csv</code> file below.
 		</p>
 	</section>
@@ -241,8 +288,12 @@
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">IMDb</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
 			Go to your
-			<a href="https://www.imdb.com/list/watchlist" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">Watchlist</a>,
-			tap ··· → Export, then paste the link below or upload the file.
+			<a
+				href="https://www.imdb.com/list/watchlist"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="text-orange-500 hover:underline">Watchlist</a
+			>, tap ··· → Export, then paste the link below or upload the file.
 		</p>
 	</section>
 
@@ -281,7 +332,8 @@
 
 		{#if csvFormat && csvRows.length}
 			<p class="text-sm text-gray-600 dark:text-gray-400">
-				Found <span class="font-medium text-gray-900 dark:text-white">{csvRows.length}</span> title{csvRows.length === 1 ? '' : 's'} from {csvFormat}.
+				Found <span class="font-medium text-gray-900 dark:text-white">{csvRows.length}</span>
+				title{csvRows.length === 1 ? '' : 's'} from {csvFormat}.
 			</p>
 		{/if}
 
@@ -304,18 +356,22 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Paste a list</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			One title per line — from Notes, Keep, or anywhere. Bullets, numbers, and years are stripped automatically.
+			One title per line — from Notes, Keep, or anywhere. Bullets, numbers, and years are stripped
+			automatically.
 		</p>
+		<!-- eslint-disable svelte/no-useless-mustaches -- literal \n only survives inside an expression; Svelte collapses whitespace in static attribute text -->
 		<textarea
 			bind:value={textInput}
-			placeholder={"The Bear\n- Severance (2022)\n1. Andor\n• Slow Horses"}
+			placeholder={'The Bear\n- Severance (2022)\n1. Andor\n• Slow Horses'}
 			rows="6"
 			class="w-full rounded-lg bg-gray-100 px-3 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 		></textarea>
+		<!-- eslint-enable svelte/no-useless-mustaches -->
 
 		{#if textRows.length > 0}
 			<p class="text-sm text-gray-600 dark:text-gray-400">
-				<span class="font-medium text-gray-900 dark:text-white">{textRows.length}</span> title{textRows.length === 1 ? '' : 's'} detected.
+				<span class="font-medium text-gray-900 dark:text-white">{textRows.length}</span>
+				title{textRows.length === 1 ? '' : 's'} detected.
 			</p>
 		{/if}
 
@@ -338,7 +394,9 @@
 
 	{#if importDoneOnce && !importing}
 		<p class="text-xs text-teal-600 dark:text-teal-400">
-			✓ Added {importAdded} title{importAdded === 1 ? '' : 's'}.{missedTitles.length > 0 ? ` ${missedTitles.length} not found on TMDB.` : ''}
+			✓ Added {importAdded} title{importAdded === 1 ? '' : 's'}.{missedTitles.length > 0
+				? ` ${missedTitles.length} not found on TMDB.`
+				: ''}
 		</p>
 	{/if}
 
@@ -352,22 +410,25 @@
 				</h2>
 				<button
 					onclick={clearMissedTitles}
-					class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-				>Clear</button>
+					class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">Clear</button
+				>
 			</div>
-			<p class="text-xs text-gray-500 dark:text-gray-400">Search for these manually and add them to your queue.</p>
+			<p class="text-xs text-gray-500 dark:text-gray-400">
+				Search for these manually and add them to your queue.
+			</p>
 			<ul class="space-y-1">
 				{#each missedTitles as title (title)}
-					<li class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800/60">
+					<li
+						class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800/60"
+					>
 						<span class="truncate text-sm text-gray-700 dark:text-gray-300">{title}</span>
 						<a
 							href="/add?q={encodeURIComponent(title)}"
-							class="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-400"
-						>Search →</a>
+							class="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-400">Search →</a
+						>
 					</li>
 				{/each}
 			</ul>
 		</section>
 	{/if}
-
 </div>

@@ -67,12 +67,16 @@
 	}
 </script>
 
-<svelte:document onclick={(e) => {
-	const t = e.target as HTMLElement;
-	if (!t.closest('[data-detail-panel]') && !t.closest('[data-detail-trigger]')) {
-		detailItem = null; overviewExpanded = false; posterExpanded = false;
-	}
-}} />
+<svelte:document
+	onclick={(e) => {
+		const t = e.target as HTMLElement;
+		if (!t.closest('[data-detail-panel]') && !t.closest('[data-detail-trigger]')) {
+			detailItem = null;
+			overviewExpanded = false;
+			posterExpanded = false;
+		}
+	}}
+/>
 
 <svelte:head>
 	<title>Queuest — Add</title>
@@ -83,7 +87,8 @@
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Search</h2>
 		{#if isOnboarding}
 			<p class="text-xs text-gray-500 dark:text-gray-400">
-				Already have a watchlist elsewhere? Expand <strong>Import</strong> below to add titles from Letterboxd, IMDb, or a backup instead of one by one.
+				Already have a watchlist elsewhere? Expand <strong>Import</strong> below to add titles from Letterboxd,
+				IMDb, or a backup instead of one by one.
 			</p>
 		{/if}
 	</div>
@@ -115,12 +120,17 @@
 	{:else if data.results.length > 0}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
 			{#each data.results as result (result.id)}
-				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
+				<div
+					class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+				>
 					<!-- Poster (clickable) -->
 					<!-- svelte-ignore a11y_consider_explicit_label -->
 					<button
 						class="relative aspect-[2/3] overflow-hidden bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
-						onclick={() => { detailItem = result; overviewExpanded = false; }}
+						onclick={() => {
+							detailItem = result;
+							overviewExpanded = false;
+						}}
 						data-detail-trigger
 						aria-label="View details for {result.title}"
 					>
@@ -131,12 +141,16 @@
 								class="h-full w-full object-cover"
 							/>
 						{:else}
-							<div class="flex h-full w-full items-center justify-center text-5xl text-gray-400 dark:text-gray-700">
+							<div
+								class="flex h-full w-full items-center justify-center text-5xl text-gray-400 dark:text-gray-700"
+							>
 								🎬
 							</div>
 						{/if}
 						{#if result.year}
-							<span class="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs text-gray-200">
+							<span
+								class="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs text-gray-200"
+							>
 								{result.year}
 							</span>
 						{/if}
@@ -180,7 +194,9 @@
 
 						<!-- Release chip -->
 						{#if releaseChip(result.release)}
-							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">{releaseChip(result.release)}</p>
+							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">
+								{releaseChip(result.release)}
+							</p>
 						{/if}
 
 						<button
@@ -210,7 +226,8 @@
 			<button
 				onclick={() => invalidateAll()}
 				class="mt-3 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-			>Retry</button>
+				>Retry</button
+			>
 		</div>
 	{:else if data.query}
 		<div class="py-12 text-center text-gray-500 xs:py-20">
@@ -226,15 +243,35 @@
 
 	<!-- Import (collapsible) -->
 	<details class="group rounded-lg border border-gray-200 dark:border-gray-800">
-		<summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+		<summary
+			class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"
+		>
 			<span class="flex items-center gap-2">
-				<svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true">
-					<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-10.707a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V16a1 1 0 11-2 0V9.414L7.707 10.707a1 1 0 01-1.414-1.414l3-3z" clip-rule="evenodd"/>
+				<svg
+					viewBox="0 0 20 20"
+					fill="currentColor"
+					class="h-3.5 w-3.5 shrink-0 text-gray-400"
+					aria-hidden="true"
+				>
+					<path
+						fill-rule="evenodd"
+						d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-10.707a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V16a1 1 0 11-2 0V9.414L7.707 10.707a1 1 0 01-1.414-1.414l3-3z"
+						clip-rule="evenodd"
+					/>
 				</svg>
 				Import from Letterboxd, IMDb, or a backup
 			</span>
-			<svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-				<path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+			<svg
+				class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180"
+				viewBox="0 0 20 20"
+				fill="currentColor"
+				aria-hidden="true"
+			>
+				<path
+					fill-rule="evenodd"
+					d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+					clip-rule="evenodd"
+				/>
 			</svg>
 		</summary>
 		<div class="border-t border-gray-200 px-4 py-4 dark:border-gray-800">
@@ -250,7 +287,11 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-		onclick={() => { detailItem = null; overviewExpanded = false; posterExpanded = false; }}
+		onclick={() => {
+			detailItem = null;
+			overviewExpanded = false;
+			posterExpanded = false;
+		}}
 	></div>
 
 	<!-- Panel: bottom sheet on mobile, right drawer on sm+ -->
@@ -259,14 +300,24 @@
 		data-detail-panel
 	>
 		<!-- Title bar -->
-		<div class="shrink-0 flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+		<div
+			class="shrink-0 flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800"
+		>
 			<h2 class="truncate pr-2 text-sm font-semibold text-gray-900 dark:text-white">{di.title}</h2>
 			<button
-				onclick={() => { detailItem = null; overviewExpanded = false; posterExpanded = false; }}
+				onclick={() => {
+					detailItem = null;
+					overviewExpanded = false;
+					posterExpanded = false;
+				}}
 				class="shrink-0 rounded-full p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
 				aria-label="Close"
 			>
-				<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+				<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"
+					><path
+						d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
+					/></svg
+				>
 			</button>
 		</div>
 
@@ -277,23 +328,34 @@
 				{#if di.poster_path}
 					<button
 						class="w-20 shrink-0 self-start rounded-lg shadow-md overflow-hidden cursor-zoom-in"
-						onclick={() => posterExpanded = true}
+						onclick={() => (posterExpanded = true)}
 						aria-label="Expand poster"
 					>
-						<img src="{TMDB_IMG}/w185{di.poster_path}" alt={di.title} class="w-full h-full object-cover" />
+						<img
+							src="{TMDB_IMG}/w185{di.poster_path}"
+							alt={di.title}
+							class="w-full h-full object-cover"
+						/>
 					</button>
 				{/if}
 				<div class="min-w-0">
-					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+					<div
+						class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400"
+					>
 						{#if di.year}<span>{di.year}</span>{/if}
-						<span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-800">{di.media_type === 'movie' ? '🎬 Movie' : '📺 TV'}</span>
+						<span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-800"
+							>{di.media_type === 'movie' ? '🎬 Movie' : '📺 TV'}</span
+						>
 						{#if di.director}<span>Dir. {di.director}</span>{/if}
 						{#if di.creator}<span>Created by {di.creator}</span>{/if}
 					</div>
 					{#if di.genres?.length}
 						<div class="mt-1.5 flex flex-wrap gap-1">
 							{#each di.genres as g (g)}
-								<span class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{g}</span>
+								<span
+									class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+									>{g}</span
+								>
 							{/each}
 						</div>
 					{/if}
@@ -304,13 +366,20 @@
 				<!-- Overview -->
 				{#if di.overview}
 					<div>
-						<p class="text-xs leading-relaxed text-gray-600 dark:text-gray-400
-							{overviewExpanded ? '' : 'line-clamp-4'}">{di.overview}</p>
+						<p
+							class="text-xs leading-relaxed text-gray-600 dark:text-gray-400
+							{overviewExpanded ? '' : 'line-clamp-4'}"
+						>
+							{di.overview}
+						</p>
 						{#if di.overview.length > 200}
 							<button
-								onclick={() => { overviewExpanded = !overviewExpanded; }}
+								onclick={() => {
+									overviewExpanded = !overviewExpanded;
+								}}
 								class="mt-1 text-[10px] font-medium text-orange-500 hover:text-orange-400"
-							>{overviewExpanded ? 'Less' : 'More'}</button>
+								>{overviewExpanded ? 'Less' : 'More'}</button
+							>
 						{/if}
 					</div>
 				{/if}
@@ -325,19 +394,39 @@
 				<!-- Cast -->
 				{#if di.cast?.length}
 					<div>
-						<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Cast</p>
+						<p
+							class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+						>
+							Cast
+						</p>
 						<div class="flex gap-2 overflow-x-auto pb-1">
 							{#each di.cast as c (c.name)}
 								<div class="flex shrink-0 flex-col items-center gap-1 w-14">
 									<div class="h-12 w-12 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
 										{#if c.profile_path}
-											<img src="{TMDB_IMG}/w185{c.profile_path}" alt={c.name} class="h-full w-full object-cover" />
+											<img
+												src="{TMDB_IMG}/w185{c.profile_path}"
+												alt={c.name}
+												class="h-full w-full object-cover"
+											/>
 										{:else}
-											<div class="flex h-full w-full items-center justify-center text-lg text-gray-400">👤</div>
+											<div
+												class="flex h-full w-full items-center justify-center text-lg text-gray-400"
+											>
+												👤
+											</div>
 										{/if}
 									</div>
-									<p class="text-center text-[9px] font-medium leading-tight text-gray-700 dark:text-gray-300 line-clamp-2">{c.name}</p>
-									<p class="text-center text-[9px] leading-tight text-gray-400 dark:text-gray-600 line-clamp-1">{c.character}</p>
+									<p
+										class="text-center text-[9px] font-medium leading-tight text-gray-700 dark:text-gray-300 line-clamp-2"
+									>
+										{c.name}
+									</p>
+									<p
+										class="text-center text-[9px] leading-tight text-gray-400 dark:text-gray-600 line-clamp-1"
+									>
+										{c.character}
+									</p>
 								</div>
 							{/each}
 						</div>
@@ -346,12 +435,20 @@
 
 				<!-- Where to watch -->
 				<div>
-					<p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Where to watch</p>
+					<p
+						class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+					>
+						Where to watch
+					</p>
 					{#if di.providers.length}
 						<div class="flex flex-wrap gap-2">
 							{#each di.providers as p (p.provider_id)}
 								<div class="flex items-center gap-1.5">
-									<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} class="h-6 w-6 rounded-lg" />
+									<img
+										src="{TMDB_IMG}/w92{p.logo_path}"
+										alt={p.provider_name}
+										class="h-6 w-6 rounded-lg"
+									/>
 									<span class="text-xs text-gray-600 dark:text-gray-400">{p.provider_name}</span>
 								</div>
 							{/each}
@@ -362,8 +459,18 @@
 						<div class="space-y-1">
 							<p class="text-xs text-gray-500">🚫 Not on streaming services</p>
 							<div class="flex gap-3">
-								<a href="https://www.kanopy.com/en/search?query={encodeURIComponent(di.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-orange-500 hover:text-orange-400">Kanopy →</a>
-								<a href="https://www.hoopladigital.com/search?q={encodeURIComponent(di.title)}" target="_blank" rel="noopener noreferrer" class="text-xs text-orange-500 hover:text-orange-400">Hoopla →</a>
+								<a
+									href="https://www.kanopy.com/en/search?query={encodeURIComponent(di.title)}"
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-xs text-orange-500 hover:text-orange-400">Kanopy →</a
+								>
+								<a
+									href="https://www.hoopladigital.com/search?q={encodeURIComponent(di.title)}"
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-xs text-orange-500 hover:text-orange-400">Hoopla →</a
+								>
 							</div>
 						</div>
 					{/if}
@@ -405,7 +512,7 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div
 			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
-			onclick={() => posterExpanded = false}
+			onclick={() => (posterExpanded = false)}
 		>
 			<img
 				src="{TMDB_IMG}/w500{di.poster_path}"

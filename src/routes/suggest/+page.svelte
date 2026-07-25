@@ -34,7 +34,9 @@
 			}
 		}
 
-		suggestions = Array.from(byProvider.values()).sort((a, b) => b.runtime_minutes - a.runtime_minutes);
+		suggestions = Array.from(byProvider.values()).sort(
+			(a, b) => b.runtime_minutes - a.runtime_minutes
+		);
 		loaded = true;
 	});
 
@@ -47,7 +49,9 @@
 
 <div class="space-y-8">
 	<div>
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">What to Subscribe to Next</h2>
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
+			What to Subscribe to Next
+		</h2>
 		<p class="mt-1 text-sm text-gray-500">
 			Based on your {totalUnwatched} unwatched title{totalUnwatched === 1 ? '' : 's'}
 		</p>
@@ -71,7 +75,9 @@
 	{:else}
 		<div class="space-y-3">
 			{#each suggestions as suggestion, i (suggestion.provider_id)}
-				<div class="flex items-center gap-4 rounded-xl bg-white p-4 ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
+				<div
+					class="flex items-center gap-4 rounded-xl bg-white p-4 ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+				>
 					<!-- Rank -->
 					<div
 						class="w-6 text-center text-lg font-bold {i === 0
@@ -96,8 +102,8 @@
 					<div class="flex-1">
 						<p class="font-medium">{suggestion.name}</p>
 						<p class="text-sm text-gray-500">
-							{formatRuntime(suggestion.runtime_minutes, 'tv')} remaining
-							· {suggestion.title_count} {suggestion.title_count === 1 ? 'title' : 'titles'}
+							{formatRuntime(suggestion.runtime_minutes, 'tv')} remaining · {suggestion.title_count}
+							{suggestion.title_count === 1 ? 'title' : 'titles'}
 						</p>
 					</div>
 

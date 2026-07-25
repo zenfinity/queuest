@@ -14,11 +14,11 @@
 	let items: ShareItem[] = $state([]);
 	let queueName = $state('');
 
-	let addingAll  = $state(false);
+	let addingAll = $state(false);
 	let addedCount = $state(0);
-	let skipCount  = $state(0);
-	let addDone    = $state(false);
-	let addError   = $state('');
+	let skipCount = $state(0);
+	let addDone = $state(false);
+	let addError = $state('');
 
 	async function addAllToQueue() {
 		if (addingAll) return;
@@ -69,9 +69,9 @@
 			}
 		}
 		addedCount = added;
-		skipCount  = dupes;
-		addDone    = true;
-		addingAll  = false;
+		skipCount = dupes;
+		addDone = true;
+		addingAll = false;
 	}
 
 	const DEFAULT: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
@@ -84,7 +84,8 @@
 	}
 
 	function hms(mins: number): string {
-		const h = Math.floor(mins / 60), m = mins % 60;
+		const h = Math.floor(mins / 60),
+			m = mins % 60;
 		return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
 	}
 
@@ -92,12 +93,21 @@
 
 	onMount(async () => {
 		const key = window.location.hash.slice(1);
-		if (!key) { pageState = 'invalid'; return; }
+		if (!key) {
+			pageState = 'invalid';
+			return;
+		}
 
 		try {
 			const res = await fetch(`/api/share?t=${encodeURIComponent(data.token)}`);
-			if (res.status === 404) { pageState = 'expired'; return; }
-			if (!res.ok) { pageState = 'error'; return; }
+			if (res.status === 404) {
+				pageState = 'expired';
+				return;
+			}
+			if (!res.ok) {
+				pageState = 'error';
+				return;
+			}
 
 			const buf = await res.arrayBuffer();
 			const json = await decryptWithKey(buf, key);
@@ -131,11 +141,16 @@
 				{#if pageState === 'ready' && items.length > 0}
 					{#if addDone}
 						{#if addError && !addedCount && !skipCount}
-							<span class="rounded-lg bg-red-100 px-4 py-2 text-sm font-medium text-red-700 dark:bg-red-900/40 dark:text-red-400" title={addError}>
+							<span
+								class="rounded-lg bg-red-100 px-4 py-2 text-sm font-medium text-red-700 dark:bg-red-900/40 dark:text-red-400"
+								title={addError}
+							>
 								Failed to add — {addError}
 							</span>
 						{:else}
-							<span class="rounded-lg bg-teal-100 px-4 py-2 text-sm font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-400">
+							<span
+								class="rounded-lg bg-teal-100 px-4 py-2 text-sm font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-400"
+							>
 								{#if addedCount > 0}
 									✓ {addedCount} added{skipCount > 0 ? ` · ${skipCount} already in queue` : ''}
 								{:else}
@@ -171,15 +186,17 @@
 			{/each}
 		</div>
 
-	<!-- Expired -->
+		<!-- Expired -->
 	{:else if pageState === 'expired'}
 		<div class="py-24 text-center">
 			<p class="mb-2 text-5xl">🔗</p>
 			<p class="text-lg font-medium text-gray-700 dark:text-gray-300">Share link expired</p>
-			<p class="mt-1 text-sm text-gray-500">Shared links are valid for 30 days. Ask for a new one!</p>
+			<p class="mt-1 text-sm text-gray-500">
+				Shared links are valid for 30 days. Ask for a new one!
+			</p>
 		</div>
 
-	<!-- Invalid / error -->
+		<!-- Invalid / error -->
 	{:else if pageState === 'invalid' || pageState === 'error'}
 		<div class="py-24 text-center">
 			<p class="mb-2 text-5xl">🔒</p>
@@ -187,16 +204,26 @@
 			<p class="mt-1 text-sm text-gray-500">The link may be incomplete or corrupted.</p>
 		</div>
 
-	<!-- Grid of shared items -->
+		<!-- Grid of shared items -->
 	{:else}
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each items as item (`${item.tmdb_id}:${item.media_type}`)}
-				<div class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0">
+				<div
+					class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+				>
 					<div class="relative aspect-[2/3] bg-gray-200 dark:bg-gray-800">
 						{#if item.poster_path}
-							<img src="{TMDB_IMG}/w300{item.poster_path}" alt={item.title} class="h-full w-full object-cover" />
+							<img
+								src="{TMDB_IMG}/w300{item.poster_path}"
+								alt={item.title}
+								class="h-full w-full object-cover"
+							/>
 						{:else}
-							<div class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600">🎬</div>
+							<div
+								class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600"
+							>
+								🎬
+							</div>
 						{/if}
 					</div>
 					<div class="flex flex-1 flex-col gap-2 p-3">
@@ -206,7 +233,12 @@
 								{item.media_type === 'movie' ? '🎬' : '📺'}
 							</span>
 							{#each item.providers.slice(0, 4) as p (p.provider_id)}
-								<img src="{TMDB_IMG}/w92{p.logo_path}" alt={p.provider_name} title={p.provider_name} class="h-5 w-5 rounded" />
+								<img
+									src="{TMDB_IMG}/w92{p.logo_path}"
+									alt={p.provider_name}
+									title={p.provider_name}
+									class="h-5 w-5 rounded"
+								/>
 							{/each}
 							{#if item.providers.length > 4}
 								<span class="text-xs text-gray-500">+{item.providers.length - 4}</span>
@@ -215,7 +247,9 @@
 								<span class="text-sm leading-none" title="Not on streaming services">🚫</span>
 							{/if}
 						</div>
-						<p class="text-[10px] tabular-nums text-gray-500">{formatRuntime(itemRuntime(item), item.media_type)}</p>
+						<p class="text-[10px] tabular-nums text-gray-500">
+							{formatRuntime(itemRuntime(item), item.media_type)}
+						</p>
 					</div>
 				</div>
 			{/each}

@@ -12,7 +12,9 @@ const MIN_BYTES = 12 + 16;
 function makeToken(): string {
 	const bytes = crypto.getRandomValues(new Uint8Array(TOKEN_BYTES));
 	return btoa(String.fromCharCode(...bytes))
-		.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+		.replace(/\+/g, '-')
+		.replace(/\//g, '_')
+		.replace(/=/g, '');
 }
 
 export const POST: RequestHandler = async ({ request, platform }) => {
@@ -25,7 +27,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	if (!kv) return new Response('Sharing unavailable', { status: 503 });
 
 	const body = await request.arrayBuffer();
-	if (body.byteLength < MIN_BYTES) return new Response('Payload too small to be valid', { status: 400 });
+	if (body.byteLength < MIN_BYTES)
+		return new Response('Payload too small to be valid', { status: 400 });
 	if (body.byteLength > MAX_BYTES) return new Response('Payload too large', { status: 413 });
 
 	const token = makeToken();

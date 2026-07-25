@@ -269,7 +269,7 @@ describe('parseImportBackup', () => {
 			prefs: {
 				queueColors: {
 					[longKey]: '#ff0000',
-					'tag': longVal
+					tag: longVal
 				}
 			}
 		};
@@ -277,10 +277,10 @@ describe('parseImportBackup', () => {
 		const colors = result.prefs?.queueColors ?? {};
 		const keys = Object.keys(colors);
 		// Keys should be clamped to 100 chars
-		expect(keys.some(k => k.length === 100)).toBe(true);
+		expect(keys.some((k) => k.length === 100)).toBe(true);
 		const values = Object.values(colors);
 		// Values should be clamped to 50 chars (the longVal is 100 # chars)
-		expect(values.some(v => v.length === 50)).toBe(true);
+		expect(values.some((v) => v.length === 50)).toBe(true);
 	});
 
 	it('throws on non-object input', () => {

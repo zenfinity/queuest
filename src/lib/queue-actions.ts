@@ -12,7 +12,9 @@ export interface QueueActionDeps {
 	setError: (message: string) => void;
 }
 
-export async function reloadQueue(deps: Pick<QueueActionDeps, 'setItems' | 'setError'>): Promise<void> {
+export async function reloadQueue(
+	deps: Pick<QueueActionDeps, 'setItems' | 'setError'>
+): Promise<void> {
 	try {
 		deps.setItems(await getAll());
 	} catch (e) {

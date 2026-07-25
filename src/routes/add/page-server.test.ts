@@ -66,8 +66,16 @@ describe('/add server load', () => {
 		]);
 		getWatchProviders.mockRejectedValue(new Error('boom'));
 		getRuntime.mockResolvedValue({
-			runtime_minutes: 148, seasons: [], networkIds: [], companyIds: [],
-			release: null, backdrop_path: null, genres: [], cast: [], director: null, creator: null
+			runtime_minutes: 148,
+			seasons: [],
+			networkIds: [],
+			companyIds: [],
+			release: null,
+			backdrop_path: null,
+			genres: [],
+			cast: [],
+			director: null,
+			creator: null
 		});
 
 		const result = await runLoad('inception');
@@ -77,17 +85,34 @@ describe('/add server load', () => {
 
 	it('returns matched results on the happy path, with no error', async () => {
 		searchMulti.mockResolvedValue([
-			{ id: 27205, media_type: 'movie', title: 'Inception', poster_path: '/x.jpg', overview: 'A thief...', release_date: '2010-07-16' }
+			{
+				id: 27205,
+				media_type: 'movie',
+				title: 'Inception',
+				poster_path: '/x.jpg',
+				overview: 'A thief...',
+				release_date: '2010-07-16'
+			}
 		]);
 		getWatchProviders.mockResolvedValue({
 			providers: [{ provider_id: 8, provider_name: 'Netflix', logo_path: '/n.png' }],
 			rentable: false
 		});
 		getRuntime.mockResolvedValue({
-			runtime_minutes: 148, seasons: [], networkIds: [], companyIds: [],
-			release: null, backdrop_path: '/bg.jpg', genres: ['Sci-Fi'], cast: [], director: 'Christopher Nolan', creator: null
+			runtime_minutes: 148,
+			seasons: [],
+			networkIds: [],
+			companyIds: [],
+			release: null,
+			backdrop_path: '/bg.jpg',
+			genres: ['Sci-Fi'],
+			cast: [],
+			director: 'Christopher Nolan',
+			creator: null
 		});
-		augmentProviders.mockReturnValue([{ provider_id: 8, provider_name: 'Netflix', logo_path: '/n.png' }]);
+		augmentProviders.mockReturnValue([
+			{ provider_id: 8, provider_name: 'Netflix', logo_path: '/n.png' }
+		]);
 
 		const result = await runLoad('inception');
 		expect(result.error).toBeNull();
@@ -108,8 +133,16 @@ describe('/add server load', () => {
 		);
 		getWatchProviders.mockResolvedValue({ providers: [], rentable: false });
 		getRuntime.mockResolvedValue({
-			runtime_minutes: 90, seasons: [], networkIds: [], companyIds: [],
-			release: null, backdrop_path: null, genres: [], cast: [], director: null, creator: null
+			runtime_minutes: 90,
+			seasons: [],
+			networkIds: [],
+			companyIds: [],
+			release: null,
+			backdrop_path: null,
+			genres: [],
+			cast: [],
+			director: null,
+			creator: null
 		});
 		augmentProviders.mockReturnValue([]);
 

@@ -13,15 +13,16 @@
 
 	// ── Export ────────────────────────────────────────────────────────────────
 	let exportPassphrase = $state('');
-	let exporting        = $state(false);
-	let exportDone       = $state(false);
+	let exporting = $state(false);
+	let exportDone = $state(false);
 
 	async function doExport() {
 		if (!exportPassphrase) return;
-		exporting = true; exportDone = false;
+		exporting = true;
+		exportDone = false;
 		try {
 			const [items, services] = await Promise.all([getAll(), getServices()]);
-			const _weeklyHours  = JSON.parse(localStorage.getItem('sq:budget:weekly') ?? '10');
+			const _weeklyHours = JSON.parse(localStorage.getItem('sq:budget:weekly') ?? '10');
 			const _weeksPerMonth = JSON.parse(localStorage.getItem('sq:budget:weeks') ?? '4');
 			// Wrap items + preferences so a restore is complete
 			const payload = {
@@ -34,7 +35,7 @@
 					queueName: getQueueName(),
 					queueColors: getQueueColors(),
 					sort: localStorage.getItem('sq:sort') ?? 'added',
-					view: localStorage.getItem('sq:view') ?? 'grid',
+					view: localStorage.getItem('sq:view') ?? 'grid'
 				},
 				items,
 				services
@@ -48,25 +49,32 @@
 			URL.revokeObjectURL(url);
 			exportPassphrase = '';
 			exportDone = true;
-		} finally { exporting = false; }
+		} finally {
+			exporting = false;
+		}
 	}
 
 	// ── Refresh providers ─────────────────────────────────────────────────────
-	let refreshing     = $state(false);
-	let refreshTotal   = $state(0);
-	let refreshDone    = $state(0);
-	let refreshError   = $state('');
+	let refreshing = $state(false);
+	let refreshTotal = $state(0);
+	let refreshDone = $state(0);
+	let refreshError = $state('');
 	let refreshSuccess = $state(false);
 
 	async function doRefresh() {
-		refreshing = true; refreshError = ''; refreshSuccess = false;
+		refreshing = true;
+		refreshError = '';
+		refreshSuccess = false;
 		try {
 			const items = await getAll();
 			const payload = items.map(({ id, tmdb_id, media_type }) => ({ id, tmdb_id, media_type }));
 			refreshTotal = payload.length;
 			refreshDone = 0;
 
-			if (!payload.length) { refreshSuccess = true; return; }
+			if (!payload.length) {
+				refreshSuccess = true;
+				return;
+			}
 
 			const res = await fetch('/api/refresh-providers', {
 				method: 'POST',
@@ -76,7 +84,7 @@
 
 			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
 
-			const results = await res.json() as Array<{
+			const results = (await res.json()) as Array<{
 				id: number;
 				providers: import('$lib/types').Provider[];
 				rentable?: boolean;
@@ -92,32 +100,53 @@
 
 			// Write back to IndexedDB one by one
 			for (const r of results) {
-				await patchProviders(r.id, r.providers, r.rentable ?? false, r.release, r.seasons, r.runtime_minutes, r.backdrop_path, r.genres, r.cast, r.director, r.creator);
+				await patchProviders(
+					r.id,
+					r.providers,
+					r.rentable ?? false,
+					r.release,
+					r.seasons,
+					r.runtime_minutes,
+					r.backdrop_path,
+					r.genres,
+					r.cast,
+					r.director,
+					r.creator
+				);
 				refreshDone++;
 			}
 			refreshSuccess = true;
 		} catch (e) {
 			refreshError = e instanceof Error ? e.message : 'Refresh failed.';
-		} finally { refreshing = false; }
+		} finally {
+			refreshing = false;
+		}
 	}
 
 	// ── Feedback ──────────────────────────────────────────────────────────────
-	let feedbackOpen      = $state(false);
-	let feedbackTitle     = $state('');
-	let feedbackBody      = $state('');
-	let feedbackSending   = $state(false);
-	let feedbackError     = $state('');
-	let feedbackIssueUrl  = $state('');
+	let feedbackOpen = $state(false);
+	let feedbackTitle = $state('');
+	let feedbackBody = $state('');
+	let feedbackSending = $state(false);
+	let feedbackError = $state('');
+	let feedbackIssueUrl = $state('');
 
 	function openFeedback() {
-		feedbackOpen = true; feedbackTitle = ''; feedbackBody = '';
-		feedbackError = ''; feedbackIssueUrl = '';
+		feedbackOpen = true;
+		feedbackTitle = '';
+		feedbackBody = '';
+		feedbackError = '';
+		feedbackIssueUrl = '';
 	}
-	function closeFeedback() { feedbackOpen = false; }
+	function closeFeedback() {
+		feedbackOpen = false;
+	}
 
 	async function submitFeedback() {
 		if (!feedbackTitle.trim()) return;
-		feedbackSending = true; feedbackError = ''; feedbackIssueUrl = '';
+		feedbackSending = true;
+		feedbackError = '';
+		feedbackIssueUrl = '';
 		try {
 			const res = await fetch('/api/feedback', {
 				method: 'POST',
@@ -130,27 +159,49 @@
 			} else {
 				const data = await res.json();
 				feedbackIssueUrl = data.url;
-				feedbackTitle = ''; feedbackBody = '';
+				feedbackTitle = '';
+				feedbackBody = '';
 			}
 		} catch (e) {
 			feedbackError = e instanceof Error ? e.message : 'Network error.';
-		} finally { feedbackSending = false; }
+		} finally {
+			feedbackSending = false;
+		}
 	}
 
 	// ── Reset ─────────────────────────────────────────────────────────────────
-	let resetArmed  = $state(false);
-	let resetting   = $state(false);
+	let resetArmed = $state(false);
+	let resetting = $state(false);
 
 	async function doReset() {
-		if (!resetArmed) { resetArmed = true; return; }
+		if (!resetArmed) {
+			resetArmed = true;
+			return;
+		}
 		resetting = true;
 		try {
 			await Promise.all([replaceAll([]), setServices([])]);
-			const keys = ['sq:theme','sq:budget','sq:budget:weekly','sq:budget:weeks',
-			               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed','sq:import-missed'];
-			for (const k of keys) { try { localStorage.removeItem(k); } catch {} }
+			const keys = [
+				'sq:theme',
+				'sq:budget',
+				'sq:budget:weekly',
+				'sq:budget:weeks',
+				'sq:sort',
+				'sq:view',
+				'sq:queue-name',
+				'sq:queue-colors',
+				'sq:welcomed',
+				'sq:import-missed'
+			];
+			for (const k of keys) {
+				try {
+					localStorage.removeItem(k);
+				} catch {}
+			}
 			window.location.href = '/';
-		} finally { resetting = false; }
+		} finally {
+			resetting = false;
+		}
 	}
 
 	// ── Cancel alerts opt-in ─────────────────────────────────────────────────
@@ -158,15 +209,19 @@
 
 	function toggleCancelAlerts() {
 		cancelAlertsEnabled = !cancelAlertsEnabled;
-		try { localStorage.setItem('sq:cancel-alerts', cancelAlertsEnabled ? 'true' : 'false'); } catch {}
+		try {
+			localStorage.setItem('sq:cancel-alerts', cancelAlertsEnabled ? 'true' : 'false');
+		} catch {}
 	}
 
 	// ── Queue identity ────────────────────────────────────────────────────────
-	let myQueueName  = $state('My Queue');
-	let queueColors  = $state<Record<string, string>>({});
+	let myQueueName = $state('My Queue');
+	let queueColors = $state<Record<string, string>>({});
 	let importedTags = $state<string[]>([]);
 
-	function saveQueueName() { setQueueName(myQueueName); }
+	function saveQueueName() {
+		setQueueName(myQueueName);
+	}
 	function updateImportedColor(tag: string, color: string) {
 		setQueueColor(tag, color);
 		queueColors = { ...queueColors, [tag]: color };
@@ -185,8 +240,6 @@
 		}
 		importedTags = [...tags].sort();
 	});
-
-
 </script>
 
 <svelte:head><title>Queuest — Settings</title></svelte:head>
@@ -238,13 +291,14 @@
 			<div class="space-y-2">
 				{#each importedTags as tag (tag)}
 					{@const color = queueColors[tag] ?? '#888888'}
-					<div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
+					<div
+						class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60"
+					>
 						<div class="flex items-center gap-2.5 min-w-0">
-							<span
-								class="h-3 w-3 shrink-0 rounded-full"
-								style="background:{color};"
-							></span>
-							<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{tag}</span>
+							<span class="h-3 w-3 shrink-0 rounded-full" style="background:{color};"></span>
+							<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200"
+								>{tag}</span
+							>
 						</div>
 						<label class="relative ml-3 shrink-0 cursor-pointer" title="Change color">
 							<span
@@ -254,7 +308,8 @@
 							<input
 								type="color"
 								value={color}
-								oninput={(e) => updateImportedColor(tag, (e.currentTarget as HTMLInputElement).value)}
+								oninput={(e) =>
+									updateImportedColor(tag, (e.currentTarget as HTMLInputElement).value)}
 								class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
 							/>
 						</label>
@@ -268,9 +323,12 @@
 
 	<!-- Cancel alerts -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Cancellation Alerts</h2>
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
+			Cancellation Alerts
+		</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			When enabled, a banner appears on your queue when you've nearly cleared a streaming service — a nudge to consider pausing your subscription.
+			When enabled, a banner appears on your queue when you've nearly cleared a streaming service —
+			a nudge to consider pausing your subscription.
 		</p>
 		<div class="flex items-center justify-between">
 			<span class="text-sm text-gray-600 dark:text-gray-400">Show cancellation alerts</span>
@@ -281,8 +339,10 @@
 				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors
 					{cancelAlertsEnabled ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}"
 			>
-				<span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
-					{cancelAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}">
+				<span
+					class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
+					{cancelAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}"
+				>
 				</span>
 			</button>
 		</div>
@@ -294,7 +354,9 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Export Watchlist</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Downloads your queue and preferences as an encrypted <code class="text-orange-500">.queuest</code> file. The passphrase is required to import — keep it somewhere safe.
+			Downloads your queue and preferences as an encrypted <code class="text-orange-500"
+				>.queuest</code
+			> file. The passphrase is required to import — keep it somewhere safe.
 		</p>
 		<div class="flex gap-2">
 			<input
@@ -323,8 +385,8 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Refresh Data</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Re-fetches streaming providers, cast, release dates, and season info for every title in your queue.
-			Useful if providers look wrong, a title has moved services, or detail info is missing.
+			Re-fetches streaming providers, cast, release dates, and season info for every title in your
+			queue. Useful if providers look wrong, a title has moved services, or detail info is missing.
 		</p>
 		<button
 			onclick={doRefresh}
@@ -338,7 +400,9 @@
 			{/if}
 		</button>
 		{#if refreshSuccess && !refreshing}
-			<p class="text-xs text-teal-600 dark:text-teal-400">✓ Updated {refreshDone} title{refreshDone === 1 ? '' : 's'}.</p>
+			<p class="text-xs text-teal-600 dark:text-teal-400">
+				✓ Updated {refreshDone} title{refreshDone === 1 ? '' : 's'}.
+			</p>
 		{/if}
 		{#if refreshError}
 			<p class="text-xs text-red-500">{refreshError}</p>
@@ -351,15 +415,22 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Danger Zone</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Wipes your entire queue and resets all preferences. The app will restart as if you're a new user.
+			Wipes your entire queue and resets all preferences. The app will restart as if you're a new
+			user.
 			<span class="font-medium text-red-500">This cannot be undone.</span>
 		</p>
 		{#if resetArmed}
-			<div class="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/40 dark:bg-red-950/20">
-				<span class="text-sm text-red-700 dark:text-red-400">Are you sure? All data will be lost.</span>
+			<div
+				class="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/40 dark:bg-red-950/20"
+			>
+				<span class="text-sm text-red-700 dark:text-red-400"
+					>Are you sure? All data will be lost.</span
+				>
 				<div class="ml-auto flex gap-2">
 					<button
-						onclick={() => { resetArmed = false; }}
+						onclick={() => {
+							resetArmed = false;
+						}}
 						class="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-600 ring-1 ring-gray-300 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700"
 					>
 						Cancel
@@ -393,7 +464,9 @@
 			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
 				Queu<span class="text-orange-400">est</span>
 			</span>
-			<span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+			<span
+				class="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+			>
 				v{VERSION}
 			</span>
 		</div>
@@ -413,7 +486,9 @@
 				class="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 			>
 				<svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-					<path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+					<path
+						d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+					/>
 				</svg>
 				GitHub
 			</a>
@@ -443,7 +518,12 @@
 			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Send Feedback</h2>
 			<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
 				This opens a public GitHub issue — don't include personal info. Check
-				<a href="{GITHUB_REPO}/issues" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:underline">existing issues</a>
+				<a
+					href="{GITHUB_REPO}/issues"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="text-orange-500 hover:underline">existing issues</a
+				>
 				first!
 			</p>
 
@@ -468,7 +548,9 @@
 			{#if feedbackIssueUrl}
 				<p class="mt-2 text-xs text-teal-600 dark:text-teal-400">
 					✓ Issue filed!
-					<a href={feedbackIssueUrl} target="_blank" rel="noopener noreferrer" class="underline">View it on GitHub →</a>
+					<a href={feedbackIssueUrl} target="_blank" rel="noopener noreferrer" class="underline"
+						>View it on GitHub →</a
+					>
 				</p>
 			{/if}
 

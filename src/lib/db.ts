@@ -22,7 +22,10 @@ function open(): Promise<IDBDatabase> {
 			}
 		};
 		req.onsuccess = () => resolve(req.result);
-		req.onerror = () => { _dbPromise = null; reject(req.error); };
+		req.onerror = () => {
+			_dbPromise = null;
+			reject(req.error);
+		};
 	});
 	return _dbPromise;
 }
@@ -178,7 +181,11 @@ export async function setServices(services: Provider[]): Promise<void> {
 
 export async function toggleService(service: Provider): Promise<boolean> {
 	const id = service.provider_id;
-	const plain: Provider = { provider_id: id, provider_name: service.provider_name, logo_path: service.logo_path };
+	const plain: Provider = {
+		provider_id: id,
+		provider_name: service.provider_name,
+		logo_path: service.logo_path
+	};
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(SERVICES_STORE, 'readwrite');

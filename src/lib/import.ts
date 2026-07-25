@@ -17,22 +17,35 @@ function parseCSV(text: string): string[][] {
 	for (let i = 0; i < src.length; i++) {
 		const ch = src[i];
 		if (inQ) {
-			if (ch === '"' && src[i + 1] === '"') { field += '"'; i++; }
-			else if (ch === '"') inQ = false;
+			if (ch === '"' && src[i + 1] === '"') {
+				field += '"';
+				i++;
+			} else if (ch === '"') inQ = false;
 			else field += ch;
 		} else if (ch === '"') {
 			inQ = true;
 		} else if (ch === ',') {
-			cols.push(field); field = '';
+			cols.push(field);
+			field = '';
 		} else if (ch === '\r' && src[i + 1] === '\n') {
-			cols.push(field); rows.push(cols); cols = []; field = ''; i++;
+			cols.push(field);
+			rows.push(cols);
+			cols = [];
+			field = '';
+			i++;
 		} else if (ch === '\n') {
-			cols.push(field); rows.push(cols); cols = []; field = '';
+			cols.push(field);
+			rows.push(cols);
+			cols = [];
+			field = '';
 		} else {
 			field += ch;
 		}
 	}
-	if (field || cols.length) { cols.push(field); if (cols.some(Boolean)) rows.push(cols); }
+	if (field || cols.length) {
+		cols.push(field);
+		if (cols.some(Boolean)) rows.push(cols);
+	}
 	return rows;
 }
 
@@ -50,12 +63,13 @@ export function parseLetterboxdCSV(text: string): ImportRow[] {
 	const nameIdx = headers.indexOf('name');
 	const yearIdx = headers.indexOf('year');
 	if (nameIdx === -1) return [];
-	return rows.slice(1)
+	return rows
+		.slice(1)
 		.filter((r) => r[nameIdx]?.trim())
 		.map((r) => ({
 			title: r[nameIdx].trim(),
-			year: yearIdx !== -1 ? (r[yearIdx]?.trim() || null) : null,
-			mediaTypeHint: 'movie' as const,
+			year: yearIdx !== -1 ? r[yearIdx]?.trim() || null : null,
+			mediaTypeHint: 'movie' as const
 		}));
 }
 
@@ -71,7 +85,8 @@ export function parseImdbCSV(text: string): ImportRow[] {
 	const TV_TYPES = new Set(['tvseries', 'tvminiseries', 'tvspecial']);
 	const SKIP_TYPES = new Set(['short', 'tvshort', 'videogame', 'video']);
 
-	return rows.slice(1)
+	return rows
+		.slice(1)
 		.filter((r) => {
 			const t = r[typeIdx]?.trim().toLowerCase() ?? '';
 			return r[titleIdx]?.trim() && !SKIP_TYPES.has(t);
@@ -80,8 +95,8 @@ export function parseImdbCSV(text: string): ImportRow[] {
 			const rawType = r[typeIdx]?.trim().toLowerCase() ?? '';
 			return {
 				title: r[titleIdx].trim(),
-				year: yearIdx !== -1 ? (r[yearIdx]?.trim() || null) : null,
-				mediaTypeHint: TV_TYPES.has(rawType) ? 'tv' as const : 'movie' as const,
+				year: yearIdx !== -1 ? r[yearIdx]?.trim() || null : null,
+				mediaTypeHint: TV_TYPES.has(rawType) ? ('tv' as const) : ('movie' as const)
 			};
 		});
 }
@@ -129,10 +144,14 @@ export function parseTextList(text: string): ImportRow[] {
 
 			// Extract trailing year: "(2023)", "[2023]", or bare "2023" at end
 			let year: string | null = null;
-			const yearMatch = s.match(/[\[(]?(\d{4})[\])]?\s*$/);
+			const yearMatch = s.match(/[[(]?(\d{4})[\])]?\s*$/);
 			if (yearMatch && parseInt(yearMatch[1]) >= 1900 && parseInt(yearMatch[1]) <= 2100) {
 				year = yearMatch[1];
-				s = s.slice(0, yearMatch.index).trim().replace(/[,;:-]+$/, '').trim();
+				s = s
+					.slice(0, yearMatch.index)
+					.trim()
+					.replace(/[,;:-]+$/, '')
+					.trim();
 			}
 			if (!s) return null;
 			return { title: s, year, mediaTypeHint: 'auto' as const };

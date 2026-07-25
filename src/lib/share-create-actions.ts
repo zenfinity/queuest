@@ -32,7 +32,10 @@ export async function createShareLink(
 				poster_path: item.poster_path,
 				providers: item.providers,
 				runtime_minutes: item.runtime_minutes,
-				seasons: (item.seasons ?? []).map((s) => ({ season_number: s.season_number, runtime_minutes: s.runtime_minutes })),
+				seasons: (item.seasons ?? []).map((s) => ({
+					season_number: s.season_number,
+					runtime_minutes: s.runtime_minutes
+				})),
 				queue_tag: item.queue_tag ?? null
 			}))
 		};
