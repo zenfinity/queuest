@@ -120,4 +120,4 @@ Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API re
 
 ## License
 
-AGPL-3.0
+AGPL 3.0
