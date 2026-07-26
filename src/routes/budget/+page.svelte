@@ -12,8 +12,28 @@
 	let isOnboarding = $state(false);
 
 	// ── Budget ────────────────────────────────────────────────────────────────
-	let hoursPerWeek = $state(10);
-	let weeksPerMonth = $state(4);
+	// Read synchronously at init (this route is ssr=false, so localStorage is
+	// always available here) rather than in onMount — the persistence $effect
+	// below runs in declaration order on mount, so if this lived in onMount
+	// instead, the effect would fire first with the default 10/4 and stomp
+	// whatever was actually saved before onMount ever got a chance to read it.
+	function loadBudgetPrefs(): { hoursPerWeek: number; weeksPerMonth: number } {
+		try {
+			const weekly = localStorage.getItem('sq:budget:weekly');
+			const weeks = localStorage.getItem('sq:budget:weeks');
+			if (weekly !== null && weeks !== null) {
+				return { hoursPerWeek: JSON.parse(weekly), weeksPerMonth: JSON.parse(weeks) };
+			}
+			const legacy = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
+			return { hoursPerWeek: Math.round(legacy / 4), weeksPerMonth: 4 };
+		} catch {
+			return { hoursPerWeek: 10, weeksPerMonth: 4 };
+		}
+	}
+	const initialBudgetPrefs = loadBudgetPrefs();
+
+	let hoursPerWeek = $state(initialBudgetPrefs.hoursPerWeek);
+	let weeksPerMonth = $state(initialBudgetPrefs.weeksPerMonth);
 	let budgetHours = $derived(hoursPerWeek * weeksPerMonth);
 
 	$effect(() => {
@@ -56,19 +76,6 @@
 
 	onMount(async () => {
 		isOnboarding = page.url.searchParams.has('onboarding');
-
-		try {
-			const weekly = localStorage.getItem('sq:budget:weekly');
-			const weeks = localStorage.getItem('sq:budget:weeks');
-			if (weekly !== null && weeks !== null) {
-				hoursPerWeek = JSON.parse(weekly);
-				weeksPerMonth = JSON.parse(weeks);
-			} else {
-				const legacy = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
-				weeksPerMonth = 4;
-				hoursPerWeek = Math.round(legacy / weeksPerMonth);
-			}
-		} catch {}
 
 		const [items, svcs] = await Promise.all([getAll(), getServices()]);
 		setSubscribedIds(new Set(svcs.map((s) => s.provider_id)));
