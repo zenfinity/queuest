@@ -1,7 +1,16 @@
-const NAME_KEY   = 'sq:queue:name';
+const NAME_KEY = 'sq:queue:name';
 const COLORS_KEY = 'sq:queue:colors';
 
-const PALETTE = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
+const PALETTE = [
+	'#ef4444',
+	'#f97316',
+	'#eab308',
+	'#22c55e',
+	'#06b6d4',
+	'#3b82f6',
+	'#8b5cf6',
+	'#ec4899'
+];
 
 function autoColor(name: string): string {
 	let h = 5381;
@@ -10,15 +19,25 @@ function autoColor(name: string): string {
 }
 
 export function getQueueName(): string {
-	try { return localStorage.getItem(NAME_KEY) ?? 'My Queue'; } catch { return 'My Queue'; }
+	try {
+		return localStorage.getItem(NAME_KEY) ?? 'My Queue';
+	} catch {
+		return 'My Queue';
+	}
 }
 
 export function setQueueName(name: string): void {
-	try { localStorage.setItem(NAME_KEY, name); } catch {}
+	try {
+		localStorage.setItem(NAME_KEY, name);
+	} catch {}
 }
 
 export function getQueueColors(): Record<string, string> {
-	try { return JSON.parse(localStorage.getItem(COLORS_KEY) ?? '{}'); } catch { return {}; }
+	try {
+		return JSON.parse(localStorage.getItem(COLORS_KEY) ?? '{}');
+	} catch {
+		return {};
+	}
 }
 
 export function setQueueColor(name: string, color: string): void {

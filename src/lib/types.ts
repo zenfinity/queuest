@@ -42,21 +42,18 @@ export interface WatchlistItem {
 	poster_path: string | null;
 	overview: string | null;
 	providers: Provider[];
-	rentable?: boolean;                // true if available to rent/buy but not on subscription
-	runtime_minutes: number | null;   // total runtime (all seasons)
-	seasons: SeasonSummary[];          // TV only; empty array for movies / pre-feature items
-	watched_seasons: number[];         // season numbers fully completed
-	current_season: number | null;    // season currently in progress
-	current_episode: number | null;   // episode currently on within current_season
+	rentable?: boolean; // true if available to rent/buy but not on subscription
+	runtime_minutes: number | null; // total runtime (all seasons)
+	seasons: SeasonSummary[]; // TV only; empty array for movies / pre-feature items
+	watched_seasons: number[]; // season numbers fully completed
 	added_at: string;
 	watched_at: string | null;
 	release?: ReleaseInfo | null;
-	queue_tag?: string | null;         // set on items imported from someone else's shared list
-	backdrop_path?: string | null;
+	queue_tag?: string | null; // set on items imported from someone else's shared list
 	genres?: string[];
 	cast?: CastMember[];
-	director?: string | null;          // movie director
-	creator?: string | null;           // TV show creator(s)
+	director?: string | null; // movie director
+	creator?: string | null; // TV show creator(s)
 }
 
 export interface SearchResult {
@@ -71,7 +68,6 @@ export interface SearchResult {
 	runtime_minutes: number | null;
 	seasons: SeasonSummary[];
 	release: ReleaseInfo | null;
-	backdrop_path: string | null;
 	genres: string[];
 	cast: CastMember[];
 	director: string | null;

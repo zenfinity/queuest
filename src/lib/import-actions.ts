@@ -1,12 +1,16 @@
-import type { ImportRow } from './import';
-import type { WatchlistItem, Provider } from './types';
+import type { ImportFormat, ImportRow } from './import';
+import type { WatchlistItem } from './types';
 import { addItem, replaceAll, setServices } from './db';
 import { decrypt } from './crypto';
 import { parseImportBackup } from './share-schema';
 import { setQueueName, setQueueColor } from './queue-colors';
+import { parseImportCSV } from './import';
+import { saveBudgetPrefs } from './progress';
+import { throwIfNotOk, isConstraintError } from './http';
 
 export interface ImportActionDeps {
 	setImporting: (importing: boolean) => void;
+	setImportTotal: (total: number) => void;
 	setImportDone: (done: number) => void;
 	setImportAdded: (added: number) => void;
 	setImportError: (error: string) => void;
@@ -20,14 +24,11 @@ export interface RestoreDeps extends ImportActionDeps {
 
 const BATCH = 10;
 
-export async function importRows(
-	rows: ImportRow[],
-	deps: ImportActionDeps
-): Promise<void> {
+export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Promise<void> {
 	if (!rows.length) return;
 	deps.setImporting(true);
 	deps.setImportError('');
-	const importTotal = rows.length;
+	deps.setImportTotal(rows.length);
 	let importDone = 0;
 	let importAdded = 0;
 	let missedTitles: string[] = [];
@@ -40,8 +41,8 @@ export async function importRows(
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(batch)
 			});
-			if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-			const matched = await res.json() as Array<{
+			await throwIfNotOk(res);
+			const matched = (await res.json()) as Array<{
 				title: string;
 				result: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> | null;
 			}>;
@@ -51,7 +52,7 @@ export async function importRows(
 						await addItem(result);
 						importAdded++;
 					} catch (e) {
-						if (e instanceof DOMException && e.name === 'ConstraintError') {
+						if (isConstraintError(e)) {
 							importAdded++;
 						} else {
 							throw e;
@@ -66,7 +67,9 @@ export async function importRows(
 		}
 		deps.setImportDoneOnce(true);
 		deps.setMissedTitles(missedTitles);
-		try { localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles)); } catch {}
+		try {
+			localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles));
+		} catch {}
 		deps.setImportAdded(importAdded);
 	} catch (e) {
 		deps.setImportError(e instanceof Error ? e.message : 'Import failed.');
@@ -75,13 +78,28 @@ export async function importRows(
 	}
 }
 
-export async function replaceAllItems(items: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>[]): Promise<void> {
-	const fullItems: WatchlistItem[] = items.map((item, idx) => ({
-		...item,
-		id: idx,
-		added_at: new Date().toISOString(),
-		watched_at: null
-	}));
+export async function replaceAllItems(
+	items: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>[]
+): Promise<void> {
+	// parseImportBackup's declared type omits id/added_at/watched_at, but at
+	// runtime it passes the raw object through unmodified (see share-schema.ts),
+	// so a backup produced by buildExportBlob still carries the real values here.
+	// Preserve them when present rather than stamping every item as "added just
+	// now, never watched" — and never reuse the exported id: ids are IndexedDB
+	// autoIncrement, so they're device-local and would collide with (or
+	// silently shadow) whatever this device already assigned to other items.
+	const fullItems = items.map((item) => {
+		const { added_at, watched_at } = item as unknown as {
+			added_at?: unknown;
+			watched_at?: unknown;
+		};
+		const { id: _id, ...rest } = item as unknown as Partial<WatchlistItem>;
+		return {
+			...(rest as Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>),
+			added_at: typeof added_at === 'string' ? added_at : new Date().toISOString(),
+			watched_at: typeof watched_at === 'string' ? watched_at : null
+		};
+	});
 	await replaceAll(fullItems);
 }
 
@@ -94,7 +112,9 @@ export async function restoreBackup(
 	deps.setImporting(true);
 	deps.setImportError('');
 	try {
-		const parsed = parseImportBackup(JSON.parse(await decrypt(await file.arrayBuffer(), passphrase)));
+		const parsed = parseImportBackup(
+			JSON.parse(await decrypt(await file.arrayBuffer(), passphrase))
+		);
 
 		const ops: Promise<void>[] = [replaceAllItems(parsed.items)];
 
@@ -104,13 +124,17 @@ export async function restoreBackup(
 			localStorage.setItem('sq:theme', parsed.prefs.theme);
 			document.documentElement.classList.toggle('dark', dark);
 		}
-		if (typeof parsed.prefs?.weeklyHours === 'number' && typeof parsed.prefs?.weeksPerMonth === 'number') {
-			localStorage.setItem('sq:budget:weekly', JSON.stringify(parsed.prefs.weeklyHours));
-			localStorage.setItem('sq:budget:weeks',  JSON.stringify(parsed.prefs.weeksPerMonth));
-			localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.weeklyHours * parsed.prefs.weeksPerMonth));
+		if (
+			typeof parsed.prefs?.weeklyHours === 'number' &&
+			typeof parsed.prefs?.weeksPerMonth === 'number'
+		) {
+			saveBudgetPrefs(parsed.prefs.weeklyHours, parsed.prefs.weeksPerMonth);
 		} else if (typeof parsed.prefs?.budget === 'number') {
+			// Legacy backups only stored the derived total, not the weekly/weeks pair —
+			// write sq:budget as the exact original value rather than saveBudgetPrefs'
+			// weeklyHours * weeksPerMonth, which would introduce rounding drift.
 			localStorage.setItem('sq:budget:weekly', JSON.stringify(Math.round(parsed.prefs.budget / 4)));
-			localStorage.setItem('sq:budget:weeks',  '4');
+			localStorage.setItem('sq:budget:weeks', '4');
 			localStorage.setItem('sq:budget', JSON.stringify(parsed.prefs.budget));
 		}
 		if (typeof parsed.prefs?.queueName === 'string') setQueueName(parsed.prefs.queueName);
@@ -132,20 +156,24 @@ export async function restoreBackup(
 	}
 }
 
-export async function fetchCsvFromUrl(url: string): Promise<{ rows: any[]; format: string }> {
-	if (!url.trim()) return { rows: [], format: '' };
+export async function fetchCsvFromUrl(
+	url: string
+): Promise<{ rows: ImportRow[]; format: ImportFormat }> {
+	if (!url.trim()) return { rows: [], format: 'unknown' };
 	try {
 		try {
 			const direct = await fetch(url.trim());
-			if (direct.ok) return { rows: [], format: 'csv' };
-		} catch {}
+			if (direct.ok) return parseImportCSV(await direct.text());
+		} catch {
+			// CORS blocked — fall through to server proxy
+		}
 		const res = await fetch('/api/import-fetch', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ url: url.trim() })
 		});
-		if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-		return { rows: [], format: 'csv' };
+		await throwIfNotOk(res);
+		return parseImportCSV(await res.text());
 	} catch (e) {
 		throw e instanceof Error ? e : new Error('Failed to fetch URL.');
 	}

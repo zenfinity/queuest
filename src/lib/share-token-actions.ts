@@ -1,6 +1,7 @@
-import type { ShareItem, WatchlistItem } from './types';
+import type { ShareItem } from './types';
 import { addItem } from './db';
 import { getOrAssignColor } from './queue-colors';
+import { isConstraintError } from './http';
 
 export interface ShareTokenActionDeps {
 	setAddingAll: (adding: boolean) => void;
@@ -46,14 +47,12 @@ export async function addAllToQueue(
 						runtime_minutes: s.runtime_minutes
 					})),
 					watched_seasons: [],
-					current_season: null,
-					current_episode: null,
 					release: null,
 					queue_tag: tag
 				});
 				added++;
 			} catch (err) {
-				if (err instanceof DOMException && err.name === 'ConstraintError') {
+				if (isConstraintError(err)) {
 					dupes++;
 				} else {
 					const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);

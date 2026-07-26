@@ -15,11 +15,11 @@ const BASE = 'https://api.themoviedb.org/3';
 // streams on Hulu, so they are deliberately excluded.
 const DISNEY_PLUS_NETWORK_ID = 2739;
 const DISNEY_PLUS_COMPANY_IDS = new Set([
-	1,    // Lucasfilm Ltd.        → Star Wars, Indiana Jones
-	2,    // Walt Disney Pictures  → live-action Disney films
-	3,    // Pixar                 → Toy Story, Coco, etc.
-	420,  // Marvel Studios        → MCU
-	6125  // Walt Disney Animation → Frozen, Moana, Encanto, etc.
+	1, // Lucasfilm Ltd.        → Star Wars, Indiana Jones
+	2, // Walt Disney Pictures  → live-action Disney films
+	3, // Pixar                 → Toy Story, Coco, etc.
+	420, // Marvel Studios        → MCU
+	6125 // Walt Disney Animation → Frozen, Moana, Encanto, etc.
 ]);
 
 export const DISNEY_PLUS_PROVIDER: Provider = {
@@ -56,9 +56,7 @@ export async function searchMulti(query: string, apiKey: string) {
 	);
 	if (!res.ok) return [];
 	const data = (await res.json()) as { results: Record<string, unknown>[] };
-	return (data.results ?? []).filter(
-		(r) => r.media_type === 'movie' || r.media_type === 'tv'
-	);
+	return (data.results ?? []).filter((r) => r.media_type === 'movie' || r.media_type === 'tv');
 }
 
 interface RuntimeResult {
@@ -69,7 +67,6 @@ interface RuntimeResult {
 	/** Production company IDs from the TMDB response (movies; empty for TV) */
 	companyIds: number[];
 	release: import('./types').ReleaseInfo | null;
-	backdrop_path: string | null;
 	genres: string[];
 	cast: import('./types').CastMember[];
 	director: string | null;
@@ -82,16 +79,29 @@ export async function getRuntime(
 	apiKey: string
 ): Promise<RuntimeResult> {
 	// Movies: append release_dates + credits in one call; TV: just credits
-	const qs = mediaType === 'movie' ? '&append_to_response=release_dates,credits' : '&append_to_response=credits';
+	const qs =
+		mediaType === 'movie'
+			? '&append_to_response=release_dates,credits'
+			: '&append_to_response=credits';
 	const res = await tmdbFetch(`${BASE}/${mediaType}/${id}?api_key=${apiKey}&language=en-US${qs}`);
-	if (!res.ok) return { runtime_minutes: null, seasons: [], networkIds: [], companyIds: [], release: null, backdrop_path: null, genres: [], cast: [], director: null, creator: null };
+	if (!res.ok)
+		return {
+			runtime_minutes: null,
+			seasons: [],
+			networkIds: [],
+			companyIds: [],
+			release: null,
+			genres: [],
+			cast: [],
+			director: null,
+			creator: null
+		};
 
 	if (mediaType === 'movie') {
 		const data = (await res.json()) as {
 			runtime?: number;
 			status?: string;
 			release_date?: string;
-			backdrop_path?: string | null;
 			genres?: Array<{ id: number; name: string }>;
 			production_companies?: Array<{ id: number }>;
 			release_dates?: {
@@ -101,14 +111,26 @@ export async function getRuntime(
 				}>;
 			};
 			credits?: {
-				cast?: Array<{ name: string; character: string; profile_path?: string | null; order: number }>;
+				cast?: Array<{
+					name: string;
+					character: string;
+					profile_path?: string | null;
+					order: number;
+				}>;
 				crew?: Array<{ name: string; job: string }>;
 			};
 		};
 
 		const companyIds = (data.production_companies ?? []).map((c) => c.id);
-		const release = movieReleaseInfo(data.status, data.release_date, data.release_dates?.results, companyIds);
-		const cast = (data.credits?.cast ?? []).slice(0, 8).map((c) => ({ name: c.name, character: c.character, profile_path: c.profile_path ?? null }));
+		const release = movieReleaseInfo(
+			data.status,
+			data.release_date,
+			data.release_dates?.results,
+			companyIds
+		);
+		const cast = (data.credits?.cast ?? [])
+			.slice(0, 8)
+			.map((c) => ({ name: c.name, character: c.character, profile_path: c.profile_path ?? null }));
 		const director = data.credits?.crew?.find((c) => c.job === 'Director')?.name ?? null;
 
 		return {
@@ -117,7 +139,6 @@ export async function getRuntime(
 			networkIds: [],
 			companyIds,
 			release,
-			backdrop_path: data.backdrop_path ?? null,
 			genres: (data.genres ?? []).map((g) => g.name),
 			cast,
 			director,
@@ -133,11 +154,15 @@ export async function getRuntime(
 		networks?: Array<{ id: number }>;
 		status?: string;
 		next_episode_to_air?: { air_date?: string; season_number?: number } | null;
-		backdrop_path?: string | null;
 		genres?: Array<{ id: number; name: string }>;
 		created_by?: Array<{ name: string }>;
 		credits?: {
-			cast?: Array<{ name: string; character: string; profile_path?: string | null; order: number }>;
+			cast?: Array<{
+				name: string;
+				character: string;
+				profile_path?: string | null;
+				order: number;
+			}>;
 		};
 	};
 
@@ -158,13 +183,22 @@ export async function getRuntime(
 	const totalEps = data.number_of_episodes ?? 0;
 	const runtime_minutes = totalEps && avgRuntime ? Math.round(totalEps * avgRuntime) : null;
 	const networkIds = (data.networks ?? []).map((n) => n.id);
-	const release = tvReleaseInfo(data.status, data.next_episode_to_air, data.last_episode_to_air?.season_number);
-	const cast = (data.credits?.cast ?? []).slice(0, 8).map((c) => ({ name: c.name, character: c.character, profile_path: c.profile_path ?? null }));
+	const release = tvReleaseInfo(
+		data.status,
+		data.next_episode_to_air,
+		data.last_episode_to_air?.season_number
+	);
+	const cast = (data.credits?.cast ?? [])
+		.slice(0, 8)
+		.map((c) => ({ name: c.name, character: c.character, profile_path: c.profile_path ?? null }));
 	const creator = (data.created_by ?? []).map((c) => c.name).join(', ') || null;
 
 	return {
-		runtime_minutes, seasons, networkIds, companyIds: [], release,
-		backdrop_path: data.backdrop_path ?? null,
+		runtime_minutes,
+		seasons,
+		networkIds,
+		companyIds: [],
+		release,
 		genres: (data.genres ?? []).map((g) => g.name),
 		cast,
 		director: null,
@@ -201,7 +235,9 @@ function addDays(isoStr: string, days: number): string {
 function movieReleaseInfo(
 	status: string | undefined,
 	release_date: string | undefined,
-	releaseDates: Array<{ iso_3166_1: string; release_dates: Array<{ type: number; release_date: string }> }> | undefined,
+	releaseDates:
+		| Array<{ iso_3166_1: string; release_dates: Array<{ type: number; release_date: string }> }>
+		| undefined,
 	companyIds: number[]
 ): import('./types').ReleaseInfo | null {
 	if (!status) return null;
@@ -289,27 +325,28 @@ const BUNDLE_NAME_RE = /bundle|with hulu|with disney|with max|\bvia\b|amazon cha
 //   1899 Max
 
 /**
+ * Deduplicate tier variants: if one name is a prefix of another (e.g.
+ * "Peacock Premium" vs "Peacock Premium Plus"), keep only the base.
+ */
+function dedupTiers(providers: Provider[]): Provider[] {
+	return providers.filter(
+		(p) =>
+			!providers.some(
+				(other) => other !== p && p.provider_name.startsWith(other.provider_name + ' ')
+			)
+	);
+}
+
+/**
  * Clean a raw flatrate provider list from TMDB/JustWatch:
  *  1. Drop entries whose name contains bundle/add-on wording.
- *  2. Deduplicate tier variants (e.g. "Peacock Premium" vs "Peacock Premium Plus").
+ *  2. Deduplicate tier variants via dedupTiers().
  *
  * Disney+/Hulu pair disambiguation is handled upstream in augmentProviders(),
  * which has network/company context to determine which service is canonical.
  */
-export function filterProviders(providers: Provider[]): Provider[] {
-	const named = providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name));
-
-	// Deduplicate tier variants: if one name is a prefix of another
-	// (e.g. "Peacock Premium" vs "Peacock Premium Plus"), keep only the base.
-	return named.filter(
-		(p) => !named.some((other) => other !== p && p.provider_name.startsWith(other.provider_name + ' '))
-	);
-}
-
-function dedupTiers(providers: Provider[]): Provider[] {
-	return providers.filter(
-		(p) => !providers.some((other) => other !== p && p.provider_name.startsWith(other.provider_name + ' '))
-	);
+function filterProviders(providers: Provider[]): Provider[] {
+	return dedupTiers(providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name)));
 }
 
 /**
@@ -357,7 +394,9 @@ export function augmentProviders(
 	if (isDisneyPlus) {
 		const without15 = named.filter((p) => p.provider_id !== 15);
 		return dedupTiers(
-			without15.some((p) => p.provider_id === 337) ? without15 : [DISNEY_PLUS_PROVIDER, ...without15]
+			without15.some((p) => p.provider_id === 337)
+				? without15
+				: [DISNEY_PLUS_PROVIDER, ...without15]
 		);
 	}
 

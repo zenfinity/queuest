@@ -186,8 +186,6 @@ describe('parseImportBackup', () => {
 				runtime_minutes: 100,
 				seasons: [],
 				watched_seasons: [],
-				current_season: null,
-				current_episode: null,
 				added_at: '2026-01-01T00:00:00Z',
 				watched_at: null
 			}
@@ -211,8 +209,6 @@ describe('parseImportBackup', () => {
 					runtime_minutes: 2000,
 					seasons: [],
 					watched_seasons: [],
-					current_season: null,
-					current_episode: null,
 					added_at: '2026-01-01T00:00:00Z',
 					watched_at: null
 				}
@@ -232,6 +228,16 @@ describe('parseImportBackup', () => {
 		expect(result.prefs?.theme).toBe('dark');
 		expect(result.prefs?.weeklyHours).toBe(15);
 		expect(result.services).toHaveLength(1);
+	});
+
+	it('accepts "lanes" as a valid view (ViewKey, not the pre-rename "gantt")', () => {
+		const result = parseImportBackup({ items: [], prefs: { view: 'lanes' } });
+		expect(result.prefs?.view).toBe('lanes');
+	});
+
+	it('rejects the stale pre-rename "gantt" view value', () => {
+		const result = parseImportBackup({ items: [], prefs: { view: 'gantt' } });
+		expect(result.prefs?.view).toBeUndefined();
 	});
 
 	it('filters out invalid items', () => {
@@ -269,7 +275,7 @@ describe('parseImportBackup', () => {
 			prefs: {
 				queueColors: {
 					[longKey]: '#ff0000',
-					'tag': longVal
+					tag: longVal
 				}
 			}
 		};
@@ -277,10 +283,10 @@ describe('parseImportBackup', () => {
 		const colors = result.prefs?.queueColors ?? {};
 		const keys = Object.keys(colors);
 		// Keys should be clamped to 100 chars
-		expect(keys.some(k => k.length === 100)).toBe(true);
+		expect(keys.some((k) => k.length === 100)).toBe(true);
 		const values = Object.values(colors);
 		// Values should be clamped to 50 chars (the longVal is 100 # chars)
-		expect(values.some(v => v.length === 50)).toBe(true);
+		expect(values.some((v) => v.length === 50)).toBe(true);
 	});
 
 	it('throws on non-object input', () => {

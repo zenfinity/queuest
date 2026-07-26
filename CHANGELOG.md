@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.5.4] — 2026-07-25
+
+### Documentation & licensing
+
+- **README corrected**: license section said MIT — the repo is AGPL-3.0. Added the `license` field to `package.json`, fixed the `preview`/`.dev.vars` setup instructions (previously pointed at `.env.local`, which `wrangler pages dev` never reads), corrected the budget-is-configurable-in-Settings claim (it's at `/budget`) in both the README and the in-app copy, and updated stale repo-slug links. (#126)
+
+### Infrastructure & repo hygiene
+
+- **ESLint + Prettier + `lint`/`format` scripts**, wired to match the existing hand-formatted style (tabs, single quotes, no trailing commas, 100-char width). `tsconfig.json` gained `noUnusedLocals`/`noUnusedParameters`. `.gitignore` cleaned up; `.claude/launch.json`'s hardcoded path removed from tracking. (#124)
+- **Deleted dead code**: the orphaned `/services` and `/import` routes (both superseded by earlier work), the fully-unwired `welcome.svelte.ts` module, the unrendered `backdrop_path` field, the always-null `current_season`/`current_episode` fields, and several smaller unused exports/params surfaced by the new strict TS flags. (#123)
+
+### Bug fixes
+
+- **Backup restore, reset, and view-whitelist defects**: restoring a backup could silently drop data on certain shapes, "Reset everything" left stale entries in a couple of lists, and a filter's allowed-view whitelist didn't match its actual options. (#96)
+
+### Testing & maintainability
+
+- **Wired the remaining actions modules** into their components — `settings`, `add`, `share-create`, `share-token`, and `import` now all follow the same dependency-injected, unit-tested pattern as `queue-actions.ts`, closing the gap left by v0.5.3's initial extraction pass. Along the way, fixed a real bug where CSV-import-from-URL was fetching and then discarding the response body, always returning an empty result. (#92, #94)
+- **`app/+page.svelte` decomposed** from 1102 to 505 lines: extracted `QueueGanttView`, `QueueListView`, and `QueueGridView` into `$lib/components/`, each landed as its own commit. `resolvedHue` centralized into `$lib/colors.ts`. (#119, #120)
+- **`tmdb.ts` test coverage** added (17 tests): Disney+/Hulu provider disambiguation, tier/bundle filtering, and movie/TV release-date branching via mocked `fetch` + `vi.setSystemTime`. `add/page-server.test.ts` no longer mocks the pure `augmentProviders`. (#127)
+- **Duplicated helpers consolidated**: `hms()` (5 copies) and a provider-aggregation loop (4 copies, inconsistently keyed by name vs. id — now uniformly by `provider_id`) moved into `lib/progress.ts`; the budget-prefs triple-write, the `res.ok`-throw pattern, `ConstraintError`-as-success checks, and base64url encoding each consolidated into shared helpers. (#121)
+- **API routes**: the same-origin guard and error-response shape were inconsistent across all six routes (a mix of thrown SvelteKit error pages, bare-string responses, and a success-shaped body on failure) — settled on one `{ error: string }` JSON contract everywhere, added the guard to the one route that lacked it, and replaced `refresh-providers`' silent truncation of over-limit batches with a rejection, matching `import-search`. (#122)
+
+---
+
 ## [0.5.3] — 2026-07-22
 
 ### Security

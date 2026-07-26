@@ -14,8 +14,8 @@ export function ensureSubscribedLoaded(): Promise<void> {
 	if (_loaded) return Promise.resolve();
 	if (_promise) return _promise;
 	_promise = getServices()
-		.then(svcs => {
-			services.ids = new Set(svcs.map(s => s.provider_id));
+		.then((svcs) => {
+			services.ids = new Set(svcs.map((s) => s.provider_id));
 			_loaded = true;
 			_promise = null;
 		})

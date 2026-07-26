@@ -1,5 +1,6 @@
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { apiError, checkSameOrigin } from '$lib/server/api';
 import type { RequestHandler } from './$types';
 
 const REPO = 'zenfinity/streamq';
@@ -8,21 +9,19 @@ const TITLE_MAX = 200;
 const BODY_MAX = 5_000;
 
 export const POST: RequestHandler = async ({ request }) => {
-	// Same-origin guard
-	const fetchSite = request.headers.get('Sec-Fetch-Site');
-	if (fetchSite && fetchSite !== 'same-origin') {
-		throw error(403, 'Forbidden');
-	}
+	const originError = checkSameOrigin(request);
+	if (originError) return originError;
 
 	const GITHUB_TOKEN = env.GITHUB_TOKEN;
 	if (!GITHUB_TOKEN) {
-		throw error(503, 'Feedback not configured');
+		return apiError(503, 'Feedback not configured');
 	}
 
 	const { title, body } = await request.json();
-	if (!title?.trim()) throw error(400, 'Title is required');
-	if (typeof title !== 'string' || title.length > TITLE_MAX) throw error(400, 'Title too long');
-	if (body !== undefined && (typeof body !== 'string' || body.length > BODY_MAX)) throw error(400, 'Body too long');
+	if (!title?.trim()) return apiError(400, 'Title is required');
+	if (typeof title !== 'string' || title.length > TITLE_MAX) return apiError(400, 'Title too long');
+	if (body !== undefined && (typeof body !== 'string' || body.length > BODY_MAX))
+		return apiError(400, 'Body too long');
 
 	const res = await fetch(GITHUB_API, {
 		method: 'POST',
@@ -42,7 +41,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	if (!res.ok) {
 		// Don't leak upstream error details to the client
-		throw error(502, 'Could not submit feedback. Please try again.');
+		return apiError(502, 'Could not submit feedback. Please try again.');
 	}
 
 	const issue = await res.json();

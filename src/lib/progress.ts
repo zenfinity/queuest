@@ -1,11 +1,15 @@
-import type { ReleaseInfo, WatchlistItem } from './types';
+import type { Provider, ReleaseInfo, WatchlistItem } from './types';
 
 // ── Release chip ──────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string, includeYear = true): string {
+function fmtDate(iso: string): string {
 	const d = new Date(iso + 'T00:00:00Z');
-	const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', timeZone: 'UTC' };
-	if (includeYear) opts.year = 'numeric';
+	const opts: Intl.DateTimeFormatOptions = {
+		month: 'short',
+		day: 'numeric',
+		year: 'numeric',
+		timeZone: 'UTC'
+	};
 	return d.toLocaleDateString('en-US', opts);
 }
 
@@ -55,7 +59,11 @@ export function releaseChip(r: ReleaseInfo | null | undefined): string | null {
 		if (r.streaming_estimate) {
 			// Show month + year only for estimates
 			const d = new Date(r.streaming_estimate + 'T00:00:00Z');
-			const est = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+			const est = d.toLocaleDateString('en-US', {
+				month: 'short',
+				year: 'numeric',
+				timeZone: 'UTC'
+			});
 			parts.push(`Est. streaming ~${est}`);
 		}
 		return parts.join(' · ') || null;
@@ -64,7 +72,14 @@ export function releaseChip(r: ReleaseInfo | null | undefined): string | null {
 	return null;
 }
 
-const DEFAULT_RUNTIME: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
+export const DEFAULT_RUNTIME: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
+
+/** Formats a duration in minutes as e.g. "2h 30m" or "45m", exact (no "~"). */
+export function hms(mins: number): string {
+	const h = Math.floor(mins / 60),
+		m = mins % 60;
+	return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`;
+}
 
 /**
  * Returns the remaining watch time for an item in minutes.
@@ -84,23 +99,10 @@ export function remainingRuntime(item: WatchlistItem): number {
 
 	for (const season of item.seasons) {
 		if (watched.has(season.season_number)) continue;
-
-		if (
-			season.season_number === item.current_season &&
-			item.current_episode != null &&
-			item.current_episode > 0
-		) {
-			const perEp =
-				season.episode_count > 0 ? season.runtime_minutes / season.episode_count : 0;
-			const episodesLeft = Math.max(0, season.episode_count - item.current_episode);
-			remaining += episodesLeft * perEp;
-		} else {
-			remaining += season.runtime_minutes;
-		}
+		remaining += season.runtime_minutes;
 	}
 
 	// If everything is marked watched, remaining is 0 — that's correct.
-	// But if seasons array is there but all empty for some reason, fall back.
 	return Math.round(remaining);
 }
 
@@ -124,18 +126,14 @@ export function cancelCandidates(
 	const budgetMins = budgetHours * 60;
 	if (budgetMins <= 0) return [];
 
-	const map = new Map<number, CancelCandidate>();
-	for (const item of unwatched) {
-		if (!item.providers.length) continue;
-		const p = item.providers[0];
-		if (!map.has(p.provider_id)) {
-			map.set(p.provider_id, { providerId: p.provider_id, name: p.provider_name, logo: p.logo_path, totalMins: 0 });
-		}
-		map.get(p.provider_id)!.totalMins += remainingRuntime(item);
-	}
-
 	const now = Date.now();
-	return [...map.values()]
+	return aggregateByProvider(unwatched, { firstProviderOnly: true })
+		.map((agg): CancelCandidate => ({
+			providerId: agg.provider_id,
+			name: agg.provider_name,
+			logo: agg.logo_path,
+			totalMins: agg.totalMins
+		}))
 		.filter(({ providerId, totalMins }) => {
 			if (totalMins <= 0 || totalMins > budgetMins) return false;
 			const d = dismissed[String(providerId)];
@@ -145,13 +143,59 @@ export function cancelCandidates(
 }
 
 /**
- * Returns a compact progress label for TV shows, e.g. "S1–S3 done · S4 E2"
- * Returns null for movies or items with no progress recorded.
+ * Persists the monthly viewing budget as the weekly-hours/weeks-per-month
+ * pair plus their derived product — the three localStorage keys every
+ * budget-editing surface (callout, /budget, backup restore) must keep
+ * in sync with each other.
  */
-export function progressLabel(item: WatchlistItem): string | null {
-	if (item.media_type !== 'tv') return null;
-	const watched = item.watched_seasons ?? [];
-	if (!watched.length) return null;
-	const sorted = [...watched].sort((a, b) => a - b);
-	return 'S' + sorted.join(' S') + ' done';
+export function saveBudgetPrefs(hoursPerWeek: number, weeksPerMonth: number): void {
+	try {
+		localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
+		localStorage.setItem('sq:budget:weeks', JSON.stringify(weeksPerMonth));
+		localStorage.setItem('sq:budget', JSON.stringify(hoursPerWeek * weeksPerMonth));
+	} catch {}
+}
+
+export interface ProviderAggregate {
+	provider_id: number;
+	provider_name: string;
+	logo_path: string;
+	count: number;
+	totalMins: number;
+}
+
+/**
+ * Groups items by provider, keyed by provider_id (not name — two providers
+ * can share a name prefix, or get renamed upstream, and would otherwise
+ * silently merge or split depending on which screen renders them).
+ *
+ * By default walks every provider on every item. Pass `firstProviderOnly`
+ * to instead treat each item as belonging to just its primary provider
+ * (used where "which service is this queued against" should be singular).
+ */
+export function aggregateByProvider(
+	items: WatchlistItem[],
+	opts: { firstProviderOnly?: boolean } = {}
+): ProviderAggregate[] {
+	const map = new Map<number, ProviderAggregate>();
+	for (const item of items) {
+		const providers: Provider[] = opts.firstProviderOnly
+			? item.providers.slice(0, 1)
+			: item.providers;
+		for (const p of providers) {
+			if (!map.has(p.provider_id)) {
+				map.set(p.provider_id, {
+					provider_id: p.provider_id,
+					provider_name: p.provider_name,
+					logo_path: p.logo_path,
+					count: 0,
+					totalMins: 0
+				});
+			}
+			const agg = map.get(p.provider_id)!;
+			agg.count++;
+			agg.totalMins += remainingRuntime(item);
+		}
+	}
+	return [...map.values()];
 }

@@ -1,0 +1,13 @@
+.svelte-kit/
+build/
+dist/
+node_modules/
+.wrangler/
+static/
+.design-sync/
+.claude/
+package.json
+package-lock.json
+
+# Prose docs — formatting is an editorial choice, not a lint concern
+*.md

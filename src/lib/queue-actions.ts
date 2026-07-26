@@ -12,7 +12,9 @@ export interface QueueActionDeps {
 	setError: (message: string) => void;
 }
 
-export async function reloadQueue(deps: Pick<QueueActionDeps, 'setItems' | 'setError'>): Promise<void> {
+export async function reloadQueue(
+	deps: Pick<QueueActionDeps, 'setItems' | 'setError'>
+): Promise<void> {
 	try {
 		deps.setItems(await getAll());
 	} catch (e) {
@@ -64,7 +66,7 @@ export async function toggleSeasonProgress(
 		? current.filter((s) => s !== seasonNum)
 		: [...current, seasonNum];
 	try {
-		await updateShowProgress(item.id, next, item.current_season, item.current_episode);
+		await updateShowProgress(item.id, next);
 		await reloadQueue(deps);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not update season progress.');

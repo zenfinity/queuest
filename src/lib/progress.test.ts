@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { releaseChip, remainingRuntime, cancelCandidates, progressLabel } from './progress';
+import { releaseChip, remainingRuntime, cancelCandidates } from './progress';
 import type { WatchlistItem, ReleaseInfo } from './types';
 
 function makeItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
@@ -14,8 +14,6 @@ function makeItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
 		runtime_minutes: 120,
 		seasons: [],
 		watched_seasons: [],
-		current_season: null,
-		current_episode: null,
 		added_at: '2026-01-01T00:00:00.000Z',
 		watched_at: null,
 		...overrides
@@ -32,7 +30,9 @@ describe('remainingRuntime', () => {
 	});
 
 	it('falls back to the TV default when a show has no season data and no runtime_minutes', () => {
-		expect(remainingRuntime(makeItem({ media_type: 'tv', runtime_minutes: null, seasons: [] }))).toBe(45);
+		expect(
+			remainingRuntime(makeItem({ media_type: 'tv', runtime_minutes: null, seasons: [] }))
+		).toBe(45);
 	});
 
 	it('subtracts fully-watched seasons for a TV show', () => {
@@ -48,18 +48,6 @@ describe('remainingRuntime', () => {
 		expect(remainingRuntime(item)).toBe(300);
 	});
 
-	it('accounts for partial progress within the current season', () => {
-		const item = makeItem({
-			media_type: 'tv',
-			runtime_minutes: null,
-			seasons: [{ season_number: 1, episode_count: 10, name: 'S1', runtime_minutes: 300 }],
-			watched_seasons: [],
-			current_season: 1,
-			current_episode: 4 // 4 watched, 6 left of 10 episodes → 60% of 300 = 180
-		});
-		expect(remainingRuntime(item)).toBe(180);
-	});
-
 	it('returns 0 when every season is watched', () => {
 		const item = makeItem({
 			media_type: 'tv',
@@ -68,21 +56,6 @@ describe('remainingRuntime', () => {
 			watched_seasons: [1]
 		});
 		expect(remainingRuntime(item)).toBe(0);
-	});
-});
-
-describe('progressLabel', () => {
-	it('returns null for movies', () => {
-		expect(progressLabel(makeItem({ media_type: 'movie' }))).toBeNull();
-	});
-
-	it('returns null for a TV show with no watched seasons', () => {
-		expect(progressLabel(makeItem({ media_type: 'tv', watched_seasons: [] }))).toBeNull();
-	});
-
-	it('lists watched seasons in ascending order', () => {
-		const label = progressLabel(makeItem({ media_type: 'tv', watched_seasons: [3, 1, 2] }));
-		expect(label).toBe('S1 S2 S3 done');
 	});
 });
 

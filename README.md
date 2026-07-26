@@ -24,7 +24,7 @@ Queuest lets you build a watch queue, see which services carry each title, and e
 Search for movies and TV shows by name. Queuest pulls metadata from TMDB — poster, runtime, cast, genres, and which streaming services carry the title in the US (via JustWatch data). Tap any result to open a detail panel with the full picture before you add it. Add anything you want to watch to your queue.
 
 ### 2. See your subscription value
-The **Gantt view** groups your queue by provider. Each bar's width represents watch time relative to your monthly viewing budget (configurable in Settings). If a provider's lane fits inside one bar-width, one month is all you need.
+The **Gantt view** groups your queue by provider. Each bar's width represents watch time relative to your monthly viewing budget (configurable on the Budget page). If a provider's lane fits inside one bar-width, one month is all you need.
 
 The **Suggest** tab ranks providers by total remaining watch time across your unwatched titles — useful for deciding what to subscribe to first. Checking off seasons reduces a show's contribution automatically.
 
@@ -47,7 +47,7 @@ Everything is stored locally in your browser's IndexedDB — no account, no serv
 - 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL; filter by provider, type, or queue before sharing; decryption key lives only in the URL fragment; links expire after 30 days
 - 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto API; restores queue, preferences, view settings, and shared queue colors completely
 - 🌙 **Dark / light mode** — persisted in preferences and backup file
-- ⏱ **Viewing budget** — configurable monthly hours (hrs/week × weeks/month), used to normalise bar widths
+- ⏱ **Viewing budget** — configurable monthly hours (hrs/week × weeks/month) on the Budget page, used to normalise bar widths
 - 🔄 **Refresh provider data** — re-fetches streaming info for every queued title in one click (Settings)
 - 💬 **In-app feedback** — files a GitHub issue directly from Settings
 
@@ -74,7 +74,7 @@ npm install
 npm run dev
 ```
 
-You'll need a [TMDB API key](https://developer.themoviedb.org/docs/getting-started). Copy `.env.example` to `.env.local` and fill it in:
+You'll need a [TMDB API key](https://developer.themoviedb.org/docs/getting-started). Copy `.env.example` to `.env.local` and fill it in — this is what `npm run dev` reads:
 
 ```
 TMDB_API_KEY=your_key_here
@@ -92,6 +92,8 @@ GITHUB_TOKEN=your_token_here
 npm run build
 npm run preview   # uses wrangler pages dev
 ```
+
+`npm run preview` runs through `wrangler`, which reads `.dev.vars` instead of `.env.local`. Copy `.env.example` to `.dev.vars` as well if you want a working TMDB key in preview mode.
 
 ---
 

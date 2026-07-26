@@ -8,13 +8,18 @@ vi.mock('$env/dynamic/private', () => ({ env: { TMDB_API_KEY: 'test-key' } }));
 const searchMulti = vi.fn();
 const getWatchProviders = vi.fn();
 const getRuntime = vi.fn();
-const augmentProviders = vi.fn();
+
+// augmentProviders is pure — use the real implementation instead of mocking it, so
+// this test actually exercises its Disney+/Hulu disambiguation and tier dedup. The
+// $lib alias isn't resolvable outside SvelteKit's own build, so pull the real
+// implementation in via the relative path instead of importOriginal().
+const { augmentProviders } = await import('../../lib/tmdb');
 
 vi.mock('$lib/tmdb', () => ({
 	searchMulti: (...args: unknown[]) => searchMulti(...args),
 	getWatchProviders: (...args: unknown[]) => getWatchProviders(...args),
 	getRuntime: (...args: unknown[]) => getRuntime(...args),
-	augmentProviders: (...args: unknown[]) => augmentProviders(...args)
+	augmentProviders
 }));
 
 const { load } = await import('./+page.server');
@@ -42,7 +47,6 @@ beforeEach(() => {
 	searchMulti.mockReset();
 	getWatchProviders.mockReset();
 	getRuntime.mockReset();
-	augmentProviders.mockReset();
 });
 
 describe('/add server load', () => {
@@ -66,8 +70,15 @@ describe('/add server load', () => {
 		]);
 		getWatchProviders.mockRejectedValue(new Error('boom'));
 		getRuntime.mockResolvedValue({
-			runtime_minutes: 148, seasons: [], networkIds: [], companyIds: [],
-			release: null, backdrop_path: null, genres: [], cast: [], director: null, creator: null
+			runtime_minutes: 148,
+			seasons: [],
+			networkIds: [],
+			companyIds: [],
+			release: null,
+			genres: [],
+			cast: [],
+			director: null,
+			creator: null
 		});
 
 		const result = await runLoad('inception');
@@ -77,17 +88,30 @@ describe('/add server load', () => {
 
 	it('returns matched results on the happy path, with no error', async () => {
 		searchMulti.mockResolvedValue([
-			{ id: 27205, media_type: 'movie', title: 'Inception', poster_path: '/x.jpg', overview: 'A thief...', release_date: '2010-07-16' }
+			{
+				id: 27205,
+				media_type: 'movie',
+				title: 'Inception',
+				poster_path: '/x.jpg',
+				overview: 'A thief...',
+				release_date: '2010-07-16'
+			}
 		]);
 		getWatchProviders.mockResolvedValue({
 			providers: [{ provider_id: 8, provider_name: 'Netflix', logo_path: '/n.png' }],
 			rentable: false
 		});
 		getRuntime.mockResolvedValue({
-			runtime_minutes: 148, seasons: [], networkIds: [], companyIds: [],
-			release: null, backdrop_path: '/bg.jpg', genres: ['Sci-Fi'], cast: [], director: 'Christopher Nolan', creator: null
+			runtime_minutes: 148,
+			seasons: [],
+			networkIds: [],
+			companyIds: [],
+			release: null,
+			genres: ['Sci-Fi'],
+			cast: [],
+			director: 'Christopher Nolan',
+			creator: null
 		});
-		augmentProviders.mockReturnValue([{ provider_id: 8, provider_name: 'Netflix', logo_path: '/n.png' }]);
 
 		const result = await runLoad('inception');
 		expect(result.error).toBeNull();
@@ -108,10 +132,16 @@ describe('/add server load', () => {
 		);
 		getWatchProviders.mockResolvedValue({ providers: [], rentable: false });
 		getRuntime.mockResolvedValue({
-			runtime_minutes: 90, seasons: [], networkIds: [], companyIds: [],
-			release: null, backdrop_path: null, genres: [], cast: [], director: null, creator: null
+			runtime_minutes: 90,
+			seasons: [],
+			networkIds: [],
+			companyIds: [],
+			release: null,
+			genres: [],
+			cast: [],
+			director: null,
+			creator: null
 		});
-		augmentProviders.mockReturnValue([]);
 
 		const result = await runLoad('title');
 		expect(result.results).toHaveLength(8);

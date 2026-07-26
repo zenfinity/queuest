@@ -1,5 +1,6 @@
 import type { SearchResult, WatchlistItem } from './types';
 import { addItem } from './db';
+import { isConstraintError } from './http';
 
 export interface AddActionDeps {
 	setAdding: (id: number, adding: boolean) => void;
@@ -26,10 +27,7 @@ export async function addSearchResultToQueue(
 			runtime_minutes: result.runtime_minutes,
 			seasons: result.seasons,
 			watched_seasons: [],
-			current_season: null,
-			current_episode: null,
 			release: result.release,
-			backdrop_path: result.backdrop_path,
 			genres: result.genres,
 			cast: result.cast,
 			director: result.director,
@@ -38,7 +36,7 @@ export async function addSearchResultToQueue(
 		await addItem(item);
 		deps.setAdded(result.id, true);
 	} catch (e) {
-		if (e instanceof DOMException && e.name === 'ConstraintError') {
+		if (isConstraintError(e)) {
 			deps.setAdded(result.id, true);
 		} else {
 			const msg = e instanceof Error ? e.message : 'Failed to add';

@@ -10,6 +10,8 @@ export function initTheme() {
 
 export function toggleTheme() {
 	theme.dark = !theme.dark;
-	try { localStorage.setItem('sq:theme', theme.dark ? 'dark' : 'light'); } catch {}
+	try {
+		localStorage.setItem('sq:theme', theme.dark ? 'dark' : 'light');
+	} catch {}
 	document.documentElement.classList.toggle('dark', theme.dark);
 }

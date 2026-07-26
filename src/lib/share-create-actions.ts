@@ -1,8 +1,7 @@
 import type { WatchlistItem, SharePayload } from './types';
-import { getAll } from './db';
 import { generateShareKey, encryptWithKey } from './crypto';
 import { getQueueName } from './queue-colors';
-import { remainingRuntime } from './progress';
+import { throwIfNotOk } from './http';
 
 export interface ShareCreateActionDeps {
 	setShareCreating: (creating: boolean) => void;
@@ -32,7 +31,10 @@ export async function createShareLink(
 				poster_path: item.poster_path,
 				providers: item.providers,
 				runtime_minutes: item.runtime_minutes,
-				seasons: (item.seasons ?? []).map((s) => ({ season_number: s.season_number, runtime_minutes: s.runtime_minutes })),
+				seasons: (item.seasons ?? []).map((s) => ({
+					season_number: s.season_number,
+					runtime_minutes: s.runtime_minutes
+				})),
 				queue_tag: item.queue_tag ?? null
 			}))
 		};
@@ -43,7 +45,7 @@ export async function createShareLink(
 			headers: { 'Content-Type': 'application/octet-stream' },
 			body: blob
 		});
-		if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+		await throwIfNotOk(res);
 		const { token } = (await res.json()) as { token: string };
 		if (typeof window !== 'undefined') {
 			deps.setShareUrl(`${window.location.origin}/share/${token}#${key}`);

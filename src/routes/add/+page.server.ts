@@ -16,7 +16,20 @@ export const load: PageServerLoad = async ({ url }) => {
 			raw.slice(0, 8).map(async (item) => {
 				const id = item.id as number;
 				const mediaType = item.media_type as 'movie' | 'tv';
-				const [{ providers: rawProviders, rentable }, { runtime_minutes, seasons, networkIds, companyIds, release, backdrop_path, genres, cast, director, creator }] = await Promise.all([
+				const [
+					{ providers: rawProviders, rentable },
+					{
+						runtime_minutes,
+						seasons,
+						networkIds,
+						companyIds,
+						release,
+						genres,
+						cast,
+						director,
+						creator
+					}
+				] = await Promise.all([
 					getWatchProviders(id, mediaType, apiKey),
 					getRuntime(id, mediaType, apiKey)
 				]);
@@ -34,7 +47,6 @@ export const load: PageServerLoad = async ({ url }) => {
 					runtime_minutes,
 					seasons,
 					release,
-					backdrop_path,
 					genres,
 					cast,
 					director,
@@ -44,8 +56,12 @@ export const load: PageServerLoad = async ({ url }) => {
 		);
 
 		return { results, query, error: null };
-	} catch (e) {
+	} catch {
 		// Never let a TMDB hiccup take down the whole page — surface it inline with a retry instead.
-		return { results: [] as SearchResult[], query, error: 'Could not reach TMDB. Please try again.' };
+		return {
+			results: [] as SearchResult[],
+			query,
+			error: 'Could not reach TMDB. Please try again.'
+		};
 	}
 };

@@ -1,12 +1,14 @@
-import type { WatchlistItem, Provider } from './types';
+import type { Provider } from './types';
 import { getAll, replaceAll, patchProviders, getServices, setServices } from './db';
 import { encrypt } from './crypto';
 import { getQueueName, getQueueColors } from './queue-colors';
+import { throwIfNotOk } from './http';
 
 export interface SettingsActionDeps {
 	setRefreshing: (refreshing: boolean) => void;
 	setRefreshError: (error: string) => void;
 	setRefreshSuccess: (success: boolean) => void;
+	setRefreshTotal: (total: number) => void;
 	setRefreshDone: (done: number) => void;
 	setFeedbackError: (error: string) => void;
 	setFeedbackIssueUrl: (url: string) => void;
@@ -21,14 +23,23 @@ export async function buildExportBlob(
 	const payload = {
 		version: 1,
 		prefs: {
-			theme: typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') ? 'dark' : 'light' : 'light',
+			theme:
+				typeof document !== 'undefined'
+					? document.documentElement.classList.contains('dark')
+						? 'dark'
+						: 'light'
+					: 'light',
 			weeklyHours,
 			weeksPerMonth,
 			budget: weeklyHours * weeksPerMonth,
 			queueName: getQueueName(),
 			queueColors: getQueueColors(),
-			sort: typeof localStorage !== 'undefined' ? localStorage.getItem('sq:sort') ?? 'added' : 'added',
-			view: typeof localStorage !== 'undefined' ? localStorage.getItem('sq:view') ?? 'grid' : 'grid'
+			sort:
+				typeof localStorage !== 'undefined'
+					? (localStorage.getItem('sq:sort') ?? 'added')
+					: 'added',
+			view:
+				typeof localStorage !== 'undefined' ? (localStorage.getItem('sq:view') ?? 'grid') : 'grid'
 		},
 		items,
 		services
@@ -37,16 +48,15 @@ export async function buildExportBlob(
 	return new Blob([buf], { type: 'application/octet-stream' });
 }
 
-export async function refreshProviders(
-	deps: SettingsActionDeps
-): Promise<void> {
+export async function refreshProviders(deps: SettingsActionDeps): Promise<void> {
 	deps.setRefreshing(true);
 	deps.setRefreshError('');
 	deps.setRefreshSuccess(false);
 	try {
 		const items = await getAll();
 		const payload = items.map(({ id, tmdb_id, media_type }) => ({ id, tmdb_id, media_type }));
-		const refreshTotal = payload.length;
+		deps.setRefreshTotal(payload.length);
+		deps.setRefreshDone(0);
 
 		if (!payload.length) {
 			deps.setRefreshSuccess(true);
@@ -59,16 +69,15 @@ export async function refreshProviders(
 			body: JSON.stringify(payload)
 		});
 
-		if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+		await throwIfNotOk(res);
 
-		const results = await res.json() as Array<{
+		const results = (await res.json()) as Array<{
 			id: number;
 			providers: Provider[];
 			rentable?: boolean;
 			release: any;
 			seasons?: any;
 			runtime_minutes?: number | null;
-			backdrop_path?: string | null;
 			genres?: string[];
 			cast?: any[];
 			director?: string | null;
@@ -76,7 +85,18 @@ export async function refreshProviders(
 		}>;
 
 		for (const r of results) {
-			await patchProviders(r.id, r.providers, r.rentable ?? false, r.release, r.seasons, r.runtime_minutes, r.backdrop_path, r.genres, r.cast, r.director, r.creator);
+			await patchProviders(
+				r.id,
+				r.providers,
+				r.rentable ?? false,
+				r.release,
+				r.seasons,
+				r.runtime_minutes,
+				r.genres,
+				r.cast,
+				r.director,
+				r.creator
+			);
 			deps.setRefreshDone(results.indexOf(r) + 1);
 		}
 		deps.setRefreshSuccess(true);
@@ -102,8 +122,8 @@ export async function submitFeedback(
 			body: JSON.stringify({ title, body })
 		});
 		if (!res.ok) {
-			const msg = await res.text().catch(() => res.statusText);
-			deps.setFeedbackError(msg || 'Something went wrong.');
+			const data = await res.json().catch(() => null);
+			deps.setFeedbackError(data?.error || 'Something went wrong.');
 		} else {
 			const data = await res.json();
 			deps.setFeedbackIssueUrl(data.url);
@@ -115,10 +135,26 @@ export async function submitFeedback(
 
 export async function resetEverything(): Promise<void> {
 	await Promise.all([replaceAll([]), setServices([])]);
-	const keys = ['sq:theme','sq:budget','sq:budget:weekly','sq:budget:weeks',
-	               'sq:sort','sq:view','sq:queue-name','sq:queue-colors','sq:welcomed','sq:import-missed'];
+	const keys = [
+		'sq:theme',
+		'sq:budget',
+		'sq:budget:weekly',
+		'sq:budget:weeks',
+		'sq:budget-callout-dismissed',
+		'sq:sort',
+		'sq:sortDir',
+		'sq:view',
+		'sq:queue:name',
+		'sq:queue:colors',
+		'sq:welcomed',
+		'sq:import-missed',
+		'sq:cancel-alerts',
+		'sq:dismiss-cancel'
+	];
 	for (const k of keys) {
-		try { localStorage.removeItem(k); } catch {}
+		try {
+			localStorage.removeItem(k);
+		} catch {}
 	}
 	if (typeof window !== 'undefined') {
 		window.location.href = '/';
