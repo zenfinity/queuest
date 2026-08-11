@@ -74,7 +74,11 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 		const store = tx.objectStore(STORE);
 		const get = store.get(id);
 		get.onsuccess = () => {
-			const item = get.result as WatchlistItem;
+			const item = get.result as WatchlistItem | undefined;
+			if (!item) {
+				reject(new Error(`Item with id ${id} not found`));
+				return;
+			}
 			item.watched_at = watched ? new Date().toISOString() : null;
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
@@ -91,7 +95,11 @@ export async function setQueueTag(id: number, tag: string | null): Promise<void>
 		const store = tx.objectStore(STORE);
 		const get = store.get(id);
 		get.onsuccess = () => {
-			const item = get.result as WatchlistItem;
+			const item = get.result as WatchlistItem | undefined;
+			if (!item) {
+				reject(new Error(`Item with id ${id} not found`));
+				return;
+			}
 			item.queue_tag = tag ?? undefined;
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
@@ -108,7 +116,11 @@ export async function updateShowProgress(id: number, watchedSeasons: number[]): 
 		const store = tx.objectStore(STORE);
 		const get = store.get(id);
 		get.onsuccess = () => {
-			const item = get.result as WatchlistItem;
+			const item = get.result as WatchlistItem | undefined;
+			if (!item) {
+				reject(new Error(`Item with id ${id} not found`));
+				return;
+			}
 			item.watched_seasons = watchedSeasons;
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
@@ -136,7 +148,11 @@ export async function patchProviders(
 		const store = tx.objectStore(STORE);
 		const get = store.get(id);
 		get.onsuccess = () => {
-			const item = get.result as WatchlistItem;
+			const item = get.result as WatchlistItem | undefined;
+			if (!item) {
+				reject(new Error(`Item with id ${id} not found`));
+				return;
+			}
 			item.providers = providers;
 			item.rentable = rentable;
 			item.release = release;

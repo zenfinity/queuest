@@ -101,6 +101,18 @@ describe('db: watchlist items', () => {
 		expect(all).toHaveLength(1);
 		expect(all[0].title).toBe('New');
 	});
+
+	it('rejects setWatched when id does not exist', async () => {
+		await expect(db.setWatched(999, true)).rejects.toThrow('Item with id 999 not found');
+	});
+
+	it('rejects updateShowProgress when id does not exist', async () => {
+		await expect(db.updateShowProgress(999, [1, 2])).rejects.toThrow('Item with id 999 not found');
+	});
+
+	it('rejects setQueueTag when id does not exist', async () => {
+		await expect(db.setQueueTag(999, 'Favorites')).rejects.toThrow('Item with id 999 not found');
+	});
 });
 
 describe('db: services (subscribed providers)', () => {
