@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getAll } from '$lib/db';
+	import { getAll, replaceAll } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import {
 		buildExportBlob,
@@ -9,7 +9,8 @@
 		resetEverything
 	} from '$lib/settings-actions';
 
-	import { getQueueName, setQueueName, getQueueColors, setQueueColor } from '$lib/queue-colors';
+	import { getQueueName, setQueueName, getQueueColors, setQueueColor, renameCollectionColor, deleteCollectionColor } from '$lib/queue-colors';
+	import { listCollections } from '$lib/queue-actions';
 	import pkg from '../../../package.json';
 
 	const VERSION = pkg.version;
@@ -133,14 +134,92 @@
 	// ── Queue identity ────────────────────────────────────────────────────────
 	let myQueueName = $state('My Queue');
 	let queueColors = $state<Record<string, string>>({});
-	let importedTags = $state<string[]>([]);
+	let collections = $state<string[]>([]);
+	let collectionCounts = $state<Record<string, number>>({});
+	let items = $state<typeof import('$lib/types').WatchlistItem[]>([]);
+	let renamingCollection = $state<string | null>(null);
+	let renameInput = $state('');
+	let deleteArmed = $state<string | null>(null);
+	let manageBusy = $state(false);
 
 	function saveQueueName() {
 		setQueueName(myQueueName);
 	}
-	function updateImportedColor(tag: string, color: string) {
+
+	function updateCollectionColor(tag: string, color: string) {
 		setQueueColor(tag, color);
 		queueColors = { ...queueColors, [tag]: color };
+	}
+
+	async function renameCollection(oldName: string, newName: string) {
+		if (!newName.trim() || newName === oldName) {
+			renamingCollection = null;
+			renameInput = '';
+			return;
+		}
+
+		manageBusy = true;
+		try {
+			// Update all items with the old tag to the new tag.
+			// NOTE: Rename is a bulk write, and with last-write-wins sync (#101), this can race with
+			// per-item edits on another device. If a rename on device A races with an edit on device B
+			// for the same item, the result is unpredictable — the rename may land on some items but not
+			// others. This is acceptable for v1 given how rare it is; long-term fix is to version the
+			// collection itself rather than denormalizing the name.
+			for (const item of items) {
+				if (item.queue_tag === oldName) {
+					item.queue_tag = newName;
+				}
+			}
+			// Move the color entry
+			renameCollectionColor(oldName, newName);
+			// Persist to database
+			await replaceAll(items);
+			// Update local state
+			queueColors = { ...queueColors };
+			collections = listCollections(items);
+			updateCounts();
+			renamingCollection = null;
+			renameInput = '';
+		} finally {
+			manageBusy = false;
+		}
+	}
+
+	async function deleteCollection(name: string) {
+		if (!deleteArmed) {
+			deleteArmed = name;
+			return;
+		}
+
+		manageBusy = true;
+		try {
+			// Clear queue_tag on all items with this collection (items are never deleted, only uncategorized)
+			for (const item of items) {
+				if (item.queue_tag === name) {
+					item.queue_tag = undefined;
+				}
+			}
+			// Remove the color entry to avoid orphaned palette entries
+			deleteCollectionColor(name);
+			// Persist to database
+			await replaceAll(items);
+			// Update local state
+			queueColors = { ...queueColors };
+			collections = listCollections(items);
+			updateCounts();
+			deleteArmed = null;
+		} finally {
+			manageBusy = false;
+		}
+	}
+
+	function updateCounts() {
+		const counts: Record<string, number> = {};
+		for (const collection of collections) {
+			counts[collection] = items.filter((i) => i.queue_tag === collection).length;
+		}
+		collectionCounts = counts;
 	}
 
 	// ── Persistence ───────────────────────────────────────────────────────────
@@ -149,12 +228,9 @@
 		myQueueName = getQueueName();
 		queueColors = getQueueColors();
 
-		const items = await getAll();
-		const tags = new Set<string>();
-		for (const item of items) {
-			if (item.queue_tag) tags.add(item.queue_tag);
-		}
-		importedTags = [...tags].sort();
+		items = await getAll();
+		collections = listCollections(items);
+		updateCounts();
 	});
 </script>
 
@@ -195,40 +271,118 @@
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
-	<!-- Shared Queues -->
+	<!-- Collections -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared Queues</h2>
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Collections</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Queues shared with you. Edit each color to distinguish them in your main view.
+			Organize your queue into collections. Create new ones from the detail panel or by assigning items. Importing a shared list automatically creates a collection.
 		</p>
-		{#if importedTags.length === 0}
-			<p class="text-sm text-gray-400 dark:text-gray-600">No shared queues yet.</p>
+		{#if collections.length === 0}
+			<p class="text-sm text-gray-400 dark:text-gray-600">No collections yet.</p>
 		{:else}
 			<div class="space-y-2">
-				{#each importedTags as tag (tag)}
-					{@const color = queueColors[tag] ?? '#888888'}
+				{#each collections as collection (collection)}
+					{@const color = queueColors[collection] ?? '#888888'}
+					{@const count = collectionCounts[collection] ?? 0}
+					{@const isRenaming = renamingCollection === collection}
+					{@const isDeleting = deleteArmed === collection}
 					<div
 						class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60"
 					>
-						<div class="flex items-center gap-2.5 min-w-0">
+						<div class="flex items-center gap-2.5 min-w-0 flex-1">
 							<span class="h-3 w-3 shrink-0 rounded-full" style="background:{color};"></span>
-							<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200"
-								>{tag}</span
-							>
+							{#if isRenaming}
+								<input
+									type="text"
+									maxlength="40"
+									value={renameInput}
+									oninput={(e) => (renameInput = e.currentTarget.value)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') renameCollection(collection, renameInput);
+										if (e.key === 'Escape') renamingCollection = null;
+									}}
+									autofocus
+									class="flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+								/>
+							{:else}
+								<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200"
+									>{collection}</span
+								>
+								<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">({count})</span>
+							{/if}
 						</div>
-						<label class="relative ml-3 shrink-0 cursor-pointer" title="Change color">
-							<span
-								class="block h-7 w-7 rounded-lg border border-gray-200 shadow-sm dark:border-gray-700"
-								style="background:{color};"
-							></span>
-							<input
-								type="color"
-								value={color}
-								oninput={(e) =>
-									updateImportedColor(tag, (e.currentTarget as HTMLInputElement).value)}
-								class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-							/>
-						</label>
+						<div class="flex items-center gap-1 ml-2 shrink-0">
+							{#if isRenaming}
+								<button
+									disabled={manageBusy}
+									onclick={() => renameCollection(collection, renameInput)}
+									class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+								>
+									Save
+								</button>
+								<button
+									disabled={manageBusy}
+									onclick={() => {
+										renamingCollection = null;
+										renameInput = '';
+									}}
+									class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+								>
+									Cancel
+								</button>
+							{:else if isDeleting}
+								<div class="text-xs text-gray-600 dark:text-gray-400 mr-2">
+									Delete collection? Items stay.
+								</div>
+								<button
+									disabled={manageBusy}
+									onclick={() => deleteCollection(collection)}
+									class="text-xs px-2 py-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
+								>
+									Confirm
+								</button>
+								<button
+									disabled={manageBusy}
+									onclick={() => (deleteArmed = null)}
+									class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+								>
+									Cancel
+								</button>
+							{:else}
+								<label class="relative cursor-pointer" title="Change color">
+									<span
+										class="block h-6 w-6 rounded border border-gray-300 shadow-sm dark:border-gray-600"
+										style="background:{color};"
+									></span>
+									<input
+										type="color"
+										value={color}
+										oninput={(e) =>
+											updateCollectionColor(collection, (e.currentTarget as HTMLInputElement).value)}
+										class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+									/>
+								</label>
+								<button
+									disabled={manageBusy}
+									onclick={() => {
+										renamingCollection = collection;
+										renameInput = collection;
+									}}
+									class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+									title="Rename collection"
+								>
+									Rename
+								</button>
+								<button
+									disabled={manageBusy}
+									onclick={() => deleteCollection(collection)}
+									class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
+									title="Delete collection"
+								>
+									Delete
+								</button>
+							{/if}
+						</div>
 					</div>
 				{/each}
 			</div>
