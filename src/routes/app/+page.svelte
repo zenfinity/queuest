@@ -6,6 +6,8 @@
 		toggleWatched,
 		removeQueueItem,
 		toggleSeasonProgress,
+		listCollections,
+		setItemCollection,
 		type QueueActionDeps
 	} from '$lib/queue-actions';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
@@ -95,6 +97,9 @@
 	// ── Derived lists ─────────────────────────────────────────────────────────
 	// "queued" always means unwatched, independent of the Watched toggle — used for cancel alerts.
 	let queued = $derived(items.filter((i) => !i.watched_at));
+
+	// Existing collections in the queue for the detail panel picker.
+	let existingCollections = $derived(listCollections(items));
 
 	// Watched toggle is inclusive: off shows only unwatched titles, on mixes in watched titles too.
 	let baseItems = $derived(queueControls.watchedOn ? items : queued);
@@ -467,6 +472,12 @@
 		showSeasons={true}
 		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
 		onClose={() => (detailItem = null)}
+		{queueColors}
+		{existingCollections}
+		onSetCollection={async (tag) => {
+			await setItemCollection(di, tag, actionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
 	>
 		{#snippet footer(item)}
 			<button

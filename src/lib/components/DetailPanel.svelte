@@ -28,6 +28,7 @@
 		added_at?: string;
 		year?: string | null;
 		watched_at?: string | null;
+		queue_tag?: string | null;
 	}
 
 	let {
@@ -36,7 +37,10 @@
 		showSeasons,
 		onToggleSeason,
 		onClose,
-		footer
+		footer,
+		queueColors = {},
+		existingCollections = [],
+		onSetCollection
 	}: {
 		item: DetailPanelItem;
 		budgetHours: number;
@@ -44,11 +48,17 @@
 		onToggleSeason?: (seasonNumber: number) => void;
 		onClose: () => void;
 		footer: Snippet<[DetailPanelItem]>;
+		queueColors?: Record<string, string>;
+		existingCollections?: string[];
+		onSetCollection?: (tag: string | null) => Promise<void>;
 	} = $props();
 
 	let overviewExpanded = $state(false);
 	let posterExpanded = $state(false);
 	let releasePopupOpen = $state(false);
+	let collectionOpen = $state(false);
+	let newCollectionInput = $state('');
+	let collectionBusy = $state(false);
 
 	// A caller can switch `item` directly (e.g. clicking a different poster
 	// while the panel is already open) without the panel ever closing, so this
@@ -58,6 +68,8 @@
 		overviewExpanded = false;
 		posterExpanded = false;
 		releasePopupOpen = false;
+		collectionOpen = false;
+		newCollectionInput = '';
 	});
 
 	function close() {
@@ -158,6 +170,91 @@
 		</div>
 
 		<div class="space-y-4 px-4 pb-4">
+			<!-- Collection -->
+			{#if onSetCollection}
+				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				<div class="flex items-center justify-between">
+					<span class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Collection</span>
+					{#if item.queue_tag}
+						<div class="flex items-center gap-2">
+							<span
+								class="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold text-white"
+								style="background-color: {tagColor || '#6b7280'};"
+							>
+								{item.queue_tag}
+							</span>
+							<button
+								onclick={async () => {
+									collectionBusy = true;
+									await onSetCollection(null);
+									collectionBusy = false;
+									collectionOpen = false;
+								}}
+								disabled={collectionBusy}
+								class="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+								title="Remove collection"
+							>
+								✕
+							</button>
+						</div>
+					{:else}
+						<span class="text-xs text-gray-400">None</span>
+					{/if}
+				</div>
+				{#if collectionOpen}
+					<div class="flex flex-col gap-2">
+						{#each existingCollections.filter(c => c !== item.queue_tag) as collection (collection)}
+							<button
+								onclick={async () => {
+									collectionBusy = true;
+									await onSetCollection(collection);
+									collectionBusy = false;
+									collectionOpen = false;
+								}}
+								disabled={collectionBusy}
+								class="text-left text-xs px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+							>
+								{collection}
+							</button>
+						{/each}
+						<input
+							type="text"
+							maxlength="40"
+							placeholder="New collection…"
+							bind:value={newCollectionInput}
+							onkeydown={async (e) => {
+								if (e.key === 'Enter' && newCollectionInput.trim()) {
+									e.preventDefault();
+									collectionBusy = true;
+									await onSetCollection(newCollectionInput.trim());
+									collectionBusy = false;
+									collectionOpen = false;
+									newCollectionInput = '';
+								}
+							}}
+							class="text-xs px-2 py-1.5 rounded border border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+						/>
+						<button
+							onclick={() => {
+								collectionOpen = false;
+								newCollectionInput = '';
+							}}
+							class="text-xs px-2 py-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+						>
+							Close
+						</button>
+					</div>
+				{:else}
+					<button
+						onclick={() => (collectionOpen = true)}
+						disabled={collectionBusy}
+						class="text-xs text-orange-500 hover:text-orange-400 disabled:opacity-50"
+					>
+						Change…
+					</button>
+				{/if}
+			{/if}
+
 			<!-- Overview -->
 			{#if item.overview}
 				<div>
