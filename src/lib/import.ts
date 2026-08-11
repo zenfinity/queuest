@@ -88,11 +88,11 @@ export function parseImdbCSV(text: string): ImportRow[] {
 	return rows
 		.slice(1)
 		.filter((r) => {
-			const t = r[typeIdx]?.trim().toLowerCase() ?? '';
+			const t = typeIdx !== -1 ? r[typeIdx]?.trim().toLowerCase() ?? '' : '';
 			return r[titleIdx]?.trim() && !SKIP_TYPES.has(t);
 		})
 		.map((r) => {
-			const rawType = r[typeIdx]?.trim().toLowerCase() ?? '';
+			const rawType = typeIdx !== -1 ? r[typeIdx]?.trim().toLowerCase() ?? '' : '';
 			return {
 				title: r[titleIdx].trim(),
 				year: yearIdx !== -1 ? r[yearIdx]?.trim() || null : null,
@@ -146,12 +146,16 @@ export function parseTextList(text: string): ImportRow[] {
 			let year: string | null = null;
 			const yearMatch = s.match(/[[(]?(\d{4})[\])]?\s*$/);
 			if (yearMatch && parseInt(yearMatch[1]) >= 1900 && parseInt(yearMatch[1]) <= 2100) {
-				year = yearMatch[1];
-				s = s
+				const remainder = s
 					.slice(0, yearMatch.index)
 					.trim()
 					.replace(/[,;:-]+$/, '')
 					.trim();
+				// Only strip the year if there's still a title remaining
+				if (remainder) {
+					year = yearMatch[1];
+					s = remainder;
+				}
 			}
 			if (!s) return null;
 			return { title: s, year, mediaTypeHint: 'auto' as const };

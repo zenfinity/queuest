@@ -137,7 +137,11 @@ export function cancelCandidates(
 		.filter(({ providerId, totalMins }) => {
 			if (totalMins <= 0 || totalMins > budgetMins) return false;
 			const d = dismissed[String(providerId)];
-			return !d || (now - new Date(d).getTime()) / 86400000 > 30;
+			if (!d) return true; // not dismissed
+			const dismissedTime = new Date(d).getTime();
+			// Malformed date is treated as "not dismissed" (fail open)
+			if (isNaN(dismissedTime)) return true;
+			return (now - dismissedTime) / 86400000 > 30;
 		})
 		.sort((a, b) => a.totalMins - b.totalMins);
 }
@@ -153,7 +157,9 @@ export function saveBudgetPrefs(hoursPerWeek: number, weeksPerMonth: number): vo
 		localStorage.setItem('sq:budget:weekly', JSON.stringify(hoursPerWeek));
 		localStorage.setItem('sq:budget:weeks', JSON.stringify(weeksPerMonth));
 		localStorage.setItem('sq:budget', JSON.stringify(hoursPerWeek * weeksPerMonth));
-	} catch {}
+	} catch {
+		// Best-effort localStorage write; app uses default budget if save fails
+	}
 }
 
 export interface ProviderAggregate {

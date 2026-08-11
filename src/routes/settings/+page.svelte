@@ -1,3 +1,5 @@
+export const ssr = false;
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getAll, replaceAll } from '$lib/db';
@@ -20,11 +22,13 @@
 	let exportPassphrase = $state('');
 	let exporting = $state(false);
 	let exportDone = $state(false);
+	let exportError = $state('');
 
 	async function doExport() {
 		if (!exportPassphrase) return;
 		exporting = true;
 		exportDone = false;
+		exportError = '';
 		try {
 			const weeklyHours = JSON.parse(localStorage.getItem('sq:budget:weekly') ?? '10');
 			const weeksPerMonth = JSON.parse(localStorage.getItem('sq:budget:weeks') ?? '4');
@@ -37,6 +41,8 @@
 			URL.revokeObjectURL(url);
 			exportPassphrase = '';
 			exportDone = true;
+		} catch (e) {
+			exportError = e instanceof Error ? e.message : 'Could not export your queue.';
 		} finally {
 			exporting = false;
 		}
@@ -107,6 +113,7 @@
 	// ── Reset ─────────────────────────────────────────────────────────────────
 	let resetArmed = $state(false);
 	let resetting = $state(false);
+	let resetError = $state('');
 
 	async function doReset() {
 		if (!resetArmed) {
@@ -114,8 +121,11 @@
 			return;
 		}
 		resetting = true;
+		resetError = '';
 		try {
 			await resetEverything();
+		} catch (e) {
+			resetError = e instanceof Error ? e.message : 'Could not reset your queue.';
 		} finally {
 			resetting = false;
 		}
@@ -128,7 +138,9 @@
 		cancelAlertsEnabled = !cancelAlertsEnabled;
 		try {
 			localStorage.setItem('sq:cancel-alerts', cancelAlertsEnabled ? 'true' : 'false');
-		} catch {}
+		} catch {
+			// Best-effort localStorage write; alert toggle always updates state regardless
+		}
 	}
 
 	// ── Queue identity ────────────────────────────────────────────────────────
@@ -447,6 +459,9 @@
 		{#if exportDone}
 			<p class="text-xs text-teal-600 dark:text-teal-400">✓ File downloaded.</p>
 		{/if}
+		{#if exportError}
+			<p class="text-xs text-red-600 dark:text-red-400">{exportError}</p>
+		{/if}
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
@@ -521,6 +536,9 @@
 			>
 				Reset everything
 			</button>
+		{/if}
+		{#if resetError}
+			<p class="text-xs text-red-600 dark:text-red-400">{resetError}</p>
 		{/if}
 	</section>
 

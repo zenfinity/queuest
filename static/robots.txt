@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Allow: /app
+Allow: /budget
+Allow: /add
+Allow: /suggest
+Allow: /share
+Disallow: /api/
+Disallow: /share/[token]/
+
+Sitemap: https://queuest.app/sitemap.xml

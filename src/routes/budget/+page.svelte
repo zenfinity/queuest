@@ -6,6 +6,7 @@
 	import { services, setSubscribedIds } from '$lib/services.svelte';
 	import { TMDB_IMG } from '$lib/tmdb';
 	import { aggregateByProvider, saveBudgetPrefs } from '$lib/progress';
+	import { readNumber } from '$lib/storage';
 	import type { Provider } from '$lib/types';
 
 	// ── Onboarding ────────────────────────────────────────────────────────────
@@ -18,17 +19,21 @@
 	// instead, the effect would fire first with the default 10/4 and stomp
 	// whatever was actually saved before onMount ever got a chance to read it.
 	function loadBudgetPrefs(): { hoursPerWeek: number; weeksPerMonth: number } {
-		try {
-			const weekly = localStorage.getItem('sq:budget:weekly');
-			const weeks = localStorage.getItem('sq:budget:weeks');
-			if (weekly !== null && weeks !== null) {
-				return { hoursPerWeek: JSON.parse(weekly), weeksPerMonth: JSON.parse(weeks) };
-			}
-			const legacy = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
-			return { hoursPerWeek: Math.round(legacy / 4), weeksPerMonth: 4 };
-		} catch {
-			return { hoursPerWeek: 10, weeksPerMonth: 4 };
+		// Try new format first: both values must exist and be valid numbers
+		const hoursPerWeek = readNumber('sq:budget:weekly', -1);
+		const weeksPerMonth = readNumber('sq:budget:weeks', -1);
+		if (hoursPerWeek > 0 && weeksPerMonth > 0) {
+			return { hoursPerWeek, weeksPerMonth };
 		}
+
+		// Fall back to legacy format if new format isn't completely valid
+		const legacy = readNumber('sq:budget', -1);
+		if (legacy > 0) {
+			return { hoursPerWeek: Math.round(legacy / 4), weeksPerMonth: 4 };
+		}
+
+		// All storage corrupted or missing
+		return { hoursPerWeek: 10, weeksPerMonth: 4 };
 	}
 	const initialBudgetPrefs = loadBudgetPrefs();
 
@@ -93,7 +98,9 @@
 			try {
 				const res = await fetch('/api/major-providers');
 				if (res.ok) majorProviders = await res.json();
-			} catch {}
+			} catch {
+				// Best-effort fetch for onboarding suggestions; page works without them
+			}
 		}
 
 		loaded = true;

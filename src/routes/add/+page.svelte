@@ -28,7 +28,9 @@
 	let budgetHours = $state(40);
 	try {
 		budgetHours = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
-	} catch {}
+	} catch {
+		// Best-effort localStorage read; app uses default budget if read fails
+	}
 
 	async function addToQueue(result: SearchResult) {
 		await addSearchResultToQueue(result, {

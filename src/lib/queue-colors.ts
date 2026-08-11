@@ -1,3 +1,5 @@
+import { readRecord } from './storage';
+
 const NAME_KEY = 'sq:queue:name';
 const COLORS_KEY = 'sq:queue:colors';
 
@@ -29,15 +31,13 @@ export function getQueueName(): string {
 export function setQueueName(name: string): void {
 	try {
 		localStorage.setItem(NAME_KEY, name);
-	} catch {}
+	} catch {
+		// Best-effort localStorage write; app uses default queue name if save fails
+	}
 }
 
 export function getQueueColors(): Record<string, string> {
-	try {
-		return JSON.parse(localStorage.getItem(COLORS_KEY) ?? '{}');
-	} catch {
-		return {};
-	}
+	return readRecord(COLORS_KEY, {});
 }
 
 export function setQueueColor(name: string, color: string): void {
@@ -45,7 +45,9 @@ export function setQueueColor(name: string, color: string): void {
 		const colors = getQueueColors();
 		colors[name] = color;
 		localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
-	} catch {}
+	} catch {
+		// Best-effort localStorage write; app works fine without persisted colors
+	}
 }
 
 /** Returns existing color for name, or auto-assigns one from the palette and saves it. */
@@ -53,12 +55,23 @@ export function getOrAssignColor(name: string): string {
 	try {
 		const colors = getQueueColors();
 		if (!colors[name]) {
-			colors[name] = autoColor(name);
+			const color = autoColor(name);
+			colors[name] = color;
 			localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
+			return color;
 		}
 		return colors[name];
 	} catch {
-		return autoColor(name);
+		// Persist the auto-generated color even if reading/writing failed
+		const color = autoColor(name);
+		try {
+			const colors = getQueueColors();
+			colors[name] = color;
+			localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
+		} catch {
+			// Best-effort localStorage write; color always returned to caller regardless
+		}
+		return color;
 	}
 }
 
@@ -71,7 +84,9 @@ export function renameCollectionColor(from: string, to: string): void {
 			delete colors[from];
 			localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
 		}
-	} catch {}
+	} catch {
+		// Best-effort localStorage write; color remains in memory regardless
+	}
 }
 
 /** Removes the color entry for a collection name. */
@@ -82,5 +97,7 @@ export function deleteCollectionColor(name: string): void {
 			delete colors[name];
 			localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
 		}
-	} catch {}
+	} catch {
+		// Best-effort localStorage write; deletion proceeds regardless
+	}
 }

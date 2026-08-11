@@ -27,12 +27,17 @@ export const POST: RequestHandler = async ({ request }) => {
 	const originError = checkSameOrigin(request);
 	if (originError) return originError;
 
-	const apiKey = env.TMDB_API_KEY ?? '';
-	const body = (await request.json()) as Array<{
-		title: string;
-		year: string | null;
-		mediaTypeHint: 'movie' | 'tv' | 'auto';
-	}>;
+	const apiKey = env.TMDB_API_KEY;
+	if (!apiKey) {
+		return apiError(503, 'Search not configured');
+	}
+
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		return apiError(400, 'Invalid JSON');
+	}
 
 	if (!Array.isArray(body)) {
 		return apiError(400, 'Expected an array of items');

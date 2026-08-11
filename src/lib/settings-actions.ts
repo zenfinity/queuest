@@ -154,7 +154,9 @@ export async function resetEverything(): Promise<void> {
 	for (const k of keys) {
 		try {
 			localStorage.removeItem(k);
-		} catch {}
+		} catch {
+			// Best-effort localStorage cleanup; app navigates away after reset regardless
+		}
 	}
 	if (typeof window !== 'undefined') {
 		window.location.href = '/';

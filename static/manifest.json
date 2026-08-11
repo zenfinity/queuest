@@ -1,0 +1,28 @@
+{
+	"name": "Queuest",
+	"short_name": "Queuest",
+	"description": "Figure out how long you actually need a streaming subscription — before paying for another month.",
+	"start_url": "/app",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "portrait-primary",
+	"theme_color": "#ffffff",
+	"background_color": "#ffffff",
+	"icons": [
+		{
+			"src": "/og-image.png",
+			"sizes": "1200x630",
+			"type": "image/png",
+			"purpose": "any"
+		}
+	],
+	"categories": ["entertainment", "lifestyle"],
+	"screenshots": [
+		{
+			"src": "/og-image.png",
+			"sizes": "1200x630",
+			"type": "image/png",
+			"form_factor": "wide"
+		}
+	]
+}

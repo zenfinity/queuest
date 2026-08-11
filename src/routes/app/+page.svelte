@@ -22,6 +22,7 @@
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
+	import { readNumber, readRecord } from '$lib/storage';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
@@ -69,7 +70,9 @@
 	function dismissBudgetCallout() {
 		try {
 			localStorage.setItem('sq:budget-callout-dismissed', 'true');
-		} catch {}
+		} catch {
+			// Best-effort localStorage write; callout dismissal always hides UI regardless
+		}
 		showBudgetCallout = false;
 	}
 
@@ -85,7 +88,9 @@
 		dismissedAlerts = updated;
 		try {
 			localStorage.setItem('sq:dismiss-cancel', JSON.stringify(updated));
-		} catch {}
+		} catch {
+			// Best-effort localStorage write; dismissed alerts persist in memory regardless
+		}
 	}
 
 	let cancelAlert = $derived.by(() => {
@@ -161,12 +166,10 @@
 		);
 		queueControls.viewMode = loadPref<ViewKey>('sq:view', 'grid');
 		queueControls.ready = true;
-		budgetHours = loadJSON<number>('sq:budget', 40);
+		budgetHours = readNumber('sq:budget', 40);
 		queueColors = getQueueColors();
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
-		try {
-			dismissedAlerts = JSON.parse(localStorage.getItem('sq:dismiss-cancel') ?? '{}');
-		} catch {}
+		dismissedAlerts = readRecord('sq:dismiss-cancel', {});
 
 		const hasBudget = localStorage.getItem('sq:budget:weekly') !== null;
 		const wasDismissed = localStorage.getItem('sq:budget-callout-dismissed') === 'true';
@@ -191,7 +194,9 @@
 			localStorage.setItem('sq:sortDir', queueControls.sortDir);
 			localStorage.setItem('sq:view', queueControls.viewMode);
 			localStorage.setItem('sq:budget', JSON.stringify(budgetHours));
-		} catch {}
+		} catch {
+			// Best-effort localStorage write; app works fine without persisted preferences
+		}
 	});
 
 	// "Subscribed" filter is meaningless with zero subscribed services — fall back to "All".

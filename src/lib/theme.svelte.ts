@@ -12,6 +12,8 @@ export function toggleTheme() {
 	theme.dark = !theme.dark;
 	try {
 		localStorage.setItem('sq:theme', theme.dark ? 'dark' : 'light');
-	} catch {}
+	} catch {
+		// Best-effort localStorage write; theme toggle always updates DOM regardless
+	}
 	document.documentElement.classList.toggle('dark', theme.dark);
 }
