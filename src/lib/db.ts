@@ -84,6 +84,23 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 	});
 }
 
+export async function setQueueTag(id: number, tag: string | null): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const get = store.get(id);
+		get.onsuccess = () => {
+			const item = get.result as WatchlistItem;
+			item.queue_tag = tag ?? undefined;
+			const put = store.put(item);
+			put.onsuccess = () => resolve();
+			put.onerror = () => reject(put.error);
+		};
+		get.onerror = () => reject(get.error);
+	});
+}
+
 export async function updateShowProgress(id: number, watchedSeasons: number[]): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {

@@ -1,5 +1,5 @@
 import type { WatchlistItem } from './types';
-import { getAll, removeItem, setWatched, updateShowProgress } from './db';
+import { getAll, removeItem, setWatched, updateShowProgress, setQueueTag } from './db';
 
 /**
  * Callbacks the caller supplies so this module stays free of any Svelte/UI
@@ -70,5 +70,30 @@ export async function toggleSeasonProgress(
 		await reloadQueue(deps);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not update season progress.');
+	}
+}
+
+/** Returns sorted, deduped list of collection names found in items. */
+export function listCollections(items: WatchlistItem[]): string[] {
+	const names = new Set<string>();
+	for (const item of items) {
+		if (item.queue_tag) names.add(item.queue_tag);
+	}
+	return Array.from(names).sort();
+}
+
+export async function setItemCollection(
+	item: WatchlistItem,
+	tag: string | null,
+	deps: QueueActionDeps
+): Promise<void> {
+	deps.setBusy(item.id, true);
+	try {
+		await setQueueTag(item.id, tag);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not update collection.');
+	} finally {
+		deps.setBusy(item.id, false);
 	}
 }

@@ -61,3 +61,26 @@ export function getOrAssignColor(name: string): string {
 		return autoColor(name);
 	}
 }
+
+/** Moves the color entry from the old name to the new name. */
+export function renameCollectionColor(from: string, to: string): void {
+	try {
+		const colors = getQueueColors();
+		if (colors[from]) {
+			colors[to] = colors[from];
+			delete colors[from];
+			localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
+		}
+	} catch {}
+}
+
+/** Removes the color entry for a collection name. */
+export function deleteCollectionColor(name: string): void {
+	try {
+		const colors = getQueueColors();
+		if (colors[name]) {
+			delete colors[name];
+			localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
+		}
+	} catch {}
+}

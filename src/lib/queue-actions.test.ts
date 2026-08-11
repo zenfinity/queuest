@@ -5,15 +5,17 @@ const getAll = vi.fn();
 const setWatched = vi.fn();
 const removeItem = vi.fn();
 const updateShowProgress = vi.fn();
+const setQueueTag = vi.fn();
 
 vi.mock('./db', () => ({
 	getAll: (...args: unknown[]) => getAll(...args),
 	setWatched: (...args: unknown[]) => setWatched(...args),
 	removeItem: (...args: unknown[]) => removeItem(...args),
-	updateShowProgress: (...args: unknown[]) => updateShowProgress(...args)
+	updateShowProgress: (...args: unknown[]) => updateShowProgress(...args),
+	setQueueTag: (...args: unknown[]) => setQueueTag(...args)
 }));
 
-const { reloadQueue, toggleWatched, removeQueueItem, toggleSeasonProgress } =
+const { reloadQueue, toggleWatched, removeQueueItem, toggleSeasonProgress, listCollections, setItemCollection } =
 	await import('./queue-actions');
 
 function makeItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
@@ -60,6 +62,7 @@ beforeEach(() => {
 	setWatched.mockReset();
 	removeItem.mockReset();
 	updateShowProgress.mockReset();
+	setQueueTag.mockReset();
 });
 
 describe('reloadQueue', () => {
@@ -198,5 +201,66 @@ describe('toggleSeasonProgress', () => {
 		await toggleSeasonProgress(item, 1, deps);
 
 		expect(state.error).toBe('write failed');
+	});
+});
+
+describe('listCollections', () => {
+	it('returns sorted, deduped collection names', () => {
+		const items = [
+			makeItem({ queue_tag: 'Favorites' }),
+			makeItem({ queue_tag: 'Action' }),
+			makeItem({ queue_tag: 'Favorites' }),
+			makeItem({ queue_tag: undefined })
+		];
+
+		const result = listCollections(items);
+
+		expect(result).toEqual(['Action', 'Favorites']);
+	});
+
+	it('returns empty array when no items have queue_tag', () => {
+		const items = [makeItem(), makeItem({ queue_tag: null })];
+
+		const result = listCollections(items);
+
+		expect(result).toEqual([]);
+	});
+});
+
+describe('setItemCollection', () => {
+	it('sets a collection, reloads, and clears busy state on success', async () => {
+		const { state, deps } = makeDeps();
+		const item = makeItem({ id: 6 });
+		setQueueTag.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([{ ...item, queue_tag: 'Drama' }]);
+
+		await setItemCollection(item, 'Drama', deps);
+
+		expect(setQueueTag).toHaveBeenCalledWith(6, 'Drama');
+		expect(state.items[0].queue_tag).toBe('Drama');
+		expect(state.busy.has(6)).toBe(false);
+	});
+
+	it('clears a collection (null) on success', async () => {
+		const { state, deps } = makeDeps();
+		const item = makeItem({ id: 8, queue_tag: 'Action' });
+		setQueueTag.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([{ ...item, queue_tag: undefined }]);
+
+		await setItemCollection(item, null, deps);
+
+		expect(setQueueTag).toHaveBeenCalledWith(8, null);
+		expect(state.busy.has(8)).toBe(false);
+	});
+
+	it('sets an error and clears busy state when setQueueTag throws', async () => {
+		const { state, deps } = makeDeps();
+		const item = makeItem({ id: 10 });
+		setQueueTag.mockRejectedValue(new Error('storage full'));
+
+		await setItemCollection(item, 'Drama', deps);
+
+		expect(state.error).toBe('storage full');
+		expect(state.busy.has(10)).toBe(false);
 	});
 });
