@@ -75,11 +75,11 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 			id: number;
 			providers: Provider[];
 			rentable?: boolean;
-			release: any;
-			seasons?: any;
+			release: { release_date?: string };
+			seasons?: { id: number; season_number: number }[];
 			runtime_minutes?: number | null;
 			genres?: string[];
-			cast?: any[];
+			cast?: { id: number; name: string }[];
 			director?: string | null;
 			creator?: string | null;
 		}>;

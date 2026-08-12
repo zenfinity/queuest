@@ -377,7 +377,7 @@
 					>
 						<span class="truncate text-sm text-gray-700 dark:text-gray-300">{title}</span>
 						<a
-							href="/add?q={encodeURIComponent(title)}"
+							href={`/add?q=${encodeURIComponent(title)}`}
 							class="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-400">Search →</a
 						>
 					</li>

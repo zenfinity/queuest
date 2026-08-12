@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const localStorageMock = (() => {
 	let store: Record<string, string> = {};
@@ -18,7 +18,7 @@ const localStorageMock = (() => {
 
 vi.stubGlobal('localStorage', localStorageMock);
 
-const { getQueueColors, setQueueColor, getOrAssignColor, renameCollectionColor, deleteCollectionColor } =
+const { getQueueColors, setQueueColor, renameCollectionColor, deleteCollectionColor } =
 	await import('./queue-colors');
 
 beforeEach(() => {

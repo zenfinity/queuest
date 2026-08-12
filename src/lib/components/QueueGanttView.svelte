@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
+	import { SvelteMap } from 'svelte/reactivity';
 	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, resolvedHue } from '$lib/colors';
@@ -45,7 +46,7 @@
 	}
 	let lanes = $derived.by((): Lane[] => {
 		const budgetMins = budgetHours * 60;
-		const map = new Map<string, Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }>();
+		const map = new SvelteMap<string, Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }>();
 		const noProvider: WatchlistItem[] = [];
 
 		for (const item of items) {
@@ -187,7 +188,6 @@
 						{@const isActive = activeItem?.id === item.id}
 						{@const posterW = Math.round((BAR_H * 2) / 3)}
 
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 							class="relative shrink-0"
