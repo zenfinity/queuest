@@ -61,10 +61,11 @@
 		const W = container.width;
 		const left = tab.left - container.left;
 		const right = tab.right - container.left;
-		// Short, sleek transition — a small horizontal spread rather than a wide dome.
-		const spread = window.innerWidth < 640 ? 10 : 16;
-		// Leave air above the peak instead of the hill touching the very top of the nav.
-		const top = window.innerWidth < 640 ? 6 : 8;
+		// Rounder bezel — a wider spread reads as a smoother, sleeker curve.
+		const spread = window.innerWidth < 640 ? 16 : 24;
+		// Hug the tab's own text box (a few px of breathing room above it) instead
+		// of a fixed inset, so the hill's height tracks the text's actual height.
+		const top = Math.max(4, tab.top - container.top - 4);
 		const x1 = Math.max(0, left - spread);
 		const x2 = Math.min(W, right + spread);
 		const midL = (x1 + left) / 2;
@@ -145,7 +146,7 @@
 						{@const active = isActive(link.href, link.exact)}
 						<a
 							use:tabRef={link.href}
-							class="relative z-10 flex items-center px-1.5 py-1.5 text-xs font-medium transition-colors sm:px-3.5 sm:py-2 sm:text-sm
+							class="relative z-10 flex items-center px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-5 sm:py-2 sm:text-sm
 								{active
 								? 'text-gray-900 dark:text-white'
 								: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
