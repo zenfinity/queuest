@@ -2,7 +2,8 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { initTheme } from '$lib/theme.svelte';
 	import '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
@@ -14,9 +15,11 @@
 		{ href: '/budget', label: 'Budget', exact: false },
 		{ href: '/add', label: 'Add', exact: false },
 		{ href: '/app', label: 'Queue', exact: true },
-		{ href: '/suggest', label: 'Suggest', exact: false },
 		{ href: '/share', label: 'Share', exact: true }
 	] as const;
+
+	const settingsLink = { href: '/settings', label: 'Settings', exact: false } as const;
+	const allTabs = [...navLinks, settingsLink];
 
 	function isActive(href: string, exact: boolean) {
 		return exact ? page.url.pathname === href : page.url.pathname.startsWith(href);
@@ -24,6 +27,57 @@
 
 	let isLanding = $derived(page.url.pathname === '/');
 	let isQueue = $derived(page.url.pathname === '/app');
+
+	// Folder-tab curve: a single continuous line along the nav's bottom edge
+	// that rises into a smooth "hill" under whichever tab is active, instead
+	// of being erased/faked behind a filled box. Coordinates are measured
+	// pixels (no viewBox) so they line up 1:1 with the tab-row's own box.
+	let tabRowEl: HTMLDivElement | undefined = $state();
+	const tabRefs = new SvelteMap<string, HTMLAnchorElement>();
+	let curveD = $state('');
+	let fillD = $state('');
+
+	function tabRef(node: HTMLAnchorElement, href: string) {
+		tabRefs.set(href, node);
+		return {
+			destroy() {
+				tabRefs.delete(href);
+			}
+		};
+	}
+
+	function updateCurve() {
+		if (!tabRowEl) return;
+		const active = allTabs.find((t) => isActive(t.href, t.exact));
+		const el = active && tabRefs.get(active.href);
+		if (!el) {
+			curveD = '';
+			fillD = '';
+			return;
+		}
+		const container = tabRowEl.getBoundingClientRect();
+		const tab = el.getBoundingClientRect();
+		const H = container.height;
+		const W = container.width;
+		const left = tab.left - container.left;
+		const right = tab.right - container.left;
+		// Rounder bezel — a wider spread reads as a smoother, sleeker curve.
+		const spread = window.innerWidth < 640 ? 16 : 24;
+		// Hug the tab's own text box (a few px of breathing room above it) instead
+		// of a fixed inset, so the hill's height tracks the text's actual height.
+		const top = Math.max(4, tab.top - container.top - 4);
+		const x1 = Math.max(0, left - spread);
+		const x2 = Math.min(W, right + spread);
+		const midL = (x1 + left) / 2;
+		const midR = (right + x2) / 2;
+		curveD =
+			`M0,${H} L${x1},${H} ` +
+			`C${midL},${H} ${midL},${top} ${left},${top} ` +
+			`L${right},${top} ` +
+			`C${midR},${top} ${midR},${H} ${x2},${H} ` +
+			`L${W},${H}`;
+		fillD = `${curveD} L${W},${H} L0,${H} Z`;
+	}
 
 	onMount(() => {
 		initTheme();
@@ -35,7 +89,18 @@
 			if (vp) vp.content = 'width=device-width, initial-scale=1';
 		}
 		window.addEventListener('resize', fixViewport);
-		return () => window.removeEventListener('resize', fixViewport);
+		window.addEventListener('resize', updateCurve);
+		updateCurve();
+		return () => {
+			window.removeEventListener('resize', fixViewport);
+			window.removeEventListener('resize', updateCurve);
+		};
+	});
+
+	$effect(() => {
+		// Re-measure whenever the active tab changes (route change).
+		void page.url.pathname;
+		tick().then(updateCurve);
 	});
 </script>
 
@@ -48,26 +113,43 @@
 />
 
 <div class="min-h-screen w-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-	<nav
-		class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90"
-	>
-		<div class="mx-auto flex h-11 max-w-5xl items-stretch gap-3 px-3 sm:h-14 sm:gap-6 sm:px-4">
+	<nav class="sticky top-0 z-50 bg-white/90 backdrop-blur dark:bg-gray-900/90">
+		<div
+			bind:this={tabRowEl}
+			class="relative mx-auto flex h-11 max-w-5xl items-stretch gap-1.5 px-3 sm:h-14 sm:gap-6 sm:px-4"
+		>
+			<svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+				<path d={fillD} class="fill-gray-50 dark:fill-gray-950" />
+				<path
+					d={curveD}
+					class="stroke-gray-200 dark:stroke-gray-800"
+					fill="none"
+					stroke-width="1"
+					vector-effect="non-scaling-stroke"
+				/>
+			</svg>
+
 			<a
-				class="flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white"
+				class="relative z-10 flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white"
 				href={resolve('/')}
 			>
 				Queu<span class="text-orange-400">est</span>
 			</a>
 
 			{#if !isLanding}
-				<div class="flex gap-4 sm:gap-5">
+				<!-- Folder-tab strip: the active link's "raised, connected" look comes from the
+				     SVG line drawn above, which curves up into a short hill under whichever tab
+				     is active and fills the area under it with the page background — a real
+				     continuous line, not a corner cut out of a straight border. -->
+				<div class="flex items-end gap-0.5 sm:gap-1">
 					{#each navLinks as link (link.href)}
 						{@const active = isActive(link.href, link.exact)}
 						<a
-							class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
+							use:tabRef={link.href}
+							class="relative z-10 flex items-center px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-5 sm:py-2 sm:text-sm
 								{active
-								? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
-								: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								? 'text-gray-900 dark:text-white'
+								: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 							href={resolve(link.href)}
 						>
 							{link.label}
@@ -82,17 +164,19 @@
 				<!-- Inline nav placement (lg+ only) — the mobile/tablet floating placement lives
 				     outside <nav> below, since backdrop-filter on <nav> would otherwise confine a
 				     fixed-position dock to the nav's own box (see QueueDock.svelte). -->
-				<div class="hidden lg:block">
+				<div class="hidden self-center lg:block">
 					<QueueDock floating={false} />
 				</div>
 			{/if}
 
 			{#if !isLanding}
+				{@const settingsActive = isActive(settingsLink.href, settingsLink.exact)}
 				<a
-					class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
-					{isActive('/settings', false)
-						? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
-						: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+					use:tabRef={settingsLink.href}
+					class="relative z-10 flex items-center self-end px-1 py-1 text-xs font-medium transition-colors sm:px-2 sm:py-1.5 sm:text-sm
+					{settingsActive
+						? 'text-gray-900 dark:text-white'
+						: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 					href={resolve('/settings')}
 					aria-label="Settings"
 				>

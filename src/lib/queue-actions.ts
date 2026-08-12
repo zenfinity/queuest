@@ -1,5 +1,12 @@
 import type { WatchlistItem } from './types';
-import { getAll, removeItem, setWatched, updateShowProgress, setQueueTag } from './db';
+import {
+	getAll,
+	removeItem,
+	setWatched,
+	updateShowProgress,
+	setQueueTag,
+	gcTombstones
+} from './db';
 
 /**
  * Callbacks the caller supplies so this module stays free of any Svelte/UI
@@ -20,6 +27,8 @@ export async function reloadQueue(
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not read your queue from local storage.');
 	}
+	// Best-effort tombstone GC; never blocks or fails the queue load itself.
+	gcTombstones().catch(() => {});
 }
 
 export async function toggleWatched(

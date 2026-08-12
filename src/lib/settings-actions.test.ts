@@ -101,15 +101,16 @@ describe('buildExportBlob', () => {
 		getQueueColors.mockReturnValue({ Horror: '#ef4444' });
 		encrypt.mockResolvedValue(new ArrayBuffer(8));
 
-		const blob = await buildExportBlob('hunter2', 10, 4);
+		const blob = await buildExportBlob('hunter2');
 
 		expect(encrypt).toHaveBeenCalledTimes(1);
 		const [json, passphrase] = encrypt.mock.calls[0];
 		expect(passphrase).toBe('hunter2');
 		const payload = JSON.parse(json);
-		expect(payload.version).toBe(1);
+		expect(payload.version).toBe(2);
 		expect(payload.items).toEqual([{ id: 1, title: 'Arrival' }]);
 		expect(payload.services).toEqual([{ provider_id: 8 }]);
+		// No sq:budget:weekly/weeks in localStorage (stub returns null) -> defaults
 		expect(payload.prefs.weeklyHours).toBe(10);
 		expect(payload.prefs.weeksPerMonth).toBe(4);
 		expect(payload.prefs.budget).toBe(40);

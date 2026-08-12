@@ -2,7 +2,7 @@ import type { ImportFormat, ImportRow } from './import';
 import type { WatchlistItem } from './types';
 import { addItem, replaceAll, setServices } from './db';
 import { decrypt } from './crypto';
-import { parseImportBackup } from './share-schema';
+import { deserializeAppState } from './app-state';
 import { setQueueName, setQueueColor } from './queue-colors';
 import { parseImportCSV } from './import';
 import { saveBudgetPrefs } from './progress';
@@ -80,27 +80,16 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 	}
 }
 
-export async function replaceAllItems(
-	items: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>[]
-): Promise<void> {
-	// parseImportBackup's declared type omits id/added_at/watched_at, but at
-	// runtime it passes the raw object through unmodified (see share-schema.ts),
-	// so a backup produced by buildExportBlob still carries the real values here.
-	// Preserve them when present rather than stamping every item as "added just
-	// now, never watched" — and never reuse the exported id: ids are IndexedDB
-	// autoIncrement, so they're device-local and would collide with (or
-	// silently shadow) whatever this device already assigned to other items.
+export async function replaceAllItems(items: Omit<WatchlistItem, 'id'>[]): Promise<void> {
+	// deserializeAppState's item validation already fills in real added_at/
+	// watched_at values when the backup has them (or sensible defaults when it
+	// doesn't) — nothing to reconstruct here. Just make sure no id rides along:
+	// ids are IndexedDB autoIncrement, so they're device-local and would
+	// collide with (or silently shadow) whatever this device already assigned
+	// to other items.
 	const fullItems = items.map((item) => {
-		const { added_at, watched_at } = item as unknown as {
-			added_at?: unknown;
-			watched_at?: unknown;
-		};
 		const { id: _id, ...rest } = item as unknown as Partial<WatchlistItem>;
-		return {
-			...(rest as Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>),
-			added_at: typeof added_at === 'string' ? added_at : new Date().toISOString(),
-			watched_at: typeof watched_at === 'string' ? watched_at : null
-		};
+		return rest as Omit<WatchlistItem, 'id'>;
 	});
 	await replaceAll(fullItems);
 }
@@ -114,7 +103,7 @@ export async function restoreBackup(
 	deps.setImporting(true);
 	deps.setImportError('');
 	try {
-		const parsed = parseImportBackup(
+		const parsed = deserializeAppState(
 			JSON.parse(await decrypt(await file.arrayBuffer(), passphrase))
 		);
 
@@ -146,7 +135,11 @@ export async function restoreBackup(
 			}
 		}
 		if (typeof parsed.prefs?.sort === 'string') localStorage.setItem('sq:sort', parsed.prefs.sort);
+		if (typeof parsed.prefs?.sortDir === 'string')
+			localStorage.setItem('sq:sortDir', parsed.prefs.sortDir);
 		if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
+		if (typeof parsed.prefs?.cancelAlerts === 'boolean')
+			localStorage.setItem('sq:cancel-alerts', parsed.prefs.cancelAlerts ? 'true' : 'false');
 
 		if (parsed.services) ops.push(setServices(parsed.services));
 		await Promise.all(ops);
