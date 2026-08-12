@@ -7,7 +7,7 @@ import type { Provider, ReleaseInfo, CastMember } from '$lib/types';
 
 const MAX_ITEMS = 100;
 
-interface RefreshResult {
+export interface RefreshResult {
 	id: number;
 	providers: Provider[];
 	rentable: boolean;

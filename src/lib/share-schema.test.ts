@@ -156,10 +156,10 @@ describe('parseSharePayload', () => {
 					extraField: 'also dropped'
 				}
 			]
-		} as any;
+		};
 		const result = parseSharePayload(payload);
-		expect((result as any).unknownKey).toBeUndefined();
-		expect((result.items[0] as any).extraField).toBeUndefined();
+		expect((result as unknown as Record<string, unknown>).unknownKey).toBeUndefined();
+		expect((result.items[0] as unknown as Record<string, unknown>).extraField).toBeUndefined();
 	});
 
 	it('throws on invalid version', () => {
@@ -264,7 +264,7 @@ describe('parseImportBackup', () => {
 		const result = parseImportBackup(backup);
 		expect(result.prefs?.theme).toBeUndefined();
 		expect(result.prefs?.weeklyHours).toBeUndefined();
-		expect((result.prefs as any)?.unknownKey).toBeUndefined();
+		expect((result.prefs as Record<string, unknown> | undefined)?.unknownKey).toBeUndefined();
 	});
 
 	it('clamps queueColors', () => {

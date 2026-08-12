@@ -3,31 +3,57 @@ import type { WatchlistItem, Provider } from './types';
 const DB_NAME = 'streamq';
 const STORE = 'watchlist';
 const SERVICES_STORE = 'services';
-const VERSION = 2;
+const META_STORE = 'meta';
+const VERSION = 3;
 
 let _dbPromise: Promise<IDBDatabase> | null = null;
 
-function open(): Promise<IDBDatabase> {
-	if (_dbPromise) return _dbPromise;
-	_dbPromise = new Promise((resolve, reject) => {
-		const req = indexedDB.open(DB_NAME, VERSION);
+function open(name = DB_NAME): Promise<IDBDatabase> {
+	if (name === DB_NAME && _dbPromise) return _dbPromise;
+	const promise = new Promise<IDBDatabase>((resolve, reject) => {
+		const req = indexedDB.open(name, VERSION);
 		req.onupgradeneeded = (e) => {
 			const db = (e.target as IDBOpenDBRequest).result;
-			if (!db.objectStoreNames.contains(STORE)) {
+			const tx = (e.target as IDBOpenDBRequest).transaction!;
+			const oldVersion = e.oldVersion;
+
+			if (oldVersion < 1) {
 				const store = db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
 				store.createIndex('tmdb_media', ['tmdb_id', 'media_type'], { unique: true });
 			}
-			if (!db.objectStoreNames.contains(SERVICES_STORE)) {
-				db.createObjectStore(SERVICES_STORE, { keyPath: 'provider_id' });
+			if (oldVersion < 2) {
+				if (!db.objectStoreNames.contains(SERVICES_STORE)) {
+					db.createObjectStore(SERVICES_STORE, { keyPath: 'provider_id' });
+				}
+			}
+			if (oldVersion < 3) {
+				if (!db.objectStoreNames.contains(META_STORE)) {
+					db.createObjectStore(META_STORE, { keyPath: 'key' });
+				}
+				// Backfill updated_at for pre-existing rows so LWW sync has a
+				// timestamp to compare from day one.
+				const store = tx.objectStore(STORE);
+				const cursorReq = store.openCursor();
+				cursorReq.onsuccess = () => {
+					const cursor = cursorReq.result;
+					if (!cursor) return;
+					const item = cursor.value as WatchlistItem;
+					if (!item.updated_at) {
+						item.updated_at = item.added_at ?? new Date().toISOString();
+						cursor.update(item);
+					}
+					cursor.continue();
+				};
 			}
 		};
 		req.onsuccess = () => resolve(req.result);
 		req.onerror = () => {
-			_dbPromise = null;
+			if (name === DB_NAME) _dbPromise = null;
 			reject(req.error);
 		};
 	});
-	return _dbPromise;
+	if (name === DB_NAME) _dbPromise = promise;
+	return promise;
 }
 
 export async function getAll(): Promise<WatchlistItem[]> {
@@ -40,17 +66,19 @@ export async function getAll(): Promise<WatchlistItem[]> {
 }
 
 export async function addItem(
-	item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>
+	item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at' | 'updated_at'>
 ): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
 		// JSON round-trip strips Svelte 5 reactive Proxies — structuredClone cannot clone them
 		const plain = JSON.parse(JSON.stringify(item)) as typeof item;
+		const now = new Date().toISOString();
 		const full: Omit<WatchlistItem, 'id'> = {
 			...plain,
-			added_at: new Date().toISOString(),
-			watched_at: null
+			added_at: now,
+			watched_at: null,
+			updated_at: now
 		};
 		const req = tx.objectStore(STORE).add(full);
 		req.onsuccess = () => resolve();
@@ -79,7 +107,9 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 				reject(new Error(`Item with id ${id} not found`));
 				return;
 			}
-			item.watched_at = watched ? new Date().toISOString() : null;
+			const now = new Date().toISOString();
+			item.watched_at = watched ? now : null;
+			item.updated_at = now;
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
 			put.onerror = () => reject(put.error);
@@ -101,6 +131,7 @@ export async function setQueueTag(id: number, tag: string | null): Promise<void>
 				return;
 			}
 			item.queue_tag = tag ?? undefined;
+			item.updated_at = new Date().toISOString();
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
 			put.onerror = () => reject(put.error);
@@ -122,6 +153,7 @@ export async function updateShowProgress(id: number, watchedSeasons: number[]): 
 				return;
 			}
 			item.watched_seasons = watchedSeasons;
+			item.updated_at = new Date().toISOString();
 			const put = store.put(item);
 			put.onsuccess = () => resolve();
 			put.onerror = () => reject(put.error);
@@ -178,7 +210,8 @@ export async function replaceAll(
 		const tx = db.transaction(STORE, 'readwrite');
 		const store = tx.objectStore(STORE);
 		store.clear();
-		for (const item of items) store.put(item);
+		const now = new Date().toISOString();
+		for (const item of items) store.put({ ...item, updated_at: item.updated_at ?? now });
 		tx.oncomplete = () => resolve();
 		tx.onerror = () => reject(tx.error);
 	});
@@ -203,6 +236,39 @@ export async function setServices(services: Provider[]): Promise<void> {
 		tx.oncomplete = () => resolve();
 		tx.onerror = () => reject(tx.error);
 	});
+}
+
+export async function getMeta(key: string): Promise<string | undefined> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db.transaction(META_STORE).objectStore(META_STORE).get(key);
+		req.onsuccess = () =>
+			resolve((req.result as { key: string; value: string } | undefined)?.value);
+		req.onerror = () => reject(req.error);
+	});
+}
+
+export async function setMeta(key: string, value: string): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db.transaction(META_STORE, 'readwrite').objectStore(META_STORE).put({ key, value });
+		req.onsuccess = () => resolve();
+		req.onerror = () => reject(req.error);
+	});
+}
+
+/** Test-only: opens a database by name, bypassing the memoized default-name connection, so migration tests can exercise `onupgradeneeded` against a fresh/versioned database without colliding with the app's own open connection. */
+export function _openForTest(name: string): Promise<IDBDatabase> {
+	return open(name);
+}
+
+/** Stable per-browser-install id, used as the sync client id. Generated once and persisted in the meta store. */
+export async function getDeviceId(): Promise<string> {
+	const existing = await getMeta('device_id');
+	if (existing) return existing;
+	const id = crypto.randomUUID();
+	await setMeta('device_id', id);
+	return id;
 }
 
 export async function toggleService(service: Provider): Promise<boolean> {

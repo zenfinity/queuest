@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { resolve } from '$app/paths';
 	import type { WatchlistItem } from '$lib/types';
 	import {
 		reloadQueue,
@@ -20,7 +22,7 @@
 	} from '$lib/progress';
 	import { getQueueColors } from '$lib/queue-colors';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
-	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
+	import { queueControls, SORT_DEFAULT_DIR, UNCATEGORIZED } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import { readNumber, readRecord } from '$lib/storage';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
@@ -40,7 +42,7 @@
 	let items = $state<WatchlistItem[]>([]);
 	let loaded = $state(false);
 	let queueColors = $state<Record<string, string>>({});
-	let busy = $state(new Set<number>());
+	let busy = new SvelteSet<number>();
 
 	let releasePopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
@@ -100,7 +102,7 @@
 	// Watched toggle is inclusive: off shows only unwatched titles, on mixes in watched titles too.
 	let baseItems = $derived(queueControls.watchedOn ? items : queued);
 
-	let visibleItems = $derived.by(() => {
+	let serviceFiltered = $derived.by(() => {
 		if (queueControls.serviceFilter === 'all' || services.ids.size === 0) return baseItems;
 		if (queueControls.serviceFilter === 'subscribed') {
 			return baseItems.filter((item) =>
@@ -112,6 +114,14 @@
 			(item) =>
 				item.providers.length > 0 && !item.providers.some((p) => services.ids.has(p.provider_id))
 		);
+	});
+
+	let visibleItems = $derived.by(() => {
+		if (queueControls.collectionFilter === null) return serviceFiltered;
+		if (queueControls.collectionFilter === UNCATEGORIZED) {
+			return serviceFiltered.filter((item) => !item.queue_tag);
+		}
+		return serviceFiltered.filter((item) => item.queue_tag === queueControls.collectionFilter);
 	});
 
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
@@ -135,10 +145,8 @@
 			items = next;
 		},
 		setBusy: (id, isBusy) => {
-			const next = new Set(busy);
-			if (isBusy) next.add(id);
-			else next.delete(id);
-			busy = next;
+			if (isBusy) busy.add(id);
+			else busy.delete(id);
 		},
 		setError: (message) => {
 			dbError = message;
@@ -194,6 +202,22 @@
 	$effect(() => {
 		if (queueControls.serviceFilter === 'subscribed' && services.ids.size === 0)
 			queueControls.serviceFilter = 'all';
+	});
+
+	// Mirrors collection names into shared state so QueueDock (rendered from the
+	// layout, without direct access to `items`) can list them in its popover.
+	$effect(() => {
+		queueControls.collectionNames = existingCollections;
+	});
+
+	// Clears a collection filter that no longer matches anything (the collection
+	// was renamed/deleted, or its last item was removed/recategorized) — same
+	// "never silently filter forever" convention as the subscribed-filter reset above.
+	$effect(() => {
+		const f = queueControls.collectionFilter;
+		if (f !== null && f !== UNCATEGORIZED && !existingCollections.includes(f)) {
+			queueControls.collectionFilter = null;
+		}
 	});
 
 	// Lets the nav know whether the dock has anything to show, for the lg+ inline placement.
@@ -409,8 +433,10 @@
 				Your queue is empty
 			</p>
 			<p class="mt-1 text-sm text-gray-500">
-				<a class="text-orange-500 hover:underline" href="/add">Search for movies and shows</a> to get
-				started
+				<a class="text-orange-500 hover:underline" href={resolve('/add')}
+					>Search for movies and shows</a
+				>
+				to get started
 			</p>
 		</div>
 
@@ -427,6 +453,7 @@
 			{budgetHours}
 			{busy}
 			{queueColors}
+			groupByCollection={queueControls.groupByCollection}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
@@ -440,6 +467,7 @@
 			{budgetHours}
 			{busy}
 			{queueColors}
+			groupByCollection={queueControls.groupByCollection}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}

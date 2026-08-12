@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { getAll } from '$lib/db';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { aggregateByProvider } from '$lib/progress';
@@ -54,7 +55,9 @@
 			<p class="mb-4 text-5xl">📺</p>
 			<p class="text-lg font-medium text-gray-700 dark:text-gray-300">No suggestions yet</p>
 			<p class="mt-1 text-sm text-gray-500">
-				<a class="text-orange-500 hover:underline" href="/add">Add titles to your queue</a>
+				<a class="text-orange-500 hover:underline" href={resolve('/add')}
+					>Add titles to your queue</a
+				>
 				to get streaming recommendations
 			</p>
 		</div>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 </script>
 
 <svelte:head>
@@ -30,7 +31,7 @@
 			{page.error?.message || "Sorry, we couldn't process your request."}
 		</p>
 		<a
-			href="/app"
+			href={resolve('/app')}
 			class="mt-6 inline-block rounded-lg bg-orange-500 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-orange-400"
 		>
 			Return to Queue

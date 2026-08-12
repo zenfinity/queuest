@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { getAll, getServices, toggleService } from '$lib/db';
 	import { services, setSubscribedIds } from '$lib/services.svelte';
@@ -57,23 +58,14 @@
 		const id = provider.provider_id;
 		const wasSubscribed = services.ids.has(id);
 		toggleError = '';
-		if (wasSubscribed) {
-			const next = new Set(services.ids);
-			next.delete(id);
-			setSubscribedIds(next);
-		} else {
-			setSubscribedIds(new Set([...services.ids, id]));
-		}
+		if (wasSubscribed) services.ids.delete(id);
+		else services.ids.add(id);
 		try {
 			await toggleService(provider);
 		} catch (e) {
-			if (wasSubscribed) {
-				setSubscribedIds(new Set([...services.ids, id]));
-			} else {
-				const next = new Set(services.ids);
-				next.delete(id);
-				setSubscribedIds(next);
-			}
+			// Roll back the optimistic update
+			if (wasSubscribed) services.ids.add(id);
+			else services.ids.delete(id);
 			toggleError =
 				e instanceof Error ? e.message : 'Could not save. Check browser storage settings.';
 		}
@@ -207,7 +199,7 @@
 	{#if isOnboarding}
 		<div class="border-t border-gray-200 dark:border-gray-800"></div>
 		<button
-			onclick={() => goto('/add?onboarding=1')}
+			onclick={() => goto(resolve('/add?onboarding=1'))}
 			class="w-full rounded-lg bg-orange-500 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-orange-400"
 		>
 			Next: Add titles →

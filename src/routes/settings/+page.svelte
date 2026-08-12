@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { WatchlistItem } from '$lib/types';
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { getAll, replaceAll } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import {
@@ -571,7 +572,7 @@
 
 		<div class="flex flex-wrap gap-2">
 			<a
-				href="/?preview"
+				href={resolve('/?preview')}
 				class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 			>
 				About Queuest
@@ -648,6 +649,8 @@
 			{#if feedbackIssueUrl}
 				<p class="mt-2 text-xs text-teal-600 dark:text-teal-400">
 					✓ Issue filed!
+					<!-- External GitHub issue URL — resolve() is for internal routes only -->
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 					<a href={feedbackIssueUrl} target="_blank" rel="noopener noreferrer" class="underline"
 						>View it on GitHub →</a
 					>
