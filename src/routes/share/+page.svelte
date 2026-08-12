@@ -120,8 +120,6 @@
 	});
 </script>
 
-export const ssr = false;
-
 <svelte:head><title>Queuest — Share</title></svelte:head>
 
 <div class="space-y-5 xs:space-y-8">

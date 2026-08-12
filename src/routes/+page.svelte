@@ -68,8 +68,6 @@
 	}
 </script>
 
-export const prerender = true;
-
 <svelte:head><title>Queuest — Know when to cancel</title></svelte:head>
 
 <div class="relative overflow-hidden">

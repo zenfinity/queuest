@@ -252,8 +252,6 @@
 	});
 </script>
 
-export const ssr = false;
-
 <svelte:head><title>Queuest — Settings</title></svelte:head>
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
