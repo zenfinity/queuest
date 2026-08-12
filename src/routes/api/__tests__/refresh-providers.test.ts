@@ -8,8 +8,8 @@ vi.mock('$env/dynamic/private', () => ({
 vi.mock('$lib/server/api', () => ({
 	apiError: (status: number, message: string) =>
 		new Response(JSON.stringify({ error: message }), { status }),
-	checkSameOrigin: (request: any) => {
-		const fetchSite = request.headers.get?.('sec-fetch-site');
+	checkSameOrigin: (request: Request) => {
+		const fetchSite = request.headers.get('sec-fetch-site');
 		if (fetchSite && fetchSite !== 'same-origin') {
 			return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
 		}
@@ -25,47 +25,50 @@ vi.mock('$lib/tmdb', () => ({
 
 import { POST } from '../refresh-providers/+server';
 
-const mockRequest = (body?: unknown, headers: Record<string, string> = {}) => ({
-	method: 'POST',
-	headers: new Map(Object.entries({ 'sec-fetch-site': 'same-origin', ...headers })),
-	json: async () => body
-});
+type PostEvent = Parameters<typeof POST>[0];
+
+function mockRequest(body?: unknown, headers: Record<string, string> = {}): Request {
+	const req = new Request('https://example.com', {
+		method: 'POST',
+		headers: { 'sec-fetch-site': 'same-origin', ...headers }
+	});
+	req.json = async () => body;
+	return req;
+}
 
 const mockItem = () => ({ id: 1, tmdb_id: 550, media_type: 'movie' as const });
 
 describe('POST /api/refresh-providers', () => {
 	it('rejects malformed JSON', async () => {
-		const req = {
-			...mockRequest(),
-			json: async () => {
-				throw new SyntaxError('Invalid JSON');
-			}
-		} as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest();
+		req.json = async () => {
+			throw new SyntaxError('Invalid JSON');
+		};
+		const res = await POST({ request: req } as PostEvent);
 		const json = await res.json();
 		expect(res.status).toBe(400);
 		expect(json.error).toContain('JSON');
 	});
 
 	it('rejects non-array body', async () => {
-		const req = mockRequest({ id: 1, tmdb_id: 550, media_type: 'movie' }) as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest({ id: 1, tmdb_id: 550, media_type: 'movie' });
+		const res = await POST({ request: req } as PostEvent);
 		const json = await res.json();
 		expect(res.status).toBe(400);
 		expect(json.error).toContain('array');
 	});
 
 	it('returns empty array for empty request', async () => {
-		const req = mockRequest([]) as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest([]);
+		const res = await POST({ request: req } as PostEvent);
 		const json = await res.json();
 		expect(res.status).toBe(200);
 		expect(json).toEqual([]);
 	});
 
 	it('rejects oversized batches', async () => {
-		const req = mockRequest(Array(101).fill(mockItem())) as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest(Array(101).fill(mockItem()));
+		const res = await POST({ request: req } as PostEvent);
 		const json = await res.json();
 		expect(res.status).toBe(400);
 		expect(json.error).toContain('max');
@@ -77,16 +80,16 @@ describe('POST /api/refresh-providers', () => {
 			{ id: 'not-a-number', tmdb_id: 550, media_type: 'movie' },
 			{ id: 1, tmdb_id: 'invalid', media_type: 'movie' },
 			{ id: 1, tmdb_id: 550, media_type: 'invalid' }
-		]) as any;
-		const res = await POST({ request: req } as any);
+		]);
+		const res = await POST({ request: req } as PostEvent);
 		// Should filter to just the first valid item
 		expect([200, 503, 502]).toContain(res.status); // May 503 or 502 if API not available
 	});
 
 	it('returns 503 when API key is not configured', async () => {
 		// This test requires env.TMDB_API_KEY to be undefined
-		const req = mockRequest([mockItem()]) as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest([mockItem()]);
+		const res = await POST({ request: req } as PostEvent);
 		// This will only 503 if TMDB_API_KEY is not set
 		if (res.status === 503) {
 			const json = await res.json();
@@ -95,9 +98,9 @@ describe('POST /api/refresh-providers', () => {
 	});
 
 	it('rejects cross-origin requests', async () => {
-		const req = mockRequest([mockItem()], { 'sec-fetch-site': 'cross-site' }) as any;
-		const res = await POST({ request: req } as any);
-		const json = await res.json();
+		const req = mockRequest([mockItem()], { 'sec-fetch-site': 'cross-site' });
+		const res = await POST({ request: req } as PostEvent);
+		await res.json();
 		expect(res.status).toBe(403);
 	});
 });

@@ -1,4 +1,4 @@
-import type { Provider } from './types';
+import type { Provider, ReleaseInfo, CastMember, SeasonSummary } from './types';
 import { getAll, replaceAll, patchProviders, getServices, setServices } from './db';
 import { encrypt } from './crypto';
 import { getQueueName, getQueueColors } from './queue-colors';
@@ -75,11 +75,11 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 			id: number;
 			providers: Provider[];
 			rentable?: boolean;
-			release: { release_date?: string };
-			seasons?: { id: number; season_number: number }[];
+			release: ReleaseInfo | null;
+			seasons?: SeasonSummary[];
 			runtime_minutes?: number | null;
 			genres?: string[];
-			cast?: { id: number; name: string }[];
+			cast?: CastMember[];
 			director?: string | null;
 			creator?: string | null;
 		}>;

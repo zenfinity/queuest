@@ -41,7 +41,7 @@ export function readRecord(key: string, fallback: Record<string, string>): Recor
 		const parsed = JSON.parse(v);
 		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback;
 		// Validate all values are strings
-		for (const [k, val] of Object.entries(parsed)) {
+		for (const [, val] of Object.entries(parsed)) {
 			if (typeof val !== 'string') return fallback;
 		}
 		return parsed as Record<string, string>;

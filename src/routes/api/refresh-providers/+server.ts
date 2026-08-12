@@ -7,12 +7,6 @@ import type { Provider, ReleaseInfo, CastMember } from '$lib/types';
 
 const MAX_ITEMS = 100;
 
-interface RefreshRequest {
-	id: number;
-	tmdb_id: number;
-	media_type: 'movie' | 'tv';
-}
-
 interface RefreshResult {
 	id: number;
 	providers: Provider[];

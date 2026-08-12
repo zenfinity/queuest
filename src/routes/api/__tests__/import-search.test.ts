@@ -8,8 +8,8 @@ vi.mock('$env/dynamic/private', () => ({
 vi.mock('$lib/server/api', () => ({
 	apiError: (status: number, message: string) =>
 		new Response(JSON.stringify({ error: message }), { status }),
-	checkSameOrigin: (request: any) => {
-		const fetchSite = request.headers.get?.('sec-fetch-site');
+	checkSameOrigin: (request: Request) => {
+		const fetchSite = request.headers.get('sec-fetch-site');
 		if (fetchSite && fetchSite !== 'same-origin') {
 			return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
 		}
@@ -26,47 +26,48 @@ vi.mock('$lib/tmdb', () => ({
 
 import { POST } from '../import-search/+server';
 
-const mockRequest = (body?: unknown, headers: Record<string, string> = {}) => ({
-	method: 'POST',
-	headers: new Map(Object.entries({ 'sec-fetch-site': 'same-origin', ...headers })),
-	json: async () => body
-});
+type PostEvent = Parameters<typeof POST>[0];
+
+function mockRequest(body?: unknown, headers: Record<string, string> = {}): Request {
+	const req = new Request('https://example.com', {
+		method: 'POST',
+		headers: { 'sec-fetch-site': 'same-origin', ...headers }
+	});
+	req.json = async () => body;
+	return req;
+}
 
 describe('POST /api/import-search', () => {
 	it('rejects malformed JSON', async () => {
-		const req = {
-			...mockRequest(),
-			json: async () => {
-				throw new SyntaxError('Invalid JSON');
-			}
-		} as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest();
+		req.json = async () => {
+			throw new SyntaxError('Invalid JSON');
+		};
+		const res = await POST({ request: req } as PostEvent);
 		const json = await res.json();
 		expect(res.status).toBe(400);
 		expect(json.error).toContain('JSON');
 	});
 
 	it('rejects non-array body', async () => {
-		const req = mockRequest({ title: 'Test' }) as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest({ title: 'Test' });
+		const res = await POST({ request: req } as PostEvent);
 		const json = await res.json();
 		expect(res.status).toBe(400);
 		expect(json.error).toContain('array');
 	});
 
 	it('rejects empty array', async () => {
-		const req = mockRequest([]) as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest([]);
+		const res = await POST({ request: req } as PostEvent);
 		const json = await res.json();
 		expect(res.status).toBe(200);
 		expect(json).toEqual([]);
 	});
 
 	it('rejects oversized batches', async () => {
-		const req = mockRequest(
-			Array(31).fill({ title: 'Test', year: null, mediaTypeHint: 'auto' })
-		) as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest(Array(31).fill({ title: 'Test', year: null, mediaTypeHint: 'auto' }));
+		const res = await POST({ request: req } as PostEvent);
 		const json = await res.json();
 		expect(res.status).toBe(400);
 		expect(json.error).toContain('max');
@@ -74,8 +75,8 @@ describe('POST /api/import-search', () => {
 
 	it('returns 503 when API key is not configured', async () => {
 		// This test requires env.TMDB_API_KEY to be undefined
-		const req = mockRequest([{ title: 'Test', year: null, mediaTypeHint: 'auto' }]) as any;
-		const res = await POST({ request: req } as any);
+		const req = mockRequest([{ title: 'Test', year: null, mediaTypeHint: 'auto' }]);
+		const res = await POST({ request: req } as PostEvent);
 		// This will only 503 if TMDB_API_KEY is not set
 		if (res.status === 503) {
 			const json = await res.json();
@@ -86,9 +87,9 @@ describe('POST /api/import-search', () => {
 	it('rejects cross-origin requests', async () => {
 		const req = mockRequest([{ title: 'Test', year: null, mediaTypeHint: 'auto' }], {
 			'sec-fetch-site': 'cross-site'
-		}) as any;
-		const res = await POST({ request: req } as any);
-		const json = await res.json();
+		});
+		const res = await POST({ request: req } as PostEvent);
+		await res.json();
 		expect(res.status).toBe(403);
 	});
 });

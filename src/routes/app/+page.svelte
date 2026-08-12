@@ -36,15 +36,6 @@
 			return fallback;
 		}
 	}
-	function loadJSON<T>(key: string, fallback: T): T {
-		try {
-			const v = localStorage.getItem(key);
-			return v ? JSON.parse(v) : fallback;
-		} catch {
-			return fallback;
-		}
-	}
-
 	// ── Core state ────────────────────────────────────────────────────────────
 	let items = $state<WatchlistItem[]>([]);
 	let loaded = $state(false);

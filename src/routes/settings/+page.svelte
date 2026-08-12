@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { WatchlistItem } from '$lib/types';
 	import { onMount } from 'svelte';
 	import { getAll, replaceAll } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
@@ -153,7 +154,7 @@
 	let queueColors = $state<Record<string, string>>({});
 	let collections = $state<string[]>([]);
 	let collectionCounts = $state<Record<string, number>>({});
-	let items = $state<(typeof import('$lib/types').WatchlistItem)[]>([]);
+	let items = $state<WatchlistItem[]>([]);
 	let renamingCollection = $state<string | null>(null);
 	let renameInput = $state('');
 	let deleteArmed = $state<string | null>(null);
