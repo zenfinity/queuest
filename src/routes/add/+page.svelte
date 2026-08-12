@@ -102,7 +102,6 @@
 					class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
 				>
 					<!-- Poster (clickable) -->
-					<!-- svelte-ignore a11y_consider_explicit_label -->
 					<button
 						class="relative aspect-[2/3] overflow-hidden bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
 						onclick={() => (detailItem = result)}
