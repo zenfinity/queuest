@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 jobs:
-  check:
+  linked-issues:
     runs-on: ubuntu-latest
     steps:
       - name: Verify PR description links issues with closing syntax
