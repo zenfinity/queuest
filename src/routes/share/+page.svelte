@@ -1,5 +1,3 @@
-export const ssr = false;
-
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { WatchlistItem } from '$lib/types';
@@ -122,6 +120,8 @@ export const ssr = false;
 	});
 </script>
 
+export const ssr = false;
+
 <svelte:head><title>Queuest — Share</title></svelte:head>
 
 <div class="space-y-5 xs:space-y-8">
@@ -197,9 +197,7 @@ export const ssr = false;
 
 			<!-- Provider filter -->
 			<div>
-				<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
-					Providers
-				</p>
+				<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Providers</p>
 				{#if servicesLoadError}
 					<p class="text-xs text-red-600 dark:text-red-400">{servicesLoadError}</p>
 				{:else if shareAllProviders.length > 0}

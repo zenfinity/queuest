@@ -6,7 +6,8 @@ vi.mock('$env/dynamic/private', () => ({
 }));
 
 vi.mock('$lib/server/api', () => ({
-	apiError: (status: number, message: string) => new Response(JSON.stringify({ error: message }), { status }),
+	apiError: (status: number, message: string) =>
+		new Response(JSON.stringify({ error: message }), { status }),
 	checkSameOrigin: (request: any) => {
 		const fetchSite = request.headers.get?.('sec-fetch-site');
 		if (fetchSite && fetchSite !== 'same-origin') {
@@ -32,9 +33,13 @@ const mockRequest = (body?: unknown, headers: Record<string, string> = {}) => ({
 });
 
 describe('POST /api/import-search', () => {
-
 	it('rejects malformed JSON', async () => {
-		const req = { ...mockRequest(), json: async () => { throw new SyntaxError('Invalid JSON'); } } as any;
+		const req = {
+			...mockRequest(),
+			json: async () => {
+				throw new SyntaxError('Invalid JSON');
+			}
+		} as any;
 		const res = await POST({ request: req } as any);
 		const json = await res.json();
 		expect(res.status).toBe(400);
@@ -58,7 +63,9 @@ describe('POST /api/import-search', () => {
 	});
 
 	it('rejects oversized batches', async () => {
-		const req = mockRequest(Array(31).fill({ title: 'Test', year: null, mediaTypeHint: 'auto' })) as any;
+		const req = mockRequest(
+			Array(31).fill({ title: 'Test', year: null, mediaTypeHint: 'auto' })
+		) as any;
 		const res = await POST({ request: req } as any);
 		const json = await res.json();
 		expect(res.status).toBe(400);
@@ -77,7 +84,9 @@ describe('POST /api/import-search', () => {
 	});
 
 	it('rejects cross-origin requests', async () => {
-		const req = mockRequest([{ title: 'Test', year: null, mediaTypeHint: 'auto' }], { 'sec-fetch-site': 'cross-site' }) as any;
+		const req = mockRequest([{ title: 'Test', year: null, mediaTypeHint: 'auto' }], {
+			'sec-fetch-site': 'cross-site'
+		}) as any;
 		const res = await POST({ request: req } as any);
 		const json = await res.json();
 		expect(res.status).toBe(403);

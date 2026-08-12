@@ -174,7 +174,10 @@
 			{#if onSetCollection}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 				<div class="flex items-center justify-between">
-					<span class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Collection</span>
+					<span
+						class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+						>Collection</span
+					>
 					{#if item.queue_tag}
 						<div class="flex items-center gap-2">
 							<span
@@ -203,7 +206,7 @@
 				</div>
 				{#if collectionOpen}
 					<div class="flex flex-col gap-2">
-						{#each existingCollections.filter(c => c !== item.queue_tag) as collection (collection)}
+						{#each existingCollections.filter((c) => c !== item.queue_tag) as collection (collection)}
 							<button
 								onclick={async () => {
 									collectionBusy = true;

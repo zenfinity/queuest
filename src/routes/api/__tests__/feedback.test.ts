@@ -6,7 +6,8 @@ vi.mock('$env/dynamic/private', () => ({
 }));
 
 vi.mock('$lib/server/api', () => ({
-	apiError: (status: number, message: string) => new Response(JSON.stringify({ error: message }), { status }),
+	apiError: (status: number, message: string) =>
+		new Response(JSON.stringify({ error: message }), { status }),
 	checkSameOrigin: (request: any) => {
 		const fetchSite = request.headers.get?.('sec-fetch-site');
 		if (fetchSite && fetchSite !== 'same-origin') {
@@ -26,7 +27,12 @@ const mockRequest = (method: string, body?: unknown, headers: Record<string, str
 
 describe('POST /api/feedback', () => {
 	it('rejects malformed JSON', async () => {
-		const req = { ...mockRequest('POST'), json: async () => { throw new SyntaxError('Invalid JSON'); } } as any;
+		const req = {
+			...mockRequest('POST'),
+			json: async () => {
+				throw new SyntaxError('Invalid JSON');
+			}
+		} as any;
 		const res = await POST({ request: req } as any);
 		const json = await res.json();
 		expect(res.status).toBe(400);

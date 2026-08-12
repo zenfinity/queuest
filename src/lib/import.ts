@@ -88,11 +88,11 @@ export function parseImdbCSV(text: string): ImportRow[] {
 	return rows
 		.slice(1)
 		.filter((r) => {
-			const t = typeIdx !== -1 ? r[typeIdx]?.trim().toLowerCase() ?? '' : '';
+			const t = typeIdx !== -1 ? (r[typeIdx]?.trim().toLowerCase() ?? '') : '';
 			return r[titleIdx]?.trim() && !SKIP_TYPES.has(t);
 		})
 		.map((r) => {
-			const rawType = typeIdx !== -1 ? r[typeIdx]?.trim().toLowerCase() ?? '' : '';
+			const rawType = typeIdx !== -1 ? (r[typeIdx]?.trim().toLowerCase() ?? '') : '';
 			return {
 				title: r[titleIdx].trim(),
 				year: yearIdx !== -1 ? r[yearIdx]?.trim() || null : null,

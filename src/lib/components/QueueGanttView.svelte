@@ -46,7 +46,10 @@
 	}
 	let lanes = $derived.by((): Lane[] => {
 		const budgetMins = budgetHours * 60;
-		const map = new SvelteMap<string, Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }>();
+		const map = new SvelteMap<
+			string,
+			Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }
+		>();
 		const noProvider: WatchlistItem[] = [];
 
 		for (const item of items) {

@@ -57,9 +57,9 @@ describe('parseTextList', () => {
 	});
 
 	it('strips non-year parentheticals', () => {
-		const rows = parseTextList('Arrival (2016)\nBlade Runner (Director\'s Cut)');
+		const rows = parseTextList("Arrival (2016)\nBlade Runner (Director's Cut)");
 		expect(rows[0]).toEqual({ title: 'Arrival', year: '2016', mediaTypeHint: 'auto' });
-		expect(rows[1]).toEqual({ title: "Blade Runner", year: null, mediaTypeHint: 'auto' });
+		expect(rows[1]).toEqual({ title: 'Blade Runner', year: null, mediaTypeHint: 'auto' });
 	});
 
 	it('handles indented items', () => {
@@ -131,7 +131,8 @@ describe('parseImdbCSV', () => {
 	});
 
 	it('classifies TV series correctly', () => {
-		const csv = 'title,year,title type\nBreaking Bad,2008,tvseries\nTrue Detective,2014,tvminiseries';
+		const csv =
+			'title,year,title type\nBreaking Bad,2008,tvseries\nTrue Detective,2014,tvminiseries';
 		const rows = parseImdbCSV(csv);
 		expect(rows[0].mediaTypeHint).toBe('tv');
 		expect(rows[1].mediaTypeHint).toBe('tv');

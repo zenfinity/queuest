@@ -1,5 +1,3 @@
-export const ssr = false;
-
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getAll, replaceAll } from '$lib/db';
@@ -11,7 +9,14 @@ export const ssr = false;
 		resetEverything
 	} from '$lib/settings-actions';
 
-	import { getQueueName, setQueueName, getQueueColors, setQueueColor, renameCollectionColor, deleteCollectionColor } from '$lib/queue-colors';
+	import {
+		getQueueName,
+		setQueueName,
+		getQueueColors,
+		setQueueColor,
+		renameCollectionColor,
+		deleteCollectionColor
+	} from '$lib/queue-colors';
 	import { listCollections } from '$lib/queue-actions';
 	import pkg from '../../../package.json';
 
@@ -148,7 +153,7 @@ export const ssr = false;
 	let queueColors = $state<Record<string, string>>({});
 	let collections = $state<string[]>([]);
 	let collectionCounts = $state<Record<string, number>>({});
-	let items = $state<typeof import('$lib/types').WatchlistItem[]>([]);
+	let items = $state<(typeof import('$lib/types').WatchlistItem)[]>([]);
 	let renamingCollection = $state<string | null>(null);
 	let renameInput = $state('');
 	let deleteArmed = $state<string | null>(null);
@@ -246,6 +251,8 @@ export const ssr = false;
 	});
 </script>
 
+export const ssr = false;
+
 <svelte:head><title>Queuest — Settings</title></svelte:head>
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
@@ -287,7 +294,8 @@ export const ssr = false;
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Collections</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Organize your queue into collections. Create new ones from the detail panel or by assigning items. Importing a shared list automatically creates a collection.
+			Organize your queue into collections. Create new ones from the detail panel or by assigning
+			items. Importing a shared list automatically creates a collection.
 		</p>
 		{#if collections.length === 0}
 			<p class="text-sm text-gray-400 dark:text-gray-600">No collections yet.</p>
@@ -370,7 +378,10 @@ export const ssr = false;
 										type="color"
 										value={color}
 										oninput={(e) =>
-											updateCollectionColor(collection, (e.currentTarget as HTMLInputElement).value)}
+											updateCollectionColor(
+												collection,
+												(e.currentTarget as HTMLInputElement).value
+											)}
 										class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
 									/>
 								</label>

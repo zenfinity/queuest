@@ -1,5 +1,3 @@
-export const prerender = true;
-
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -69,6 +67,8 @@ export const prerender = true;
 		goto('/budget?onboarding=1');
 	}
 </script>
+
+export const prerender = true;
 
 <svelte:head><title>Queuest — Know when to cancel</title></svelte:head>
 

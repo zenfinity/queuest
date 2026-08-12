@@ -15,8 +15,14 @@ vi.mock('./db', () => ({
 	setQueueTag: (...args: unknown[]) => setQueueTag(...args)
 }));
 
-const { reloadQueue, toggleWatched, removeQueueItem, toggleSeasonProgress, listCollections, setItemCollection } =
-	await import('./queue-actions');
+const {
+	reloadQueue,
+	toggleWatched,
+	removeQueueItem,
+	toggleSeasonProgress,
+	listCollections,
+	setItemCollection
+} = await import('./queue-actions');
 
 function makeItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
 	return {
