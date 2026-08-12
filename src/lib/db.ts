@@ -8,6 +8,41 @@ const VERSION = 3;
 
 let _dbPromise: Promise<IDBDatabase> | null = null;
 
+// ── Clock-skew correction (#101) ────────────────────────────────────────────
+// A device with a wrong wall clock either pins a stale row forever (clock
+// ahead of the pack) or loses every LWW conflict (clock behind) once sync is
+// on. The sync engine learns the real offset from the server's `Date`
+// response header on every PUT and calls setClockOffsetMs(); every write in
+// this file stamps updated_at through nowIso() so the correction actually
+// reaches the timestamps LWW compares. In-memory only (reset on reload) is
+// the "minimum viable" version — good enough since the offset is relearned
+// on the very next sync.
+let clockOffsetMs = 0;
+
+export function setClockOffsetMs(ms: number): void {
+	clockOffsetMs = ms;
+}
+
+export function nowIso(): string {
+	return new Date(Date.now() + clockOffsetMs).toISOString();
+}
+
+// ── Mutation notifications (#101) ───────────────────────────────────────────
+// The sync engine needs a "debounced after mutation" trigger, but wiring
+// every action module (queue-actions, import-actions, settings-actions, ...)
+// to know about sync would spread that concern everywhere. Instead every
+// write in this file calls notifyMutation() once it commits, and sync.ts
+// subscribes a single debounced listener at startup via onMutation().
+const mutationListeners: (() => void)[] = [];
+
+export function onMutation(cb: () => void): void {
+	mutationListeners.push(cb);
+}
+
+function notifyMutation(): void {
+	for (const cb of mutationListeners) cb();
+}
+
 function open(name = DB_NAME): Promise<IDBDatabase> {
 	if (name === DB_NAME && _dbPromise) return _dbPromise;
 	const promise = new Promise<IDBDatabase>((resolve, reject) => {
@@ -86,7 +121,7 @@ export async function addItem(
 		const tx = db.transaction(STORE, 'readwrite');
 		// JSON round-trip strips Svelte 5 reactive Proxies — structuredClone cannot clone them
 		const plain = JSON.parse(JSON.stringify(item)) as typeof item;
-		const now = new Date().toISOString();
+		const now = nowIso();
 		const full: Omit<WatchlistItem, 'id'> = {
 			...plain,
 			added_at: now,
@@ -94,7 +129,10 @@ export async function addItem(
 			updated_at: now
 		};
 		const req = tx.objectStore(STORE).add(full);
-		req.onsuccess = () => resolve();
+		req.onsuccess = () => {
+			notifyMutation();
+			resolve();
+		};
 		req.onerror = () => reject(req.error);
 	});
 }
@@ -123,11 +161,14 @@ export async function removeItem(id: number): Promise<void> {
 				resolve();
 				return;
 			}
-			const now = new Date().toISOString();
+			const now = nowIso();
 			item.deleted_at = now;
 			item.updated_at = now;
 			const put = store.put(item);
-			put.onsuccess = () => resolve();
+			put.onsuccess = () => {
+				notifyMutation();
+				resolve();
+			};
 			put.onerror = () => reject(put.error);
 		};
 		get.onerror = () => reject(get.error);
@@ -178,11 +219,14 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 				reject(new Error(`Item with id ${id} not found`));
 				return;
 			}
-			const now = new Date().toISOString();
+			const now = nowIso();
 			item.watched_at = watched ? now : null;
 			item.updated_at = now;
 			const put = store.put(item);
-			put.onsuccess = () => resolve();
+			put.onsuccess = () => {
+				notifyMutation();
+				resolve();
+			};
 			put.onerror = () => reject(put.error);
 		};
 		get.onerror = () => reject(get.error);
@@ -202,9 +246,12 @@ export async function setQueueTag(id: number, tag: string | null): Promise<void>
 				return;
 			}
 			item.queue_tag = tag ?? undefined;
-			item.updated_at = new Date().toISOString();
+			item.updated_at = nowIso();
 			const put = store.put(item);
-			put.onsuccess = () => resolve();
+			put.onsuccess = () => {
+				notifyMutation();
+				resolve();
+			};
 			put.onerror = () => reject(put.error);
 		};
 		get.onerror = () => reject(get.error);
@@ -224,9 +271,12 @@ export async function updateShowProgress(id: number, watchedSeasons: number[]): 
 				return;
 			}
 			item.watched_seasons = watchedSeasons;
-			item.updated_at = new Date().toISOString();
+			item.updated_at = nowIso();
 			const put = store.put(item);
-			put.onsuccess = () => resolve();
+			put.onsuccess = () => {
+				notifyMutation();
+				resolve();
+			};
 			put.onerror = () => reject(put.error);
 		};
 		get.onerror = () => reject(get.error);
@@ -266,7 +316,10 @@ export async function patchProviders(
 			if (director !== undefined) item.director = director;
 			if (creator !== undefined) item.creator = creator;
 			const put = store.put(item);
-			put.onsuccess = () => resolve();
+			put.onsuccess = () => {
+				notifyMutation();
+				resolve();
+			};
 			put.onerror = () => reject(put.error);
 		};
 		get.onerror = () => reject(get.error);
@@ -284,7 +337,7 @@ export async function renameCollectionTag(oldName: string, newName: string): Pro
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
 		const store = tx.objectStore(STORE);
-		const now = new Date().toISOString();
+		const now = nowIso();
 		const cursorReq = store.openCursor();
 		cursorReq.onsuccess = () => {
 			const cursor = cursorReq.result;
@@ -298,7 +351,10 @@ export async function renameCollectionTag(oldName: string, newName: string): Pro
 			cursor.continue();
 		};
 		cursorReq.onerror = () => reject(cursorReq.error);
-		tx.oncomplete = () => resolve();
+		tx.oncomplete = () => {
+			notifyMutation();
+			resolve();
+		};
 		tx.onerror = () => reject(tx.error);
 	});
 }
@@ -309,7 +365,7 @@ export async function clearCollectionTag(name: string): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
 		const store = tx.objectStore(STORE);
-		const now = new Date().toISOString();
+		const now = nowIso();
 		const cursorReq = store.openCursor();
 		cursorReq.onsuccess = () => {
 			const cursor = cursorReq.result;
@@ -323,22 +379,42 @@ export async function clearCollectionTag(name: string): Promise<void> {
 			cursor.continue();
 		};
 		cursorReq.onerror = () => reject(cursorReq.error);
-		tx.oncomplete = () => resolve();
+		tx.oncomplete = () => {
+			notifyMutation();
+			resolve();
+		};
 		tx.onerror = () => reject(tx.error);
 	});
 }
 
+/**
+ * Replaces the entire store, id-for-id. Called by imports/restores, and by
+ * the sync engine with a merged snapshot: items that matched an existing
+ * local row (by [tmdb_id, media_type]) carry that row's id so `put()`
+ * overwrites it in place; genuinely new items omit `id` and the store's key
+ * generator assigns one. Never renumbers existing ids and never drops a
+ * caller-supplied updated_at — both are exactly what sync depends on to stay
+ * idempotent.
+ *
+ * `silent` skips the mutation notification — the sync engine passes this
+ * when writing back its own merge result, so applying a pull doesn't
+ * immediately schedule another push of the data that was just pulled.
+ */
 export async function replaceAll(
-	items: (Omit<WatchlistItem, 'id'> & { id?: number })[]
+	items: (Omit<WatchlistItem, 'id'> & { id?: number })[],
+	opts: { silent?: boolean } = {}
 ): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
 		const store = tx.objectStore(STORE);
 		store.clear();
-		const now = new Date().toISOString();
+		const now = nowIso();
 		for (const item of items) store.put({ ...item, updated_at: item.updated_at ?? now });
-		tx.oncomplete = () => resolve();
+		tx.oncomplete = () => {
+			if (!opts.silent) notifyMutation();
+			resolve();
+		};
 		tx.onerror = () => reject(tx.error);
 	});
 }
@@ -352,15 +428,66 @@ export async function getServices(): Promise<Provider[]> {
 	});
 }
 
-export async function setServices(services: Provider[]): Promise<void> {
+export async function setServices(
+	services: Provider[],
+	opts: { silent?: boolean } = {}
+): Promise<void> {
 	const db = await open();
-	return new Promise((resolve, reject) => {
+	await new Promise<void>((resolve, reject) => {
 		const tx = db.transaction(SERVICES_STORE, 'readwrite');
 		const store = tx.objectStore(SERVICES_STORE);
 		store.clear();
 		for (const s of services) store.put(s);
 		tx.oncomplete = () => resolve();
 		tx.onerror = () => reject(tx.error);
+	});
+	// Services sync as a single LWW register (#101), not per-row tombstones —
+	// it's a small set of ids, so one timestamp for "the set changed" is enough.
+	if (!opts.silent) {
+		await setMeta('services_updated_at', nowIso());
+		notifyMutation();
+	}
+}
+
+const SYNC_DEK_KEY = 'sync_dek';
+
+/**
+ * The unwrapped sync DEK, held as a non-extractable CryptoKey (#101) —
+ * CryptoKey objects are structured-cloneable, so they survive reload without
+ * the raw key bytes ever touching JS. Goes through the meta store directly
+ * rather than getMeta/setMeta, whose signature is string-only.
+ */
+export async function getSyncDek(): Promise<CryptoKey | undefined> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db.transaction(META_STORE).objectStore(META_STORE).get(SYNC_DEK_KEY);
+		req.onsuccess = () =>
+			resolve((req.result as { key: string; value: CryptoKey } | undefined)?.value);
+		req.onerror = () => reject(req.error);
+	});
+}
+
+export async function setSyncDek(dek: CryptoKey): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db
+			.transaction(META_STORE, 'readwrite')
+			.objectStore(META_STORE)
+			.put({ key: SYNC_DEK_KEY, value: dek });
+		req.onsuccess = () => resolve();
+		req.onerror = () => reject(req.error);
+	});
+}
+
+export async function clearSyncDek(): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db
+			.transaction(META_STORE, 'readwrite')
+			.objectStore(META_STORE)
+			.delete(SYNC_DEK_KEY);
+		req.onsuccess = () => resolve();
+		req.onerror = () => reject(req.error);
 	});
 }
 
@@ -405,7 +532,7 @@ export async function toggleService(service: Provider): Promise<boolean> {
 		logo_path: service.logo_path
 	};
 	const db = await open();
-	return new Promise((resolve, reject) => {
+	const wasAdded = await new Promise<boolean>((resolve, reject) => {
 		const tx = db.transaction(SERVICES_STORE, 'readwrite');
 		const store = tx.objectStore(SERVICES_STORE);
 		const getReq = store.get(id);
@@ -421,4 +548,7 @@ export async function toggleService(service: Provider): Promise<boolean> {
 		getReq.onerror = () => reject(getReq.error);
 		tx.onerror = () => reject(tx.error);
 	});
+	await setMeta('services_updated_at', nowIso());
+	notifyMutation();
+	return wasAdded;
 }

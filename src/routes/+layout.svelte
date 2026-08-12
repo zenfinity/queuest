@@ -5,6 +5,7 @@
 	import { onMount, tick } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { initTheme } from '$lib/theme.svelte';
+	import { initSyncTriggers } from '$lib/sync';
 	import '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import QueueDock from '$lib/components/QueueDock.svelte';
@@ -81,6 +82,11 @@
 
 	onMount(() => {
 		initTheme();
+		// No-ops until sync is actually enabled (#103's job) — syncNow() bails
+		// immediately when there's no DEK in IndexedDB yet. Registering the
+		// triggers unconditionally here just means enabling sync later doesn't
+		// also require wiring app-load/visibilitychange/debounce from scratch.
+		initSyncTriggers();
 		// iOS Safari misreports viewport width during keyboard animation (and after
 		// native pickers dismiss), making sm: breakpoints fire on narrow screens.
 		// Re-stamping the viewport meta on every resize corrects it.

@@ -258,13 +258,29 @@
 			<div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
 		</div>
 		<div class="flex gap-2">
-			<input
-				type="url"
-				placeholder="https://… (IMDb export link)"
-				bind:value={csvUrl}
-				onkeydown={(e) => e.key === 'Enter' && fetchCsvUrl()}
-				class="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
-			/>
+			<div class="relative flex-1">
+				<input
+					type="url"
+					placeholder="https://… (IMDb export link)"
+					bind:value={csvUrl}
+					onkeydown={(e) => e.key === 'Enter' && fetchCsvUrl()}
+					class="w-full rounded-lg bg-gray-100 px-3 py-2 pr-9 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				{#if csvUrl}
+					<button
+						type="button"
+						aria-label="Clear link"
+						onclick={() => (csvUrl = '')}
+						class="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+					>
+						<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+							<path
+								d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
+							/>
+						</svg>
+					</button>
+				{/if}
+			</div>
 			<button
 				onclick={fetchCsvUrl}
 				disabled={!csvUrl.trim() || csvUrlLoading}

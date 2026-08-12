@@ -19,8 +19,8 @@
 // source tree for sq: string literals and fails if one exists in neither
 // (or both).
 import type { WatchlistItem, Provider, SeasonSummary, CastMember, ReleaseInfo } from './types';
-import { getAll, getServices } from './db';
-import { getQueueName, getQueueColors } from './queue-colors';
+import { getAll, getAllIncludingDeleted, getServices } from './db';
+import { getQueueName, getQueueColors, setQueueName } from './queue-colors';
 import {
 	coerceString,
 	coerceNumber,
@@ -81,30 +81,77 @@ function readRaw(key: string): string | undefined {
 	}
 }
 
-/** Builds the full app-state snapshot from IndexedDB + the synced localStorage keys. */
-export async function serializeAppState(): Promise<AppStateSnapshot> {
-	const [items, services] = await Promise.all([getAll(), getServices()]);
-
+function buildPrefs(): AppStatePrefs {
 	const weeklyHours = coerceNumber(JSON.parse(readRaw('sq:budget:weekly') ?? 'null')) ?? 10;
 	const weeksPerMonth = coerceNumber(JSON.parse(readRaw('sq:budget:weeks') ?? 'null')) ?? 4;
 
 	return {
-		version: APP_STATE_VERSION,
-		prefs: {
-			theme: readRaw('sq:theme') === 'light' ? 'light' : 'dark',
-			weeklyHours,
-			weeksPerMonth,
-			budget: weeklyHours * weeksPerMonth,
-			queueName: getQueueName(),
-			queueColors: getQueueColors(),
-			sort: (readRaw('sq:sort') as AppStatePrefs['sort']) ?? 'added',
-			sortDir: (readRaw('sq:sortDir') as AppStatePrefs['sortDir']) ?? 'desc',
-			view: (readRaw('sq:view') as AppStatePrefs['view']) ?? 'grid',
-			cancelAlerts: readRaw('sq:cancel-alerts') === 'true'
-		},
-		items,
-		services
+		theme: readRaw('sq:theme') === 'light' ? 'light' : 'dark',
+		weeklyHours,
+		weeksPerMonth,
+		budget: weeklyHours * weeksPerMonth,
+		queueName: getQueueName(),
+		queueColors: getQueueColors(),
+		sort: (readRaw('sq:sort') as AppStatePrefs['sort']) ?? 'added',
+		sortDir: (readRaw('sq:sortDir') as AppStatePrefs['sortDir']) ?? 'desc',
+		view: (readRaw('sq:view') as AppStatePrefs['view']) ?? 'grid',
+		cancelAlerts: readRaw('sq:cancel-alerts') === 'true'
 	};
+}
+
+/** Builds the full app-state snapshot from IndexedDB + the synced localStorage keys. */
+export async function serializeAppState(): Promise<AppStateSnapshot> {
+	const [items, services] = await Promise.all([getAll(), getServices()]);
+	return { version: APP_STATE_VERSION, prefs: buildPrefs(), items, services };
+}
+
+/**
+ * Same as serializeAppState, but for the sync engine (#101) rather than
+ * export/backup: includes soft-deleted rows (getAllIncludingDeleted) so
+ * tombstones actually propagate to other devices instead of silently
+ * vanishing from every payload that would otherwise carry them.
+ */
+export async function serializeSyncSnapshot(): Promise<AppStateSnapshot> {
+	const [items, services] = await Promise.all([getAllIncludingDeleted(), getServices()]);
+	return { version: APP_STATE_VERSION, prefs: buildPrefs(), items, services };
+}
+
+/**
+ * Writes a prefs object back to the synced localStorage keys — the sync
+ * engine's counterpart to restoreBackup's inline prefs-apply block in
+ * import-actions.ts. Not shared with that code path directly: restore also
+ * drives a couple of UI callbacks (theme toggle state, etc.) that don't
+ * apply to a background sync pull.
+ */
+export function applyPrefs(prefs: AppStatePrefs): void {
+	if (typeof localStorage === 'undefined') return;
+	try {
+		if (prefs.theme) {
+			localStorage.setItem('sq:theme', prefs.theme);
+			document.documentElement?.classList.toggle('dark', prefs.theme === 'dark');
+		}
+		if (typeof prefs.weeklyHours === 'number') {
+			localStorage.setItem('sq:budget:weekly', JSON.stringify(prefs.weeklyHours));
+		}
+		if (typeof prefs.weeksPerMonth === 'number') {
+			localStorage.setItem('sq:budget:weeks', JSON.stringify(prefs.weeksPerMonth));
+		}
+		if (typeof prefs.budget === 'number') {
+			localStorage.setItem('sq:budget', JSON.stringify(prefs.budget));
+		}
+		if (typeof prefs.queueName === 'string') setQueueName(prefs.queueName);
+		if (prefs.queueColors)
+			localStorage.setItem('sq:queue:colors', JSON.stringify(prefs.queueColors));
+		if (prefs.sort) localStorage.setItem('sq:sort', prefs.sort);
+		if (prefs.sortDir) localStorage.setItem('sq:sortDir', prefs.sortDir);
+		if (prefs.view) localStorage.setItem('sq:view', prefs.view);
+		if (typeof prefs.cancelAlerts === 'boolean') {
+			localStorage.setItem('sq:cancel-alerts', String(prefs.cancelAlerts));
+		}
+	} catch {
+		// Best-effort localStorage write; a failed pref write here isn't fatal —
+		// the item/service sync (the actual point of the engine) already applied.
+	}
 }
 
 // ── Deserialize (untrusted input: backup files, and later sync snapshots
@@ -112,7 +159,7 @@ export async function serializeAppState(): Promise<AppStateSnapshot> {
 // rebuilt from an allowlist, strings/arrays are length-clamped, and paths
 // are regex-validated rather than trusted and cast.
 
-type BackupItem = Omit<WatchlistItem, 'id'>;
+export type BackupItem = Omit<WatchlistItem, 'id'>;
 
 function parseSeason(raw: unknown): SeasonSummary | null {
 	if (!raw || typeof raw !== 'object') return null;

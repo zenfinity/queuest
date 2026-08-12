@@ -67,15 +67,31 @@
 	</div>
 
 	<form action="/search" method="GET" class="flex gap-2">
-		<!-- svelte-ignore a11y_autofocus -->
-		<input
-			name="q"
-			type="search"
-			bind:value={query}
-			placeholder="Search movies and TV shows…"
-			class="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 transition-shadow focus:ring-orange-500 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:ring-gray-800 dark:focus:ring-orange-500"
-			autofocus
-		/>
+		<div class="relative flex-1">
+			<!-- svelte-ignore a11y_autofocus -->
+			<input
+				name="q"
+				type="search"
+				bind:value={query}
+				placeholder="Search movies and TV shows…"
+				class="w-full rounded-lg bg-gray-100 px-4 py-2.5 pr-9 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 transition-shadow focus:ring-orange-500 [&::-webkit-search-cancel-button]:hidden dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:ring-gray-800 dark:focus:ring-orange-500"
+				autofocus
+			/>
+			{#if query}
+				<button
+					type="button"
+					aria-label="Clear search"
+					onclick={() => (query = '')}
+					class="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+				>
+					<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+						<path
+							d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
+						/>
+					</svg>
+				</button>
+			{/if}
+		</div>
 		<button
 			type="submit"
 			class="rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange-400"
