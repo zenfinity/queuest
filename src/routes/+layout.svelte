@@ -48,10 +48,10 @@
 />
 
 <div class="min-h-screen w-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-	<nav
-		class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90"
-	>
-		<div class="mx-auto flex h-11 max-w-5xl items-stretch gap-3 px-3 sm:h-14 sm:gap-6 sm:px-4">
+	<nav class="sticky top-0 z-50 bg-white/90 backdrop-blur dark:bg-gray-900/90">
+		<div
+			class="mx-auto flex h-11 max-w-5xl items-stretch gap-1.5 border-b border-gray-200 px-3 sm:h-14 sm:gap-6 sm:px-4 dark:border-gray-800"
+		>
 			<a
 				class="flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white"
 				href={resolve('/')}
@@ -60,14 +60,20 @@
 			</a>
 
 			{#if !isLanding}
-				<div class="flex gap-4 sm:gap-5">
+				<!-- Folder-tab strip: active link is a raised, connected piece of the content
+				     area below it — filled with the page background (so it visually merges with
+				     what's under the nav) and rounded at the top. `items-end` + `-mb-px` on the
+				     active tab is what sells the illusion: the tab's own background paints over
+				     that single pixel of the nav's bottom border, breaking it exactly where the
+				     tab sits, as if the tab were a physical continuation of the page below. -->
+				<div class="flex items-end gap-0.5 sm:gap-1">
 					{#each navLinks as link (link.href)}
 						{@const active = isActive(link.href, link.exact)}
 						<a
-							class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
+							class="relative flex items-center rounded-t-md px-1.5 py-1.5 text-xs font-medium transition-colors sm:rounded-t-lg sm:px-3.5 sm:py-2 sm:text-sm
 								{active
-								? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
-								: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+								? '-mb-px bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-white'
+								: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 							href={resolve(link.href)}
 						>
 							{link.label}
@@ -82,17 +88,21 @@
 				<!-- Inline nav placement (lg+ only) — the mobile/tablet floating placement lives
 				     outside <nav> below, since backdrop-filter on <nav> would otherwise confine a
 				     fixed-position dock to the nav's own box (see QueueDock.svelte). -->
-				<div class="hidden lg:block">
+				<div class="hidden self-center lg:block">
 					<QueueDock floating={false} />
 				</div>
 			{/if}
 
 			{#if !isLanding}
+				{@const settingsActive = isActive('/settings', false)}
+				<!-- "Half tab": same lifted/connected mechanism as the primary tabs, but tighter
+				     padding and a smaller radius so an active Settings reads as secondary to the
+				     5 main tabs rather than a 6th peer. Inactive gets no tab chrome at all. -->
 				<a
-					class="flex items-center border-b-2 text-xs transition-colors sm:text-sm
-					{isActive('/settings', false)
-						? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
-						: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+					class="relative flex items-center self-end rounded-t px-1 py-1 text-xs font-medium transition-colors sm:px-2 sm:py-1.5 sm:text-sm
+					{settingsActive
+						? '-mb-px bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-white'
+						: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 					href={resolve('/settings')}
 					aria-label="Settings"
 				>
