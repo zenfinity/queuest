@@ -10,11 +10,20 @@ export const SORT_DEFAULT_DIR: Record<SortKey, 'asc' | 'desc'> = {
 	runtime: 'asc'
 };
 
+// Sentinel for "items with no collection assigned" — distinct from `null`,
+// which means "no collection filter applied" (i.e. show everything).
+export const UNCATEGORIZED = '__uncategorized__';
+
 export const queueControls = $state({
 	sortBy: 'added' as SortKey,
 	sortDir: 'desc' as 'asc' | 'desc',
 	viewMode: 'grid' as ViewKey,
 	serviceFilter: 'all' as ServiceFilterKey,
+	collectionFilter: null as string | null,
+	// Mirrors the queue's current collection names so QueueDock — rendered from
+	// the layout, without direct access to queue items — can list them. Kept in
+	// sync by the queue page via an $effect.
+	collectionNames: [] as string[],
 	watchedOn: false,
 	filterOpen: false,
 	ready: false, // true once the queue page has hydrated sort/view prefs from localStorage
@@ -37,6 +46,7 @@ export function hasActiveFilters(): boolean {
 	return (
 		queueControls.sortBy !== 'added' ||
 		queueControls.sortDir !== SORT_DEFAULT_DIR[queueControls.sortBy] ||
-		queueControls.serviceFilter !== 'all'
+		queueControls.serviceFilter !== 'all' ||
+		queueControls.collectionFilter !== null
 	);
 }

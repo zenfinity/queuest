@@ -2,12 +2,14 @@
 	import {
 		queueControls,
 		SORT_DEFAULT_DIR,
+		UNCATEGORIZED,
 		setSortBy,
 		toggleSortDir,
 		clearSort,
 		hasActiveFilters
 	} from '$lib/queue-controls.svelte';
 	import { services } from '$lib/services.svelte';
+	import { getQueueColors } from '$lib/queue-colors';
 
 	// `floating` renders as a fixed pill anchored to the bottom of the viewport (small/tablet
 	// screens). Non-floating renders as a plain inline flex item — used inside the nav at lg+.
@@ -195,6 +197,39 @@
 								>{/if}
 						</button>
 					{/each}
+
+					{#if queueControls.collectionNames.length > 0}
+						{@const queueColors = getQueueColors()}
+						<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
+
+						<p
+							class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+						>
+							Collection
+						</p>
+						{#each [[null, 'All'], ...queueControls.collectionNames.map( (c) => [c, c] ), [UNCATEGORIZED, 'Uncategorized']] as [key, label] (key ?? '__all__')}
+							<button
+								onclick={() => (queueControls.collectionFilter = key)}
+								class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
+									{queueControls.collectionFilter === key
+									? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
+									: 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
+							>
+								<span class="flex min-w-0 items-center gap-1.5">
+									{#if key && key !== UNCATEGORIZED}
+										<span
+											class="h-2 w-2 shrink-0 rounded-full"
+											style="background:{queueColors[key] ?? '#9ca3af'}"
+										></span>
+									{/if}
+									<span class="truncate">{label}</span>
+								</span>
+								{#if queueControls.collectionFilter === key}<span class="shrink-0 text-orange-500"
+										>✓</span
+									>{/if}
+							</button>
+						{/each}
+					{/if}
 				</div>
 			{/if}
 		</div>
