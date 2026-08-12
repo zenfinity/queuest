@@ -1,6 +1,11 @@
+<script module lang="ts">
+	export const prerender = true;
+</script>
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { motion } from '$lib/motion.svelte';
 
 	let tab = $state<'timeline' | 'list' | 'cards'>('timeline');
@@ -9,7 +14,7 @@
 		try {
 			const isPreview = new URLSearchParams(window.location.search).has('preview');
 			if (!isPreview && localStorage.getItem('sq:welcomed')) {
-				goto('/app', { replaceState: true });
+				goto(resolve('/app'), { replaceState: true });
 				return;
 			}
 		} catch {
@@ -64,7 +69,7 @@
 		} catch {
 			// Best-effort localStorage write; app navigates to onboarding regardless
 		}
-		goto('/budget?onboarding=1');
+		goto(resolve('/budget?onboarding=1'));
 	}
 </script>
 

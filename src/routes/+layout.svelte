@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { initTheme } from '$lib/theme.svelte';
 	import '$lib/motion.svelte';
@@ -15,7 +16,7 @@
 		{ href: '/app', label: 'Queue', exact: true },
 		{ href: '/suggest', label: 'Suggest', exact: false },
 		{ href: '/share', label: 'Share', exact: true }
-	];
+	] as const;
 
 	function isActive(href: string, exact: boolean) {
 		return exact ? page.url.pathname === href : page.url.pathname.startsWith(href);
@@ -53,7 +54,7 @@
 		<div class="mx-auto flex h-11 max-w-5xl items-stretch gap-3 px-3 sm:h-14 sm:gap-6 sm:px-4">
 			<a
 				class="flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white"
-				href="/"
+				href={resolve('/')}
 			>
 				Queu<span class="text-orange-400">est</span>
 			</a>
@@ -67,7 +68,7 @@
 								{active
 								? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
 								: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-							href={link.href}
+							href={resolve(link.href)}
 						>
 							{link.label}
 						</a>
@@ -92,7 +93,7 @@
 					{isActive('/settings', false)
 						? 'border-gray-900 font-semibold text-gray-900 dark:border-white dark:text-white'
 						: 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
-					href="/settings"
+					href={resolve('/settings')}
 					aria-label="Settings"
 				>
 					<svg class="h-4 w-4 sm:hidden" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

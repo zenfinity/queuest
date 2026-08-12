@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import type { ShareItem } from '$lib/types';
 	import { decryptWithKey } from '$lib/crypto';
 	import { parseSharePayload } from '$lib/share-schema';
@@ -120,7 +121,7 @@
 					{/if}
 				{/if}
 				<a
-					href="/app"
+					href={resolve('/app')}
 					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
 				>
 					Build your own queue →

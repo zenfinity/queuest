@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { resolve } from '$app/paths';
 	import type { WatchlistItem } from '$lib/types';
 	import {
 		reloadQueue,
@@ -432,8 +433,10 @@
 				Your queue is empty
 			</p>
 			<p class="mt-1 text-sm text-gray-500">
-				<a class="text-orange-500 hover:underline" href="/add">Search for movies and shows</a> to get
-				started
+				<a class="text-orange-500 hover:underline" href={resolve('/add')}
+					>Search for movies and shows</a
+				>
+				to get started
 			</p>
 		</div>
 
