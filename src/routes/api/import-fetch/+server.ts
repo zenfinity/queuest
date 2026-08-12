@@ -27,9 +27,15 @@ export const POST: RequestHandler = async ({ request }) => {
 	const originError = checkSameOrigin(request);
 	if (originError) return originError;
 
-	const { url } = (await request.json()) as { url: string };
-	if (!url || typeof url !== 'string') {
-		return apiError(400, 'Invalid request');
+	let url: unknown;
+	try {
+		({ url } = await request.json());
+	} catch {
+		return apiError(400, 'Invalid JSON');
+	}
+
+	if (typeof url !== 'string') {
+		return apiError(400, 'URL must be a string');
 	}
 
 	let parsed: URL;

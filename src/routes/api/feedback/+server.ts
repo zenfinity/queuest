@@ -17,9 +17,16 @@ export const POST: RequestHandler = async ({ request }) => {
 		return apiError(503, 'Feedback not configured');
 	}
 
-	const { title, body } = await request.json();
-	if (!title?.trim()) return apiError(400, 'Title is required');
-	if (typeof title !== 'string' || title.length > TITLE_MAX) return apiError(400, 'Title too long');
+	let title: unknown, body: unknown;
+	try {
+		({ title, body } = await request.json());
+	} catch {
+		return apiError(400, 'Invalid JSON');
+	}
+
+	if (typeof title !== 'string') return apiError(400, 'Title must be a string');
+	if (!title.trim()) return apiError(400, 'Title is required');
+	if (title.length > TITLE_MAX) return apiError(400, 'Title too long');
 	if (body !== undefined && (typeof body !== 'string' || body.length > BODY_MAX))
 		return apiError(400, 'Body too long');
 

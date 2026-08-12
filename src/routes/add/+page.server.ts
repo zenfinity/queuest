@@ -7,7 +7,10 @@ export const load: PageServerLoad = async ({ url }) => {
 	const query = url.searchParams.get('q')?.trim() ?? '';
 	if (!query) return { results: [] as SearchResult[], query: '', error: null };
 
-	const apiKey = env.TMDB_API_KEY ?? '';
+	const apiKey = env.TMDB_API_KEY;
+	if (!apiKey) {
+		return { results: [] as SearchResult[], query, error: 'Search not configured' };
+	}
 
 	try {
 		const raw = await searchMulti(query, apiKey);

@@ -97,7 +97,7 @@ describe('addAllToQueue', () => {
 
 		await addAllToQueue([makeShareItem()], 'My Queue', deps);
 
-		expect(state.addError).toBe('IDB write failed');
+		expect(state.addError).toBe('Arrival: Error: IDB write failed');
 		expect(state.addingAll).toBe(false);
 	});
 

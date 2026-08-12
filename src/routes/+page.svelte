@@ -12,7 +12,9 @@
 				goto('/app', { replaceState: true });
 				return;
 			}
-		} catch {}
+		} catch {
+			// Best-effort localStorage read; app shows landing page if check fails
+		}
 
 		// Parallax blobs
 		const blobs = [...document.querySelectorAll<HTMLElement>('[data-parallax]')];
@@ -59,10 +61,14 @@
 	function start() {
 		try {
 			localStorage.setItem('sq:welcomed', '1');
-		} catch {}
+		} catch {
+			// Best-effort localStorage write; app navigates to onboarding regardless
+		}
 		goto('/budget?onboarding=1');
 	}
 </script>
+
+export const prerender = true;
 
 <svelte:head><title>Queuest — Know when to cancel</title></svelte:head>
 

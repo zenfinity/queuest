@@ -17,8 +17,35 @@
 	let csvUrl = $state('');
 	let csvUrlLoading = $state(false);
 
+	const MAX_PASTE_SIZE = 100 * 1024; // 100 KB
+
 	let textInput = $state('');
-	let textRows = $derived(parseTextList(textInput));
+	let textRows = $state<ImportRow[]>([]);
+	let textParseError = $state('');
+
+	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function parseTextDebounced() {
+		if (debounceTimer) clearTimeout(debounceTimer);
+		if (!textInput.trim()) {
+			textRows = [];
+			textParseError = '';
+			return;
+		}
+		debounceTimer = setTimeout(() => {
+			try {
+				textRows = parseTextList(textInput);
+				textParseError = '';
+			} catch (e) {
+				textParseError = e instanceof Error ? e.message : 'Parse error';
+				textRows = [];
+			}
+		}, 300);
+	}
+
+	$effect(() => {
+		parseTextDebounced();
+	});
 
 	let importing = $state(false);
 	let importSource = $state<'csv' | 'text' | null>(null);
@@ -33,7 +60,9 @@
 		missedTitles = [];
 		try {
 			localStorage.removeItem('sq:import-missed');
-		} catch {}
+		} catch {
+			// Best-effort localStorage write; app works fine without it
+		}
 	}
 
 	function applyCsvText(text: string) {
@@ -53,6 +82,10 @@
 		textInput = '';
 		const file = (e.currentTarget as HTMLInputElement).files?.[0];
 		if (!file) return;
+		if (file.size > MAX_PASTE_SIZE) {
+			importError = `File too large (max ${Math.round(MAX_PASTE_SIZE / 1024)} KB)`;
+			return;
+		}
 		const reader = new FileReader();
 		reader.onload = () => applyCsvText(reader.result as string);
 		reader.readAsText(file);
@@ -134,7 +167,9 @@
 	onMount(() => {
 		try {
 			missedTitles = JSON.parse(localStorage.getItem('sq:import-missed') ?? '[]');
-		} catch {}
+		} catch {
+			// Best-effort localStorage read; app works fine without missed titles list
+		}
 	});
 </script>
 
@@ -270,11 +305,22 @@
 		<!-- eslint-disable svelte/no-useless-mustaches -- literal \n only survives inside an expression; Svelte collapses whitespace in static attribute text -->
 		<textarea
 			bind:value={textInput}
+			onpaste={(e) => {
+				const paste = e.clipboardData?.getData('text') ?? '';
+				if (paste.length > MAX_PASTE_SIZE) {
+					e.preventDefault();
+					textParseError = `Paste too large (max ${Math.round(MAX_PASTE_SIZE / 1024)} KB)`;
+				}
+			}}
 			placeholder={'The Bear\n- Severance (2022)\n1. Andor\n• Slow Horses'}
 			rows="6"
 			class="w-full rounded-lg bg-gray-100 px-3 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 		></textarea>
 		<!-- eslint-enable svelte/no-useless-mustaches -->
+
+		{#if textParseError}
+			<p class="text-xs text-red-500">{textParseError}</p>
+		{/if}
 
 		{#if textRows.length > 0}
 			<p class="text-sm text-gray-600 dark:text-gray-400">
@@ -331,7 +377,7 @@
 					>
 						<span class="truncate text-sm text-gray-700 dark:text-gray-300">{title}</span>
 						<a
-							href="/add?q={encodeURIComponent(title)}"
+							href={`/add?q=${encodeURIComponent(title)}`}
 							class="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-400">Search →</a
 						>
 					</li>

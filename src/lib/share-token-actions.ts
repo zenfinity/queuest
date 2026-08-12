@@ -22,6 +22,7 @@ export async function addAllToQueue(
 	getOrAssignColor(fallbackTag);
 	let added = 0;
 	let dupes = 0;
+	const failures: string[] = [];
 	try {
 		for (const item of items) {
 			const tag = item.queue_tag || fallbackTag;
@@ -57,19 +58,19 @@ export async function addAllToQueue(
 				} else {
 					const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 					console.error('addItem failed for', item.title, err);
-					deps.setAddError(msg);
-					throw err;
+					failures.push(`${item.title}: ${msg}`);
 				}
 			}
 		}
 		deps.setAddedCount(added);
 		deps.setSkipCount(dupes);
 		deps.setAddDone(true);
+		if (failures.length > 0) {
+			deps.setAddError(failures.join('\n'));
+		}
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : 'Failed to add items';
-		if (added === 0 && dupes === 0) {
-			deps.setAddError(msg);
-		}
+		deps.setAddError(msg);
 	} finally {
 		deps.setAddingAll(false);
 	}

@@ -108,11 +108,20 @@
 					</span>
 				</div>
 				{@render seasonPicker(item)}
-				<!-- Type chip + providers -->
+				<!-- Type chip + collection chip + providers -->
 				<div class="flex flex-wrap items-center gap-1">
 					<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
 						{item.media_type === 'movie' ? '🎬' : '📺'}
 					</span>
+					{#if tagColor}
+						<span
+							class="shrink-0 min-w-0 max-w-[60%] truncate rounded px-1 py-0.5 text-[10px] font-semibold text-white"
+							style="background-color: {tagColor};"
+							title={item.queue_tag}
+						>
+							{item.queue_tag}
+						</span>
+					{/if}
 					{#each item.providers.slice(0, 4) as p (p.provider_id)}
 						<img
 							src="{TMDB_IMG}/w92{p.logo_path}"

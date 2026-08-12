@@ -1,4 +1,4 @@
-import type { Provider } from './types';
+import type { Provider, ReleaseInfo, CastMember, SeasonSummary } from './types';
 import { getAll, replaceAll, patchProviders, getServices, setServices } from './db';
 import { encrypt } from './crypto';
 import { getQueueName, getQueueColors } from './queue-colors';
@@ -75,11 +75,11 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 			id: number;
 			providers: Provider[];
 			rentable?: boolean;
-			release: any;
-			seasons?: any;
+			release: ReleaseInfo | null;
+			seasons?: SeasonSummary[];
 			runtime_minutes?: number | null;
 			genres?: string[];
-			cast?: any[];
+			cast?: CastMember[];
 			director?: string | null;
 			creator?: string | null;
 		}>;
@@ -154,7 +154,9 @@ export async function resetEverything(): Promise<void> {
 	for (const k of keys) {
 		try {
 			localStorage.removeItem(k);
-		} catch {}
+		} catch {
+			// Best-effort localStorage cleanup; app navigates away after reset regardless
+		}
 	}
 	if (typeof window !== 'undefined') {
 		window.location.href = '/';

@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.5.5] — 2026-08-11
+
+### Collections
+
+- **Named collections for grouping queue items** — assign items to a collection from the detail panel, with autocomplete from existing names; collections get an auto-assigned or user-picked color shown as a chip on Grid and List cards. Settings gained a full lifecycle: rename, recolor, and delete (with an armed confirmation, matching the reset-everything pattern) a collection across every item that carries it. (#106, #107, #108, #109)
+
+### Bug fixes
+
+- **`db.ts` writes hung forever when the id didn't exist** — `setWatched`, `updateShowProgress`, and `patchProviders` all read `get.result` without checking it existed first; a missing id left the IndexedDB transaction promise unresolved rather than rejecting. All three now guard and reject. (#114)
+- **Silent failures in export, reset, and add-all-to-queue** — export and reset both swallowed errors with no UI feedback; add-all-to-queue stopped at the first failed item instead of reporting all of them. Export/reset now surface an error message; add-all collects every failure and reports them together, `title: error` per line. Services-loading failures (subscribed-provider fetch) are now exposed via `getLoadError()` and shown on the Share page's provider filter. (#115)
+- **API routes returning 500 instead of 400 on bad input** — the feedback route checked `.trim()` before confirming `title` was a string; four routes (`feedback`, `import-fetch`, `import-search`, `refresh-providers`) didn't guard against malformed JSON bodies throwing past their validation. All four now validate ordering correctly and catch JSON parse errors as 400s. `refresh-providers` also no longer overwrites good provider data with blanks when a single item's refresh fails — it omits that item instead of returning an empty record for it. (#116)
+- **Corrupted localStorage silently broke state** — budget prefs, queue colors, and dismissed-cancellation dates all trusted `JSON.parse` output without checking its shape; a hand-edited or partially-written value could hand `NaN`, `undefined`, or the wrong type to code that assumed a valid one. New typed-read helpers (`readString`, `readNumber`, `readBoolean`, `readRecord`, `readArray`, `readDate` in `lib/storage.ts`) validate the parsed shape and fall back cleanly; budget prefs load all-or-nothing rather than mixing a valid and a corrupt field. (#117)
+- **Import parser bugs** — `parseTextList` stripped the trailing year off titles that were entirely a year (e.g. "1917"), leaving nothing; `parseImdbCSV` silently treated every row as a movie when the `Title Type` column was missing rather than skipping detection. Both fixed, with 31 new parser tests covering the edge cases. Text-list parsing is now debounced (300ms) instead of reparsing on every keystroke, and both file and pasted-text imports are capped at 100 KB to prevent the UI from freezing on oversized input. (#118)
+
+### Production readiness
+
+- **Missing production assets** — added a favicon (SVG data-URI), `manifest.json` (PWA metadata), and `robots.txt`; `PUBLIC_ORIGIN` is now read for Open Graph tag construction. A custom `+error.svelte` replaces SvelteKit's default error page with one that matches the app's theme. `/settings` and `/share` are now `ssr = false` (client-only, matching their localStorage/IndexedDB dependence); `/` (landing) is now prerendered. `hooks.server.ts` adds a CSP fallback for routes the Cloudflare `_headers` file doesn't reach, and the CSP itself now includes `form-action` and allows `https://api.themoviedb.org`. (#125)
+
+### Code quality
+
+- **Silent `catch {}` blocks documented** — all 18 empty catch blocks (mostly best-effort localStorage/clipboard writes where failure is genuinely fine) now carry a one-line comment explaining why swallowing the error is safe, rather than reading as an oversight. (#136)
+- **Lint and type-check cleanup** — the sprint's own new code (four API test files, `+error.svelte`, `settings-actions.ts`) initially shipped with `any`-typed mocks and a couple of type mismatches that failed `svelte-check` in CI; replaced with real `Request` objects and the actual `ReleaseInfo`/`CastMember`/`SeasonSummary` types, cutting `no-explicit-any` lint warnings from 87 to 29 project-wide.
+
+### Testing
+
+- **58 new tests**: 27 for the four hardened API routes, 31 for the import-parser edge cases (year-only titles, missing CSV columns). 198 tests total, all passing.
+
+---
+
 ## [0.5.4] — 2026-07-25
 
 ### Documentation & licensing

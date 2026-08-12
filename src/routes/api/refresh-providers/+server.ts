@@ -7,12 +7,6 @@ import type { Provider, ReleaseInfo, CastMember } from '$lib/types';
 
 const MAX_ITEMS = 100;
 
-interface RefreshRequest {
-	id: number;
-	tmdb_id: number;
-	media_type: 'movie' | 'tv';
-}
-
 interface RefreshResult {
 	id: number;
 	providers: Provider[];
@@ -35,10 +29,16 @@ export const POST: RequestHandler = async ({ request }) => {
 	const originError = checkSameOrigin(request);
 	if (originError) return originError;
 
-	const apiKey = env.TMDB_API_KEY ?? '';
+	const apiKey = env.TMDB_API_KEY;
 	if (!apiKey) return apiError(503, 'TMDB API key not configured');
 
-	const items = (await request.json()) as RefreshRequest[];
+	let items: unknown;
+	try {
+		items = await request.json();
+	} catch {
+		return apiError(400, 'Invalid JSON');
+	}
+
 	if (!Array.isArray(items)) {
 		return apiError(400, 'Expected an array of items');
 	}
@@ -54,7 +54,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			(r?.media_type === 'movie' || r?.media_type === 'tv')
 	);
 
-	const results: RefreshResult[] = await Promise.all(
+	const results: RefreshResult[] = [];
+	await Promise.all(
 		batch.map(async ({ id, tmdb_id, media_type }) => {
 			try {
 				const [
@@ -75,7 +76,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					getRuntime(tmdb_id, media_type, apiKey)
 				]);
 				const providers = augmentProviders(rawProviders, networkIds, companyIds);
-				return {
+				results.push({
 					id,
 					providers,
 					rentable: providers.length > 0 ? false : rentable,
@@ -86,21 +87,9 @@ export const POST: RequestHandler = async ({ request }) => {
 					cast,
 					director,
 					creator
-				};
+				});
 			} catch {
-				// Return empty rather than failing the whole batch
-				return {
-					id,
-					providers: [],
-					rentable: false,
-					release: null,
-					seasons: [],
-					runtime_minutes: null,
-					genres: [],
-					cast: [],
-					director: null,
-					creator: null
-				};
+				// Omit failed items; never return empty-but-successful records that would overwrite good data
 			}
 		})
 	);

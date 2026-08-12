@@ -5,7 +5,7 @@
 	import { TMDB_IMG } from '$lib/tmdb';
 	import { remainingRuntime, aggregateByProvider, hms } from '$lib/progress';
 	import { getQueueColors } from '$lib/queue-colors';
-	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
+	import { services, ensureSubscribedLoaded, getLoadError } from '$lib/services.svelte';
 	import { createShareLink as createShareLinkAction } from '$lib/share-create-actions';
 
 	let items = $state<WatchlistItem[]>([]);
@@ -20,6 +20,7 @@
 	let shareUrl = $state('');
 	let shareCopied = $state(false);
 	let shareError = $state('');
+	let servicesLoadError = $state('');
 
 	let allShareQueues = $derived.by(() => {
 		const names = new Set<string>();
@@ -90,7 +91,9 @@
 			setTimeout(() => {
 				shareCopied = false;
 			}, 2000);
-		} catch {}
+		} catch {
+			// Best-effort clipboard write; share link remains in textarea regardless
+		}
 	}
 
 	onMount(() => {
@@ -98,6 +101,8 @@
 		Promise.all([getAll(), ensureSubscribedLoaded()]).then(([all]) => {
 			items = all;
 			shareQueueNames = new Set(allShareQueues);
+			const error = getLoadError();
+			if (error) servicesLoadError = error;
 			const subscribedProviderIds =
 				services.ids.size > 0
 					? new Set(
@@ -114,6 +119,8 @@
 		});
 	});
 </script>
+
+export const ssr = false;
 
 <svelte:head><title>Queuest — Share</title></svelte:head>
 
@@ -189,11 +196,11 @@
 			{/if}
 
 			<!-- Provider filter -->
-			{#if shareAllProviders.length > 0}
-				<div>
-					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
-						Providers
-					</p>
+			<div>
+				<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Providers</p>
+				{#if servicesLoadError}
+					<p class="text-xs text-red-600 dark:text-red-400">{servicesLoadError}</p>
+				{:else if shareAllProviders.length > 0}
 					<div class="flex flex-wrap gap-1.5">
 						{#each shareAllProviders as p (p.provider_id)}
 							{@const on = shareProviderIds.has(p.provider_id)}
@@ -209,8 +216,8 @@
 							</button>
 						{/each}
 					</div>
-				</div>
-			{/if}
+				{/if}
+			</div>
 
 			<!-- Summary -->
 			<div

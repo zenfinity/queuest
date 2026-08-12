@@ -55,6 +55,9 @@ export async function encrypt(data: string, passphrase: string): Promise<ArrayBu
  * files encrypted before the iteration bump.
  */
 export async function decrypt(buffer: ArrayBuffer, passphrase: string): Promise<string> {
+	if (buffer.byteLength < SALT_LEN + IV_LEN) {
+		throw new Error('Decryption failed — wrong passphrase or corrupted file.');
+	}
 	const salt = new Uint8Array(buffer, 0, SALT_LEN);
 	const iv = new Uint8Array(buffer, SALT_LEN, IV_LEN);
 	const ciphertext = new Uint8Array(buffer, SALT_LEN + IV_LEN);
@@ -99,6 +102,9 @@ export async function encryptWithKey(data: string, keyB64url: string): Promise<A
 }
 
 export async function decryptWithKey(buffer: ArrayBuffer, keyB64url: string): Promise<string> {
+	if (buffer.byteLength < IV_LEN) {
+		throw new Error('Could not decrypt — the share link may be corrupted.');
+	}
 	const iv = new Uint8Array(buffer, 0, IV_LEN);
 	const ciphertext = new Uint8Array(buffer, IV_LEN);
 	const key = await crypto.subtle.importKey('raw', b64urlDecode(keyB64url), 'AES-GCM', false, [

@@ -69,7 +69,9 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 		deps.setMissedTitles(missedTitles);
 		try {
 			localStorage.setItem('sq:import-missed', JSON.stringify(missedTitles));
-		} catch {}
+		} catch {
+			// Best-effort localStorage write; app works fine without missed titles cache
+		}
 		deps.setImportAdded(importAdded);
 	} catch (e) {
 		deps.setImportError(e instanceof Error ? e.message : 'Import failed.');
@@ -165,7 +167,7 @@ export async function fetchCsvFromUrl(
 			const direct = await fetch(url.trim());
 			if (direct.ok) return parseImportCSV(await direct.text());
 		} catch {
-			// CORS blocked — fall through to server proxy
+			// CSP and CORS may block direct fetch — fall through to server proxy
 		}
 		const res = await fetch('/api/import-fetch', {
 			method: 'POST',
