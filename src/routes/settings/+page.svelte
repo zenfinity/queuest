@@ -1,7 +1,3 @@
-<script module lang="ts">
-	export const ssr = false;
-</script>
-
 <script lang="ts">
 	import type { WatchlistItem } from '$lib/types';
 	import { onMount } from 'svelte';
