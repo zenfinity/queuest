@@ -21,6 +21,7 @@ const {
 	removeQueueItem,
 	toggleSeasonProgress,
 	listCollections,
+	groupIntoCollections,
 	setItemCollection
 } = await import('./queue-actions');
 
@@ -230,6 +231,49 @@ describe('listCollections', () => {
 		const result = listCollections(items);
 
 		expect(result).toEqual([]);
+	});
+});
+
+describe('groupIntoCollections', () => {
+	it('groups items alphabetically by tag with Uncategorized pinned last', () => {
+		const drama = makeItem({ id: 1, title: 'Drama Item', queue_tag: 'Drama' });
+		const action1 = makeItem({ id: 2, title: 'Action Item 1', queue_tag: 'Action' });
+		const noTag = makeItem({ id: 3, title: 'No Tag Item', queue_tag: undefined });
+		const action2 = makeItem({ id: 4, title: 'Action Item 2', queue_tag: 'Action' });
+
+		const sections = groupIntoCollections([drama, action1, noTag, action2], {
+			Action: '#ef4444',
+			Drama: '#3b82f6'
+		});
+
+		expect(sections.map((s) => s.name)).toEqual(['Action', 'Drama', 'Uncategorized']);
+		expect(sections[0].items).toEqual([action1, action2]);
+		expect(sections[0].color).toBe('#ef4444');
+		expect(sections[0].tag).toBe('Action');
+		expect(sections[2].tag).toBeNull();
+		expect(sections[2].color).toBeNull();
+		expect(sections[2].items).toEqual([noTag]);
+	});
+
+	it('omits the Uncategorized section when every item has a tag', () => {
+		const sections = groupIntoCollections([makeItem({ queue_tag: 'Drama' })], {});
+		expect(sections.map((s) => s.name)).toEqual(['Drama']);
+	});
+
+	it('returns a single Uncategorized section when no items have a tag', () => {
+		const sections = groupIntoCollections([makeItem(), makeItem({ id: 2 })], {});
+		expect(sections.map((s) => s.name)).toEqual(['Uncategorized']);
+	});
+
+	it('returns an empty array for an empty item list', () => {
+		expect(groupIntoCollections([], {})).toEqual([]);
+	});
+
+	it('preserves item order within each section', () => {
+		const b = makeItem({ id: 1, title: 'B', queue_tag: 'X' });
+		const a = makeItem({ id: 2, title: 'A', queue_tag: 'X' });
+		const sections = groupIntoCollections([b, a], {});
+		expect(sections[0].items).toEqual([b, a]);
 	});
 });
 

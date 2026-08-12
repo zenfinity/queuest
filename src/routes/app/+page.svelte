@@ -451,6 +451,7 @@
 			{budgetHours}
 			{busy}
 			{queueColors}
+			groupByCollection={queueControls.groupByCollection}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
@@ -464,6 +465,7 @@
 			{budgetHours}
 			{busy}
 			{queueColors}
+			groupByCollection={queueControls.groupByCollection}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}

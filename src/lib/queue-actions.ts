@@ -82,6 +82,52 @@ export function listCollections(items: WatchlistItem[]): string[] {
 	return Array.from(names).sort();
 }
 
+export interface CollectionSection {
+	/** Display name; 'Uncategorized' for the synthetic no-tag section. */
+	name: string;
+	/** The underlying queue_tag, or null for the Uncategorized section. */
+	tag: string | null;
+	color: string | null;
+	items: WatchlistItem[];
+}
+
+/**
+ * Groups items (in their existing order — this doesn't re-sort) into one
+ * section per collection, alphabetical by name, with an Uncategorized
+ * section (queue_tag == null) pinned last — mirroring how the Gantt view
+ * pins its synthetic "Not Streaming" lane.
+ */
+export function groupIntoCollections(
+	items: WatchlistItem[],
+	queueColors: Record<string, string>
+): CollectionSection[] {
+	const byTag = new Map<string, WatchlistItem[]>();
+	const uncategorized: WatchlistItem[] = [];
+	for (const item of items) {
+		if (item.queue_tag) {
+			if (!byTag.has(item.queue_tag)) byTag.set(item.queue_tag, []);
+			byTag.get(item.queue_tag)!.push(item);
+		} else {
+			uncategorized.push(item);
+		}
+	}
+
+	const sections: CollectionSection[] = [...byTag.entries()]
+		.sort((a, b) => a[0].localeCompare(b[0]))
+		.map(([name, sectionItems]) => ({
+			name,
+			tag: name,
+			color: queueColors[name] ?? null,
+			items: sectionItems
+		}));
+
+	if (uncategorized.length > 0) {
+		sections.push({ name: 'Uncategorized', tag: null, color: null, items: uncategorized });
+	}
+
+	return sections;
+}
+
 export async function setItemCollection(
 	item: WatchlistItem,
 	tag: string | null,

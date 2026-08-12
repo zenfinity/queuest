@@ -202,11 +202,20 @@
 						{@const queueColors = getQueueColors()}
 						<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
 
-						<p
-							class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-						>
-							Collection
-						</p>
+						<div class="flex items-center justify-between px-2 py-1">
+							<span
+								class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+								>Collection</span
+							>
+							<button
+								onclick={() => (queueControls.groupByCollection = !queueControls.groupByCollection)}
+								class="text-[10px] font-medium transition-colors {queueControls.groupByCollection
+									? 'text-orange-500 hover:text-orange-400'
+									: 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}"
+							>
+								{queueControls.groupByCollection ? '✓ Grouped' : 'Group'}
+							</button>
+						</div>
 						{#each [[null, 'All'], ...queueControls.collectionNames.map( (c) => [c, c] ), [UNCATEGORIZED, 'Uncategorized']] as [key, label] (key ?? '__all__')}
 							<button
 								onclick={() => (queueControls.collectionFilter = key)}

@@ -20,6 +20,9 @@ export const queueControls = $state({
 	viewMode: 'grid' as ViewKey,
 	serviceFilter: 'all' as ServiceFilterKey,
 	collectionFilter: null as string | null,
+	// Grid/List section grouping — off by default, the flat list stays the
+	// default presentation. Session-only, like the filters above.
+	groupByCollection: false,
 	// Mirrors the queue's current collection names so QueueDock — rendered from
 	// the layout, without direct access to queue items — can list them. Kept in
 	// sync by the queue page via an $effect.
