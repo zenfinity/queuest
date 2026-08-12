@@ -60,6 +60,19 @@ export async function getAll(): Promise<WatchlistItem[]> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const req = db.transaction(STORE).objectStore(STORE).getAll();
+		req.onsuccess = () => {
+			const all = req.result as WatchlistItem[];
+			resolve(all.filter((item) => !item.deleted_at));
+		};
+		req.onerror = () => reject(req.error);
+	});
+}
+
+/** Includes soft-deleted rows (tombstones) — for the sync engine, which needs to see and propagate deletions. UI code should use getAll(). */
+export async function getAllIncludingDeleted(): Promise<WatchlistItem[]> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db.transaction(STORE).objectStore(STORE).getAll();
 		req.onsuccess = () => resolve(req.result as WatchlistItem[]);
 		req.onerror = () => reject(req.error);
 	});
@@ -86,12 +99,70 @@ export async function addItem(
 	});
 }
 
+/**
+ * Soft-deletes: writes a deleted_at tombstone instead of removing the row.
+ * A hard delete would let deletions get silently undone by sync — device A
+ * removes a title, device B still has it, and without a trace of the
+ * deletion, B's copy looks like a legitimate record A just doesn't have yet.
+ * No-ops if the id doesn't exist (matching the old hard-delete's behavior).
+ *
+ * Tradeoff: a device offline longer than the GC horizon (see gcTombstones)
+ * can resurrect a deletion — its copy outlives the tombstone that would
+ * have suppressed it. 90 days makes this vanishingly rare for a personal
+ * queue app, but it's a real, deliberate property of this design.
+ */
 export async function removeItem(id: number): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
-		const req = db.transaction(STORE, 'readwrite').objectStore(STORE).delete(id);
-		req.onsuccess = () => resolve();
-		req.onerror = () => reject(req.error);
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const get = store.get(id);
+		get.onsuccess = () => {
+			const item = get.result as WatchlistItem | undefined;
+			if (!item) {
+				resolve();
+				return;
+			}
+			const now = new Date().toISOString();
+			item.deleted_at = now;
+			item.updated_at = now;
+			const put = store.put(item);
+			put.onsuccess = () => resolve();
+			put.onerror = () => reject(put.error);
+		};
+		get.onerror = () => reject(get.error);
+	});
+}
+
+const TOMBSTONE_GC_HORIZON_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+/**
+ * Permanently drops tombstones older than the GC horizon, so the store
+ * doesn't grow forever. Returns the number of rows removed. Safe to call
+ * opportunistically (e.g. on queue load) — cheap no-op when there's nothing
+ * to collect.
+ */
+export async function gcTombstones(now: Date = new Date()): Promise<number> {
+	const db = await open();
+	const cutoff = now.getTime() - TOMBSTONE_GC_HORIZON_MS;
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		let removed = 0;
+		const cursorReq = store.openCursor();
+		cursorReq.onsuccess = () => {
+			const cursor = cursorReq.result;
+			if (!cursor) return;
+			const item = cursor.value as WatchlistItem;
+			if (item.deleted_at && new Date(item.deleted_at).getTime() < cutoff) {
+				cursor.delete();
+				removed++;
+			}
+			cursor.continue();
+		};
+		cursorReq.onerror = () => reject(cursorReq.error);
+		tx.oncomplete = () => resolve(removed);
+		tx.onerror = () => reject(tx.error);
 	});
 }
 
@@ -199,6 +270,61 @@ export async function patchProviders(
 			put.onerror = () => reject(put.error);
 		};
 		get.onerror = () => reject(get.error);
+	});
+}
+
+/**
+ * Bulk-renames a collection tag across all matching, non-deleted items via a
+ * cursor — not getAll()+replaceAll(), which would clear the whole store and
+ * silently drop any tombstones sitting in it (getAll() filters them out, so
+ * they'd never make it into the replacement set).
+ */
+export async function renameCollectionTag(oldName: string, newName: string): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const now = new Date().toISOString();
+		const cursorReq = store.openCursor();
+		cursorReq.onsuccess = () => {
+			const cursor = cursorReq.result;
+			if (!cursor) return;
+			const item = cursor.value as WatchlistItem;
+			if (!item.deleted_at && item.queue_tag === oldName) {
+				item.queue_tag = newName;
+				item.updated_at = now;
+				cursor.update(item);
+			}
+			cursor.continue();
+		};
+		cursorReq.onerror = () => reject(cursorReq.error);
+		tx.oncomplete = () => resolve();
+		tx.onerror = () => reject(tx.error);
+	});
+}
+
+/** Clears a collection tag across all matching, non-deleted items. See renameCollectionTag for why this is a cursor, not replaceAll(). */
+export async function clearCollectionTag(name: string): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const now = new Date().toISOString();
+		const cursorReq = store.openCursor();
+		cursorReq.onsuccess = () => {
+			const cursor = cursorReq.result;
+			if (!cursor) return;
+			const item = cursor.value as WatchlistItem;
+			if (!item.deleted_at && item.queue_tag === name) {
+				item.queue_tag = undefined;
+				item.updated_at = now;
+				cursor.update(item);
+			}
+			cursor.continue();
+		};
+		cursorReq.onerror = () => reject(cursorReq.error);
+		tx.oncomplete = () => resolve();
+		tx.onerror = () => reject(tx.error);
 	});
 }
 

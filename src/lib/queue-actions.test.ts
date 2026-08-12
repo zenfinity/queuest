@@ -6,13 +6,15 @@ const setWatched = vi.fn();
 const removeItem = vi.fn();
 const updateShowProgress = vi.fn();
 const setQueueTag = vi.fn();
+const gcTombstones = vi.fn();
 
 vi.mock('./db', () => ({
 	getAll: (...args: unknown[]) => getAll(...args),
 	setWatched: (...args: unknown[]) => setWatched(...args),
 	removeItem: (...args: unknown[]) => removeItem(...args),
 	updateShowProgress: (...args: unknown[]) => updateShowProgress(...args),
-	setQueueTag: (...args: unknown[]) => setQueueTag(...args)
+	setQueueTag: (...args: unknown[]) => setQueueTag(...args),
+	gcTombstones: (...args: unknown[]) => gcTombstones(...args)
 }));
 
 const {
@@ -70,6 +72,7 @@ beforeEach(() => {
 	removeItem.mockReset();
 	updateShowProgress.mockReset();
 	setQueueTag.mockReset();
+	gcTombstones.mockReset().mockResolvedValue(0);
 });
 
 describe('reloadQueue', () => {

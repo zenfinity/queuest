@@ -59,6 +59,10 @@ describe('db: watchlist items', () => {
 		expect(await db.getAll()).toEqual([]);
 	});
 
+	it('removeItem is a no-op for an id that does not exist', async () => {
+		await expect(db.removeItem(999)).resolves.toBeUndefined();
+	});
+
 	it('sets and clears watched_at', async () => {
 		await db.addItem(makeItem());
 		const [{ id }] = await db.getAll();
@@ -143,6 +147,133 @@ describe('db: watchlist items', () => {
 		await db.patchProviders(id, [], false, null);
 		const item = (await db.getAll())[0];
 		expect(item.updated_at).toBe(original);
+	});
+});
+
+describe('db: soft-delete tombstones', () => {
+	it('removeItem sets deleted_at and updated_at instead of deleting the row', async () => {
+		await db.addItem(makeItem({ title: 'Arrival' }));
+		const [{ id }] = await db.getAll();
+
+		await db.removeItem(id);
+
+		const all = await db.getAllIncludingDeleted();
+		expect(all).toHaveLength(1);
+		expect(all[0].title).toBe('Arrival');
+		expect(typeof all[0].deleted_at).toBe('string');
+		expect(typeof all[0].updated_at).toBe('string');
+	});
+
+	it('getAll() excludes tombstoned items', async () => {
+		await db.addItem(makeItem({ title: 'Arrival' }));
+		const [{ id }] = await db.getAll();
+		await db.removeItem(id);
+
+		expect(await db.getAll()).toEqual([]);
+	});
+
+	it('getAllIncludingDeleted() returns tombstoned items alongside live ones', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'Live' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'Deleted' }));
+		const all = await db.getAll();
+		const toDelete = all.find((i) => i.title === 'Deleted')!;
+		await db.removeItem(toDelete.id);
+
+		const everything = await db.getAllIncludingDeleted();
+		expect(everything).toHaveLength(2);
+		expect(everything.map((i) => i.title).sort()).toEqual(['Deleted', 'Live']);
+	});
+
+	it('gcTombstones removes tombstones older than the 90-day horizon', async () => {
+		await db.addItem(makeItem({ title: 'Old deletion' }));
+		const [{ id }] = await db.getAll();
+		await db.removeItem(id);
+
+		const ninetyOneDaysLater = new Date(Date.now() + 91 * 24 * 60 * 60 * 1000);
+		const removed = await db.gcTombstones(ninetyOneDaysLater);
+
+		expect(removed).toBe(1);
+		expect(await db.getAllIncludingDeleted()).toEqual([]);
+	});
+
+	it('gcTombstones leaves tombstones within the horizon alone', async () => {
+		await db.addItem(makeItem({ title: 'Recent deletion' }));
+		const [{ id }] = await db.getAll();
+		await db.removeItem(id);
+
+		const oneDayLater = new Date(Date.now() + 24 * 60 * 60 * 1000);
+		const removed = await db.gcTombstones(oneDayLater);
+
+		expect(removed).toBe(0);
+		expect(await db.getAllIncludingDeleted()).toHaveLength(1);
+	});
+
+	it('gcTombstones leaves live items alone', async () => {
+		await db.addItem(makeItem({ title: 'Still here' }));
+
+		const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+		const removed = await db.gcTombstones(farFuture);
+
+		expect(removed).toBe(0);
+		expect(await db.getAll()).toHaveLength(1);
+	});
+});
+
+describe('db: collection tag bulk updates', () => {
+	it('renameCollectionTag updates matching non-deleted items and bumps updated_at', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'A', queue_tag: 'Action' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'B', queue_tag: 'Drama' }));
+
+		await db.renameCollectionTag('Action', 'Thrillers');
+
+		const after = await db.getAll();
+		expect(after.find((i) => i.title === 'A')!.queue_tag).toBe('Thrillers');
+		expect(after.find((i) => i.title === 'B')!.queue_tag).toBe('Drama');
+		expect(typeof after.find((i) => i.title === 'A')!.updated_at).toBe('string');
+	});
+
+	it('renameCollectionTag does not touch tombstoned items', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'Deleted', queue_tag: 'Action' }));
+		const [{ id }] = await db.getAll();
+		await db.removeItem(id);
+
+		await db.renameCollectionTag('Action', 'Thrillers');
+
+		const tombstone = (await db.getAllIncludingDeleted())[0];
+		expect(tombstone.queue_tag).toBe('Action');
+	});
+
+	it('renameCollectionTag preserves tombstones sitting in the store', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'Live', queue_tag: 'Action' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'Deleted' }));
+		const all = await db.getAll();
+		await db.removeItem(all.find((i) => i.title === 'Deleted')!.id);
+
+		await db.renameCollectionTag('Action', 'Thrillers');
+
+		expect(await db.getAllIncludingDeleted()).toHaveLength(2);
+	});
+
+	it('clearCollectionTag clears matching non-deleted items', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'A', queue_tag: 'Action' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'B', queue_tag: 'Drama' }));
+
+		await db.clearCollectionTag('Action');
+
+		const after = await db.getAll();
+		expect(after.find((i) => i.title === 'A')!.queue_tag).toBeUndefined();
+		expect(after.find((i) => i.title === 'B')!.queue_tag).toBe('Drama');
+	});
+
+	it('clearCollectionTag preserves tombstones sitting in the store', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'Live', queue_tag: 'Action' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'Deleted', queue_tag: 'Action' }));
+		const all = await db.getAll();
+		await db.removeItem(all.find((i) => i.title === 'Deleted')!.id);
+
+		await db.clearCollectionTag('Action');
+
+		expect(await db.getAllIncludingDeleted()).toHaveLength(2);
 	});
 });
 

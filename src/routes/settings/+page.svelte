@@ -2,7 +2,7 @@
 	import type { WatchlistItem } from '$lib/types';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { getAll, replaceAll } from '$lib/db';
+	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import {
 		buildExportBlob,
@@ -179,12 +179,16 @@
 
 		manageBusy = true;
 		try {
-			// Update all items with the old tag to the new tag.
 			// NOTE: Rename is a bulk write, and with last-write-wins sync (#101), this can race with
 			// per-item edits on another device. If a rename on device A races with an edit on device B
 			// for the same item, the result is unpredictable — the rename may land on some items but not
 			// others. This is acceptable for v1 given how rare it is; long-term fix is to version the
 			// collection itself rather than denormalizing the name.
+			//
+			// Persist via a targeted cursor update, not getAll()+replaceAll() — replaceAll clears the
+			// whole store, and getAll() (rightly) excludes soft-deleted tombstones, so replaceAll(items)
+			// would silently drop them from the store instead of leaving them for GC.
+			await renameCollectionTag(oldName, newName);
 			for (const item of items) {
 				if (item.queue_tag === oldName) {
 					item.queue_tag = newName;
@@ -192,8 +196,6 @@
 			}
 			// Move the color entry
 			renameCollectionColor(oldName, newName);
-			// Persist to database
-			await replaceAll(items);
 			// Update local state
 			queueColors = { ...queueColors };
 			collections = listCollections(items);
@@ -213,7 +215,9 @@
 
 		manageBusy = true;
 		try {
-			// Clear queue_tag on all items with this collection (items are never deleted, only uncategorized)
+			// Items are never deleted, only uncategorized. Targeted cursor update — see the
+			// comment in renameCollection for why this isn't getAll()+replaceAll().
+			await clearCollectionTag(name);
 			for (const item of items) {
 				if (item.queue_tag === name) {
 					item.queue_tag = undefined;
@@ -221,8 +225,6 @@
 			}
 			// Remove the color entry to avoid orphaned palette entries
 			deleteCollectionColor(name);
-			// Persist to database
-			await replaceAll(items);
 			// Update local state
 			queueColors = { ...queueColors };
 			collections = listCollections(items);
