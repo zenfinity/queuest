@@ -242,7 +242,8 @@ export async function getMeta(key: string): Promise<string | undefined> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const req = db.transaction(META_STORE).objectStore(META_STORE).get(key);
-		req.onsuccess = () => resolve((req.result as { key: string; value: string } | undefined)?.value);
+		req.onsuccess = () =>
+			resolve((req.result as { key: string; value: string } | undefined)?.value);
 		req.onerror = () => reject(req.error);
 	});
 }

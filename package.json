@@ -14,8 +14,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:init:local": "wrangler d1 execute streamq-db --local --file=./schema.sql",
-    "db:init:remote": "wrangler d1 execute streamq-db --remote --file=./schema.sql"
+    "db:migrate:local": "wrangler d1 migrations apply queuest-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply queuest-db --remote"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.0.0",
