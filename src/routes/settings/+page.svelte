@@ -37,9 +37,7 @@
 		exportDone = false;
 		exportError = '';
 		try {
-			const weeklyHours = JSON.parse(localStorage.getItem('sq:budget:weekly') ?? '10');
-			const weeksPerMonth = JSON.parse(localStorage.getItem('sq:budget:weeks') ?? '4');
-			const blob = await buildExportBlob(exportPassphrase, weeklyHours, weeksPerMonth);
+			const blob = await buildExportBlob(exportPassphrase);
 			const url = URL.createObjectURL(blob);
 			Object.assign(document.createElement('a'), {
 				href: url,

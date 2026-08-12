@@ -1,7 +1,7 @@
-import { getAll, replaceAll, patchProviders, getServices, setServices } from './db';
+import { getAll, replaceAll, patchProviders, setServices } from './db';
 import { encrypt } from './crypto';
-import { getQueueName, getQueueColors } from './queue-colors';
 import { throwIfNotOk } from './http';
+import { serializeAppState, SYNCED_KEYS, LOCAL_KEYS } from './app-state';
 import type { RefreshResult } from '../routes/api/refresh-providers/+server';
 
 export interface SettingsActionDeps {
@@ -14,36 +14,8 @@ export interface SettingsActionDeps {
 	setFeedbackIssueUrl: (url: string) => void;
 }
 
-export async function buildExportBlob(
-	passphrase: string,
-	weeklyHours: number,
-	weeksPerMonth: number
-): Promise<Blob> {
-	const [items, services] = await Promise.all([getAll(), getServices()]);
-	const payload = {
-		version: 1,
-		prefs: {
-			theme:
-				typeof document !== 'undefined'
-					? document.documentElement.classList.contains('dark')
-						? 'dark'
-						: 'light'
-					: 'light',
-			weeklyHours,
-			weeksPerMonth,
-			budget: weeklyHours * weeksPerMonth,
-			queueName: getQueueName(),
-			queueColors: getQueueColors(),
-			sort:
-				typeof localStorage !== 'undefined'
-					? (localStorage.getItem('sq:sort') ?? 'added')
-					: 'added',
-			view:
-				typeof localStorage !== 'undefined' ? (localStorage.getItem('sq:view') ?? 'grid') : 'grid'
-		},
-		items,
-		services
-	};
+export async function buildExportBlob(passphrase: string): Promise<Blob> {
+	const payload = await serializeAppState();
 	const buf = await encrypt(JSON.stringify(payload), passphrase);
 	return new Blob([buf], { type: 'application/octet-stream' });
 }
@@ -124,23 +96,7 @@ export async function submitFeedback(
 
 export async function resetEverything(): Promise<void> {
 	await Promise.all([replaceAll([]), setServices([])]);
-	const keys = [
-		'sq:theme',
-		'sq:budget',
-		'sq:budget:weekly',
-		'sq:budget:weeks',
-		'sq:budget-callout-dismissed',
-		'sq:sort',
-		'sq:sortDir',
-		'sq:view',
-		'sq:queue:name',
-		'sq:queue:colors',
-		'sq:welcomed',
-		'sq:import-missed',
-		'sq:cancel-alerts',
-		'sq:dismiss-cancel'
-	];
-	for (const k of keys) {
+	for (const k of [...SYNCED_KEYS, ...LOCAL_KEYS]) {
 		try {
 			localStorage.removeItem(k);
 		} catch {

@@ -5,7 +5,7 @@ const addItem = vi.fn();
 const replaceAll = vi.fn();
 const setServices = vi.fn();
 const decrypt = vi.fn();
-const parseImportBackup = vi.fn();
+const deserializeAppState = vi.fn();
 const setQueueName = vi.fn();
 const setQueueColor = vi.fn();
 const parseImportCSV = vi.fn();
@@ -20,8 +20,8 @@ vi.mock('./crypto', () => ({
 	decrypt: (...args: unknown[]) => decrypt(...args)
 }));
 
-vi.mock('./share-schema', () => ({
-	parseImportBackup: (...args: unknown[]) => parseImportBackup(...args)
+vi.mock('./app-state', () => ({
+	deserializeAppState: (...args: unknown[]) => deserializeAppState(...args)
 }));
 
 vi.mock('./queue-colors', () => ({
@@ -96,7 +96,7 @@ beforeEach(() => {
 	replaceAll.mockReset();
 	setServices.mockReset();
 	decrypt.mockReset();
-	parseImportBackup.mockReset();
+	deserializeAppState.mockReset();
 	setQueueName.mockReset();
 	setQueueColor.mockReset();
 	parseImportCSV.mockReset();
@@ -185,36 +185,32 @@ describe('importRows', () => {
 describe('replaceAllItems', () => {
 	it('drops ids (device-local, must not round-trip) and delegates to replaceAll', async () => {
 		replaceAll.mockResolvedValue(undefined);
-		await replaceAllItems([makeItem({ title: 'A' }), makeItem({ title: 'B' })]);
+		const item = {
+			...makeItem({ title: 'A' }),
+			added_at: '2024-01-01T00:00:00.000Z',
+			watched_at: null
+		};
+		await replaceAllItems([item, { ...item, title: 'B' }]);
 
 		expect(replaceAll).toHaveBeenCalledTimes(1);
 		const [written] = replaceAll.mock.calls[0];
 		expect(written.every((i: WatchlistItem) => !('id' in i))).toBe(true);
 	});
 
-	it('preserves added_at and watched_at from the payload instead of stamping them fresh', async () => {
+	it('passes added_at/watched_at through unchanged — deserializeAppState already resolved them', async () => {
 		replaceAll.mockResolvedValue(undefined);
-		const original = {
+		const item = {
 			...makeItem({ title: 'Arrival' }),
 			id: 7,
 			added_at: '2024-03-01T00:00:00.000Z',
 			watched_at: '2024-04-01T00:00:00.000Z'
 		};
 
-		await replaceAllItems([original as unknown as ReturnType<typeof makeItem>]);
+		await replaceAllItems([item as unknown as Omit<WatchlistItem, 'id'>]);
 
 		const [written] = replaceAll.mock.calls[0];
 		expect(written[0].added_at).toBe('2024-03-01T00:00:00.000Z');
 		expect(written[0].watched_at).toBe('2024-04-01T00:00:00.000Z');
-	});
-
-	it('falls back to a fresh added_at and unwatched state when the payload has neither', async () => {
-		replaceAll.mockResolvedValue(undefined);
-		await replaceAllItems([makeItem({ title: 'A' })]);
-
-		const [written] = replaceAll.mock.calls[0];
-		expect(typeof written[0].added_at).toBe('string');
-		expect(written[0].watched_at).toBeNull();
 	});
 });
 
@@ -231,7 +227,7 @@ describe('restoreBackup', () => {
 		decrypt.mockResolvedValue(
 			JSON.stringify({ items: [makeItem()], prefs: { theme: 'dark' }, services: [] })
 		);
-		parseImportBackup.mockReturnValue({
+		deserializeAppState.mockReturnValue({
 			items: [makeItem()],
 			prefs: { theme: 'dark' },
 			services: []
