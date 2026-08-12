@@ -7,11 +7,8 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 binding = "SHARE_KV"
 id = "678c9e3f2c01496ea4e7bec5a2ef4ffe"
 
-# database_id below is a placeholder — run `wrangler d1 create queuest-db`
-# once and replace it before this binding will work against real Cloudflare
-# infra. Local dev (`wrangler pages dev` / `--local`) works without it.
 [[d1_databases]]
 binding = "DB"
 database_name = "queuest-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "84d447c9-fcbf-4ff3-ac32-90a28a7dd668"
 migrations_dir = "migrations"
