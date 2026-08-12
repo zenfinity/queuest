@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import type { WatchlistItem } from '$lib/types';
 	import {
 		reloadQueue,
@@ -40,7 +41,7 @@
 	let items = $state<WatchlistItem[]>([]);
 	let loaded = $state(false);
 	let queueColors = $state<Record<string, string>>({});
-	let busy = $state(new Set<number>());
+	let busy = new SvelteSet<number>();
 
 	let releasePopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
@@ -143,10 +144,8 @@
 			items = next;
 		},
 		setBusy: (id, isBusy) => {
-			const next = new Set(busy);
-			if (isBusy) next.add(id);
-			else next.delete(id);
-			busy = next;
+			if (isBusy) busy.add(id);
+			else busy.delete(id);
 		},
 		setError: (message) => {
 			dbError = message;

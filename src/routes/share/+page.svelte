@@ -1,5 +1,10 @@
+<script module lang="ts">
+	export const ssr = false;
+</script>
+
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import type { WatchlistItem } from '$lib/types';
 	import { getAll } from '$lib/db';
 	import { TMDB_IMG } from '$lib/tmdb';
@@ -14,8 +19,8 @@
 
 	let shareStatus = $state<'queue' | 'watched' | 'both'>('queue');
 	let shareType = $state<'all' | 'movie' | 'tv'>('all');
-	let shareProviderIds = $state(new Set<number>());
-	let shareQueueNames = $state(new Set<string>());
+	let shareProviderIds = new SvelteSet<number>();
+	let shareQueueNames = new SvelteSet<string>();
 	let shareCreating = $state(false);
 	let shareUrl = $state('');
 	let shareCopied = $state(false);
@@ -23,6 +28,9 @@
 	let servicesLoadError = $state('');
 
 	let allShareQueues = $derived.by(() => {
+		// Local dedup scratch space, discarded at the end of this computation —
+		// never touches component state, so the SvelteSet footgun doesn't apply here.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const names = new Set<string>();
 		for (const item of items) {
 			if (item.queue_tag) names.add(item.queue_tag);
@@ -58,20 +66,15 @@
 
 	let shareTotal = $derived(shareFiltered.reduce((s, i) => s + remainingRuntime(i), 0));
 
-	function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
-		const next = new Set(set);
-		if (next.has(value)) next.delete(value);
-		else next.add(value);
-		return next;
-	}
-
 	function toggleShareProvider(id: number) {
-		shareProviderIds = toggleInSet(shareProviderIds, id);
+		if (shareProviderIds.has(id)) shareProviderIds.delete(id);
+		else shareProviderIds.add(id);
 		shareUrl = '';
 	}
 
 	function toggleShareQueue(name: string) {
-		shareQueueNames = toggleInSet(shareQueueNames, name);
+		if (shareQueueNames.has(name)) shareQueueNames.delete(name);
+		else shareQueueNames.add(name);
 		shareUrl = '';
 	}
 
@@ -100,21 +103,17 @@
 		queueColors = getQueueColors();
 		Promise.all([getAll(), ensureSubscribedLoaded()]).then(([all]) => {
 			items = all;
-			shareQueueNames = new Set(allShareQueues);
+			for (const name of allShareQueues) shareQueueNames.add(name);
 			const error = getLoadError();
 			if (error) servicesLoadError = error;
-			const subscribedProviderIds =
-				services.ids.size > 0
-					? new Set(
-							shareAllProviders
-								.filter((p) => services.ids.has(p.provider_id))
-								.map((p) => p.provider_id)
-						)
-					: new Set<number>();
-			shareProviderIds =
-				subscribedProviderIds.size > 0
+			const subscribedProviderIds = shareAllProviders
+				.filter((p) => services.ids.has(p.provider_id))
+				.map((p) => p.provider_id);
+			const initialProviderIds =
+				subscribedProviderIds.length > 0
 					? subscribedProviderIds
-					: new Set(shareAllProviders.map((p) => p.provider_id));
+					: shareAllProviders.map((p) => p.provider_id);
+			for (const id of initialProviderIds) shareProviderIds.add(id);
 			loaded = true;
 		});
 	});

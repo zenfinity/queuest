@@ -7,8 +7,11 @@ let _loaded = false;
 let _loadError: string | null = null;
 let _promise: Promise<void> | null = null;
 
-export function setSubscribedIds(next: Set<number> | SvelteSet<number>) {
-	services.ids = next as SvelteSet<number>;
+export function setSubscribedIds(next: Set<number>) {
+	// Always normalize to a real SvelteSet — storing a plain Set here would let
+	// callers mutate it with .add()/.delete() with no visible effect, since a
+	// plain Set's internal mutations aren't tracked by Svelte's reactivity.
+	services.ids = next instanceof SvelteSet ? next : new SvelteSet(next);
 	_loaded = true;
 	_loadError = null;
 }

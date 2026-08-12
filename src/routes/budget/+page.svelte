@@ -57,23 +57,14 @@
 		const id = provider.provider_id;
 		const wasSubscribed = services.ids.has(id);
 		toggleError = '';
-		if (wasSubscribed) {
-			const next = new Set(services.ids);
-			next.delete(id);
-			setSubscribedIds(next);
-		} else {
-			setSubscribedIds(new Set([...services.ids, id]));
-		}
+		if (wasSubscribed) services.ids.delete(id);
+		else services.ids.add(id);
 		try {
 			await toggleService(provider);
 		} catch (e) {
-			if (wasSubscribed) {
-				setSubscribedIds(new Set([...services.ids, id]));
-			} else {
-				const next = new Set(services.ids);
-				next.delete(id);
-				setSubscribedIds(next);
-			}
+			// Roll back the optimistic update
+			if (wasSubscribed) services.ids.add(id);
+			else services.ids.delete(id);
 			toggleError =
 				e instanceof Error ? e.message : 'Could not save. Check browser storage settings.';
 		}

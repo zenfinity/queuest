@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$lib/types';
+	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { releaseChip } from '$lib/progress';
 	import { page, navigating } from '$app/state';
@@ -18,9 +19,9 @@
 	let searching = $derived(!!navigating.to);
 
 	let query = $state(page.url.searchParams.get('q') ?? '');
-	let adding = $state(new Set<number>());
-	let added = $state(new Set<number>());
-	let errors = $state(new Map<number, string>());
+	let adding = new SvelteSet<number>();
+	let added = new SvelteSet<number>();
+	let errors = new SvelteMap<number, string>();
 	let detailItem: SearchResult | null = $state(null);
 
 	// DetailPanel's runtime lollipop is relative to the monthly budget, same as
@@ -35,22 +36,16 @@
 	async function addToQueue(result: SearchResult) {
 		await addSearchResultToQueue(result, {
 			setAdding: (id, isAdding) => {
-				const next = new Set(adding);
-				if (isAdding) next.add(id);
-				else next.delete(id);
-				adding = next;
+				if (isAdding) adding.add(id);
+				else adding.delete(id);
 			},
 			setAdded: (id, isAdded) => {
-				const next = new Set(added);
-				if (isAdded) next.add(id);
-				else next.delete(id);
-				added = next;
+				if (isAdded) added.add(id);
+				else added.delete(id);
 			},
 			setError: (id, message) => {
-				const next = new Map(errors);
-				if (message) next.set(id, message);
-				else next.delete(id);
-				errors = next;
+				if (message) errors.set(id, message);
+				else errors.delete(id);
 			}
 		});
 	}
