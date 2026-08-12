@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { initTheme } from '$lib/theme.svelte';
@@ -80,6 +81,50 @@
 		fillD = `${curveD} L${W},${H} L0,${H} Z`;
 	}
 
+	// ── Swipe navigation (#162) ────────────────────────────────────────────
+	// Horizontal swipe on the page body moves between the main tabs, in the
+	// same left-to-right order as the nav strip. The tab curve's own
+	// transition (see the `d`/`fill` transitions on the <path>s below) is
+	// what sells "the tab is moving" — no separate page-content animation.
+	const SWIPE_MIN_DISTANCE = 60;
+	const SWIPE_MAX_OFF_AXIS = 60;
+	const SWIPE_MAX_DURATION_MS = 600;
+
+	let touchStartX = 0;
+	let touchStartY = 0;
+	let touchStartTime = 0;
+
+	function handleTouchStart(e: TouchEvent) {
+		const target = e.target as Element;
+		// data-detail-panel: DetailPanel's cast list scrolls horizontally.
+		// data-queue-dock: the floating filter dock — dense controls, not a swipe surface.
+		if (target.closest('[data-detail-panel], [data-queue-dock]')) return;
+		const t = e.touches[0];
+		touchStartX = t.clientX;
+		touchStartY = t.clientY;
+		touchStartTime = Date.now();
+	}
+
+	function handleTouchEnd(e: TouchEvent) {
+		if (!touchStartTime) return;
+		const t = e.changedTouches[0];
+		const dx = t.clientX - touchStartX;
+		const dy = t.clientY - touchStartY;
+		const dt = Date.now() - touchStartTime;
+		touchStartTime = 0;
+
+		if (dt > SWIPE_MAX_DURATION_MS) return;
+		if (Math.abs(dy) > SWIPE_MAX_OFF_AXIS) return; // vertical scroll, not a swipe
+		if (Math.abs(dx) < SWIPE_MIN_DISTANCE) return;
+
+		const currentIndex = navLinks.findIndex((l) => isActive(l.href, l.exact));
+		if (currentIndex === -1) return; // not on a main-tab page (settings, search, landing)
+
+		const nextIndex = dx < 0 ? currentIndex + 1 : currentIndex - 1;
+		const target = navLinks[nextIndex];
+		if (target) void goto(resolve(target.href));
+	}
+
 	onMount(() => {
 		initTheme();
 		// No-ops until sync is actually enabled (#103's job) — syncNow() bails
@@ -125,10 +170,13 @@
 			class="relative mx-auto flex h-11 max-w-5xl items-stretch gap-1.5 px-3 sm:h-14 sm:gap-6 sm:px-4"
 		>
 			<svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-				<path d={fillD} class="fill-gray-50 dark:fill-gray-950" />
+				<path
+					d={fillD}
+					class="fill-gray-50 transition-[d] duration-200 ease-out dark:fill-gray-950"
+				/>
 				<path
 					d={curveD}
-					class="stroke-gray-200 dark:stroke-gray-800"
+					class="stroke-gray-200 transition-[d] duration-200 ease-out dark:stroke-gray-800"
 					fill="none"
 					stroke-width="1"
 					vector-effect="non-scaling-stroke"
@@ -207,7 +255,11 @@
 		</div>
 	{/if}
 
-	<main class="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-8">
+	<main
+		class="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-8"
+		ontouchstart={handleTouchStart}
+		ontouchend={handleTouchEnd}
+	>
 		{@render children()}
 	</main>
 
