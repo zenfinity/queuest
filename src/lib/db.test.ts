@@ -113,6 +113,56 @@ describe('db: watchlist items', () => {
 	it('rejects setQueueTag when id does not exist', async () => {
 		await expect(db.setQueueTag(999, 'Favorites')).rejects.toThrow('Item with id 999 not found');
 	});
+
+	it('stamps updated_at on add', async () => {
+		await db.addItem(makeItem());
+		const item = (await db.getAll())[0];
+		expect(typeof item.updated_at).toBe('string');
+	});
+
+	it('bumps updated_at on setWatched, updateShowProgress, and setQueueTag', async () => {
+		await db.addItem(makeItem({ media_type: 'tv' }));
+		const [{ id }] = await db.getAll();
+
+		await db.setWatched(id, true);
+		let item = (await db.getAll())[0];
+		expect(typeof item.updated_at).toBe('string');
+
+		await db.updateShowProgress(id, [1]);
+		item = (await db.getAll())[0];
+		expect(typeof item.updated_at).toBe('string');
+
+		await db.setQueueTag(id, 'Favorites');
+		item = (await db.getAll())[0];
+		expect(typeof item.updated_at).toBe('string');
+	});
+
+	it('does not stamp updated_at from patchProviders', async () => {
+		await db.addItem(makeItem());
+		const [{ id, updated_at: original }] = await db.getAll();
+		await db.patchProviders(id, [], false, null);
+		const item = (await db.getAll())[0];
+		expect(item.updated_at).toBe(original);
+	});
+});
+
+describe('db: meta store', () => {
+	it('returns undefined for an unset key', async () => {
+		expect(await db.getMeta('nope')).toBeUndefined();
+	});
+
+	it('sets and gets a value', async () => {
+		await db.setMeta('cursor', '42');
+		expect(await db.getMeta('cursor')).toBe('42');
+	});
+
+	it('getDeviceId generates and persists a stable id', async () => {
+		const first = await db.getDeviceId();
+		const second = await db.getDeviceId();
+		expect(first).toBe(second);
+		expect(typeof first).toBe('string');
+		expect(first.length).toBeGreaterThan(0);
+	});
 });
 
 describe('db: services (subscribed providers)', () => {

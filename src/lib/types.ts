@@ -48,6 +48,7 @@ export interface WatchlistItem {
 	watched_seasons: number[]; // season numbers fully completed
 	added_at: string;
 	watched_at: string | null;
+	updated_at?: string; // last-write-wins sync timestamp; optional for pre-v3 rows until backfilled
 	release?: ReleaseInfo | null;
 	queue_tag?: string | null; // set on items imported from someone else's shared list
 	genres?: string[];
