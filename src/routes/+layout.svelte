@@ -63,15 +63,17 @@
 		const right = tab.right - container.left;
 		// Short, sleek transition — a small horizontal spread rather than a wide dome.
 		const spread = window.innerWidth < 640 ? 10 : 16;
+		// Leave air above the peak instead of the hill touching the very top of the nav.
+		const top = window.innerWidth < 640 ? 6 : 8;
 		const x1 = Math.max(0, left - spread);
 		const x2 = Math.min(W, right + spread);
 		const midL = (x1 + left) / 2;
 		const midR = (right + x2) / 2;
 		curveD =
 			`M0,${H} L${x1},${H} ` +
-			`C${midL},${H} ${midL},0 ${left},0 ` +
-			`L${right},0 ` +
-			`C${midR},0 ${midR},${H} ${x2},${H} ` +
+			`C${midL},${H} ${midL},${top} ${left},${top} ` +
+			`L${right},${top} ` +
+			`C${midR},${top} ${midR},${H} ${x2},${H} ` +
 			`L${W},${H}`;
 		fillD = `${curveD} L${W},${H} L0,${H} Z`;
 	}
