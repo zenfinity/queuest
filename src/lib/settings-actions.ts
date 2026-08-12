@@ -1,8 +1,8 @@
-import type { Provider, ReleaseInfo, CastMember, SeasonSummary } from './types';
 import { getAll, replaceAll, patchProviders, getServices, setServices } from './db';
 import { encrypt } from './crypto';
 import { getQueueName, getQueueColors } from './queue-colors';
 import { throwIfNotOk } from './http';
+import type { RefreshResult } from '../routes/api/refresh-providers/+server';
 
 export interface SettingsActionDeps {
 	setRefreshing: (refreshing: boolean) => void;
@@ -71,18 +71,7 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 
 		await throwIfNotOk(res);
 
-		const results = (await res.json()) as Array<{
-			id: number;
-			providers: Provider[];
-			rentable?: boolean;
-			release: ReleaseInfo | null;
-			seasons?: SeasonSummary[];
-			runtime_minutes?: number | null;
-			genres?: string[];
-			cast?: CastMember[];
-			director?: string | null;
-			creator?: string | null;
-		}>;
+		const results = (await res.json()) as RefreshResult[];
 
 		for (const r of results) {
 			await patchProviders(

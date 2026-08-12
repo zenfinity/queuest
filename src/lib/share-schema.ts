@@ -102,24 +102,28 @@ export function parseSharePayload(raw: unknown): SharePayload {
 	};
 }
 
+type BackupItem = Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>;
+
+interface BackupPrefs {
+	theme?: string;
+	weeklyHours?: number;
+	weeksPerMonth?: number;
+	budget?: number;
+	queueName?: string;
+	queueColors?: Record<string, string>;
+	sort?: string;
+	view?: string;
+}
+
 export function parseImportBackup(raw: unknown): {
-	items: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>[];
-	prefs?: {
-		theme?: string;
-		weeklyHours?: number;
-		weeksPerMonth?: number;
-		budget?: number;
-		queueName?: string;
-		queueColors?: Record<string, string>;
-		sort?: string;
-		view?: string;
-	};
+	items: BackupItem[];
+	prefs?: BackupPrefs;
 	services?: { provider_id: number; provider_name: string; logo_path: string }[];
 } {
 	if (!raw || typeof raw !== 'object') throw new Error('Invalid backup file');
 	const payload = raw as Record<string, unknown>;
 
-	const items: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>[] = [];
+	const items: BackupItem[] = [];
 
 	// Legacy format: direct array
 	if (
@@ -136,7 +140,7 @@ export function parseImportBackup(raw: unknown): {
 					(obj.media_type === 'movie' || obj.media_type === 'tv') &&
 					typeof obj.title === 'string'
 				) {
-					items.push(item as any);
+					items.push(item as BackupItem);
 				}
 			}
 		}
@@ -154,7 +158,7 @@ export function parseImportBackup(raw: unknown): {
 					(obj.media_type === 'movie' || obj.media_type === 'tv') &&
 					typeof obj.title === 'string'
 				) {
-					items.push(item as any);
+					items.push(item as BackupItem);
 				}
 			}
 		}
@@ -213,7 +217,7 @@ export function parseImportBackup(raw: unknown): {
 
 	return {
 		items,
-		...(Object.keys(parsed_prefs).length > 0 ? { prefs: parsed_prefs as any } : {}),
+		...(Object.keys(parsed_prefs).length > 0 ? { prefs: parsed_prefs as BackupPrefs } : {}),
 		...(services.length > 0 ? { services } : {})
 	};
 }
