@@ -14,7 +14,6 @@
 		{ href: '/budget', label: 'Budget', exact: false },
 		{ href: '/add', label: 'Add', exact: false },
 		{ href: '/app', label: 'Queue', exact: true },
-		{ href: '/suggest', label: 'Suggest', exact: false },
 		{ href: '/share', label: 'Share', exact: true }
 	] as const;
 
