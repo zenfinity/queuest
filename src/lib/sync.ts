@@ -1,0 +1,309 @@
+// Client sync engine (#101, part of the #79 sync epic). Wraps #100's
+// encrypted-blob API in a merge-then-push loop that keeps this device's
+// IndexedDB and the server's opaque blob converged, without ever letting the
+// server see plaintext or this device's local (autoIncrement) ids.
+import type { WatchlistItem, Provider } from './types';
+import {
+	getAllIncludingDeleted,
+	replaceAll,
+	setServices,
+	getSyncDek,
+	setSyncDek,
+	clearSyncDek,
+	getMeta,
+	setMeta,
+	setClockOffsetMs,
+	onMutation
+} from './db';
+import {
+	serializeSyncSnapshot,
+	deserializeAppState,
+	applyPrefs,
+	type AppStatePrefs,
+	type BackupItem
+} from './app-state';
+import { importDek, encryptBytesWithDek, decryptBytesWithDek } from './crypto';
+import { gzip, gunzip } from './gzip';
+
+const BLOB_URL = '/api/sync/blob';
+const MAX_RETRIES = 5;
+const DEBOUNCE_MS = 3000;
+const LAST_PUSHED_AT_KEY = 'sync_last_pushed_at';
+
+// ── Enable / disable ─────────────────────────────────────────────────────
+// Enabling sync (generating the DEK, wrapping it under the passphrase-derived
+// key, and calling POST /api/auth/signup) is #103's (Sync settings UI) job —
+// this module just needs somewhere to hand the already-generated DEK once
+// that flow has it.
+
+export async function enableSyncWithDek(dekB64url: string): Promise<void> {
+	const dek = await importDek(dekB64url, false);
+	await setSyncDek(dek);
+}
+
+export async function isSyncEnabled(): Promise<boolean> {
+	return (await getSyncDek()) !== undefined;
+}
+
+export async function disableSync(): Promise<void> {
+	await clearSyncDek();
+}
+
+// ── Merge (the reviewable core) ──────────────────────────────────────────
+// Merge key: [tmdb_id, media_type] — the same compound unique index db.ts
+// already enforces (src/lib/db.ts's tmdb_media index). Field-group merge,
+// not whole-item LWW: blind LWW would lose real work (device A marks
+// something watched while device B updates its own copy of the same title —
+// one edit silently wins and the other vanishes). Instead, whichever side
+// has the newer updated_at wins every field *except* watched_seasons, which
+// unions — monotonic and conflict-free, matching what the user meant by
+// marking a season watched on either device.
+//
+// (The originating issue's merge table lists per-field LWW groups —
+// watched_at/current_season/current_episode, queue_tag/title,
+// TMDB-derived — down to individual fields. This app doesn't have
+// current_season/current_episode as separate fields (that's #134,
+// episode-level tracking, not shipped) — watched progress here is entirely
+// `watched_seasons`. Folding every other field into one "newer wins" bundle
+// is equivalent for the fields that actually exist, and simpler.)
+
+function itemKey(tmdb_id: number, media_type: string): string {
+	return `${media_type}:${tmdb_id}`;
+}
+
+type LocalItem = WatchlistItem;
+type MergeCandidate = Omit<WatchlistItem, 'id'> & { id?: number };
+
+function mergeOne(local: LocalItem | undefined, remote: BackupItem | undefined): MergeCandidate {
+	if (!local) return { ...(remote as BackupItem) };
+	if (!remote) return { ...local };
+
+	const localTime = local.updated_at ?? local.added_at;
+	const remoteTime = remote.updated_at ?? remote.added_at;
+	const winner = remoteTime > localTime ? remote : local;
+
+	const watched_seasons = Array.from(
+		new Set([...(local.watched_seasons ?? []), ...(remote.watched_seasons ?? [])])
+	).sort((a, b) => a - b);
+
+	// added_at: keep whichever is earlier — it's "when this title first
+	// entered the queue," which shouldn't move just because a later sync's
+	// winner happened to have a different (e.g. defaulted) value.
+	const added_at = local.added_at < remote.added_at ? local.added_at : remote.added_at;
+
+	return { ...winner, id: local.id, added_at, watched_seasons };
+}
+
+/**
+ * Merges this device's full local state (including tombstones) against a
+ * remote snapshot just pulled from the server, producing the list to hand
+ * to replaceAll(). Every local id is preserved; remote-only items get no id
+ * so IndexedDB's key generator assigns one.
+ */
+export function mergeItems(local: LocalItem[], remote: BackupItem[]): MergeCandidate[] {
+	const localByKey = new Map<string, LocalItem>();
+	for (const item of local) localByKey.set(itemKey(item.tmdb_id, item.media_type), item);
+
+	const remoteByKey = new Map<string, BackupItem>();
+	for (const item of remote) remoteByKey.set(itemKey(item.tmdb_id, item.media_type), item);
+
+	const keys = new Set([...localByKey.keys(), ...remoteByKey.keys()]);
+	const merged: MergeCandidate[] = [];
+	for (const key of keys) {
+		merged.push(mergeOne(localByKey.get(key), remoteByKey.get(key)));
+	}
+	return merged;
+}
+
+/**
+ * Services: a single LWW register (db.ts stamps `services_updated_at` in
+ * meta on every services write), not per-row tombstones — it's a small set
+ * of ids, so one timestamp for "the set changed" is enough.
+ */
+function mergeServices(
+	local: Provider[],
+	localUpdatedAt: string | undefined,
+	remote: Provider[] | undefined,
+	remoteUpdatedAt: string | undefined
+): Provider[] {
+	if (!remote) return local;
+	if (!localUpdatedAt) return remote;
+	if (!remoteUpdatedAt) return local;
+	return remoteUpdatedAt > localUpdatedAt ? remote : local;
+}
+
+/**
+ * Prefs: no per-field timestamps are tracked, so this uses the coarser
+ * signal already on hand — the sync blob's own server-side updated_at vs.
+ * this device's own last successful push. If nothing has been pushed from
+ * *this* device more recently than the blob's last write, the pulled prefs
+ * are at least as fresh as what's local, so take them; otherwise keep local
+ * (this device's own unpushed edits are newer than what it's about to pull).
+ */
+function mergePrefs(
+	local: AppStatePrefs,
+	remote: AppStatePrefs | undefined,
+	remoteBlobUpdatedAt: string | undefined,
+	lastPushedAt: string | undefined
+): AppStatePrefs {
+	if (!remote) return local;
+	if (!remoteBlobUpdatedAt) return local;
+	if (!lastPushedAt || remoteBlobUpdatedAt >= lastPushedAt) return { ...local, ...remote };
+	return local;
+}
+
+// ── Push/pull cycle ───────────────────────────────────────────────────────
+
+interface PulledBlob {
+	version: number;
+	bytes: ArrayBuffer | null;
+	updatedAt: string | null;
+}
+
+async function getBlob(): Promise<PulledBlob> {
+	const res = await fetch(BLOB_URL, { credentials: 'same-origin' });
+	if (!res.ok) throw new Error(`Sync GET failed: ${res.status}`);
+	const version = Number(res.headers.get('X-Sync-Version') ?? '0');
+	const updatedAt = res.headers.get('X-Sync-Updated-At');
+	const bytes = await res.arrayBuffer();
+	return { version, bytes: bytes.byteLength > 0 ? bytes : null, updatedAt };
+}
+
+async function putBlob(
+	body: ArrayBuffer,
+	expectedVersion: number
+): Promise<{ ok: true; version: number } | { ok: false; conflict: true }> {
+	const res = await fetch(`${BLOB_URL}?version=${expectedVersion}`, {
+		method: 'PUT',
+		credentials: 'same-origin',
+		headers: { 'Content-Type': 'application/octet-stream' },
+		body
+	});
+	const serverDate = res.headers.get('Date');
+	if (serverDate) {
+		const offset = new Date(serverDate).getTime() - Date.now();
+		if (Number.isFinite(offset)) setClockOffsetMs(offset);
+	}
+	if (res.status === 409) return { ok: false, conflict: true };
+	if (!res.ok) throw new Error(`Sync PUT failed: ${res.status}`);
+	const json = (await res.json()) as { version: number };
+	return { ok: true, version: json.version };
+}
+
+let syncing: Promise<void> | null = null;
+
+/**
+ * Runs one full pull -> merge -> push cycle, bounded-retrying on 409
+ * (another device's write landed first: re-GET, re-merge, re-PUT). Calls
+ * collapse into whichever cycle is already in flight rather than queuing —
+ * a mutation that lands mid-sync will be picked up by the *next* trigger
+ * (debounced-after-mutation fires again), not lost.
+ */
+export async function syncNow(): Promise<void> {
+	if (syncing) return syncing;
+	syncing = runSync().finally(() => {
+		syncing = null;
+	});
+	return syncing;
+}
+
+async function runSync(): Promise<void> {
+	const dek = await getSyncDek();
+	if (!dek) return; // sync not enabled on this device
+
+	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+		const pulled = await getBlob();
+
+		let remoteItems: BackupItem[] = [];
+		let remotePrefs: AppStatePrefs | undefined;
+		let remoteServices: Provider[] | undefined;
+		if (pulled.bytes) {
+			const plainGz = await decryptBytesWithDek(pulled.bytes, dek);
+			const json = new TextDecoder().decode(await gunzip(plainGz));
+			const parsed = deserializeAppState(JSON.parse(json));
+			remoteItems = parsed.items;
+			remotePrefs = parsed.prefs;
+			remoteServices = parsed.services;
+		}
+
+		const [localSnapshot, localServicesUpdatedAt, lastPushedAt] = await Promise.all([
+			serializeSyncSnapshot(),
+			getMeta('services_updated_at'),
+			getMeta(LAST_PUSHED_AT_KEY)
+		]);
+
+		const mergedItems = mergeItems(localSnapshot.items, remoteItems);
+		const mergedServices = mergeServices(
+			localSnapshot.services,
+			localServicesUpdatedAt,
+			remoteServices,
+			pulled.updatedAt ?? undefined
+		);
+		const mergedPrefs = mergePrefs(
+			localSnapshot.prefs,
+			remotePrefs,
+			pulled.updatedAt ?? undefined,
+			lastPushedAt
+		);
+
+		// Apply locally first (silent — this is the engine's own write, not a
+		// user mutation that should schedule another push), then re-read via
+		// getAllIncludingDeleted so the push payload has real local ids
+		// stripped (never leak a device-local autoIncrement id to the server).
+		await Promise.all([
+			replaceAll(mergedItems, { silent: true }),
+			setServices(mergedServices, { silent: true })
+		]);
+		applyPrefs(mergedPrefs);
+
+		const finalItems = (await getAllIncludingDeleted()).map(
+			({ id: _id, ...rest }) => rest as BackupItem
+		);
+		const payload = JSON.stringify({
+			version: localSnapshot.version,
+			prefs: mergedPrefs,
+			items: finalItems,
+			services: mergedServices
+		});
+		const compressed = await gzip(new TextEncoder().encode(payload));
+		const ciphertext = await encryptBytesWithDek(compressed, dek);
+
+		const result = await putBlob(ciphertext, pulled.version);
+		if (result.ok) {
+			await setMeta(LAST_PUSHED_AT_KEY, new Date().toISOString());
+			return;
+		}
+		// 409: another write landed between our GET and PUT. Loop — re-GET,
+		// re-merge (idempotent; merging the same local state again against a
+		// newer remote is safe), re-PUT.
+	}
+	throw new Error('Sync failed after repeated version conflicts');
+}
+
+// ── Triggers ───────────────────────────────────────────────────────────────
+// App load, visibilitychange, debounced-after-mutation, and a manual
+// "Sync now" button (the button itself is #103's UI; syncNow() above is what
+// it calls). No websockets, no Durable Objects, no delta sync — the blob is
+// under a megabyte, whole-blob sync on these triggers is correct and boring.
+
+let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+let triggersInitialized = false;
+
+function scheduleDebouncedSync(): void {
+	if (debounceTimer) clearTimeout(debounceTimer);
+	debounceTimer = setTimeout(() => void syncNow(), DEBOUNCE_MS);
+}
+
+/** Call once at app startup (e.g. +layout.svelte's onMount). Idempotent. */
+export function initSyncTriggers(): void {
+	if (triggersInitialized) return;
+	triggersInitialized = true;
+
+	void syncNow(); // app load
+
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'visible') void syncNow();
+	});
+
+	onMutation(scheduleDebouncedSync);
+}
