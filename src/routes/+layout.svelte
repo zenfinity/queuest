@@ -2,7 +2,8 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { initTheme } from '$lib/theme.svelte';
 	import '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
@@ -17,12 +18,63 @@
 		{ href: '/share', label: 'Share', exact: true }
 	] as const;
 
+	const settingsLink = { href: '/settings', label: 'Settings', exact: false } as const;
+	const allTabs = [...navLinks, settingsLink];
+
 	function isActive(href: string, exact: boolean) {
 		return exact ? page.url.pathname === href : page.url.pathname.startsWith(href);
 	}
 
 	let isLanding = $derived(page.url.pathname === '/');
 	let isQueue = $derived(page.url.pathname === '/app');
+
+	// Folder-tab curve: a single continuous line along the nav's bottom edge
+	// that rises into a smooth "hill" under whichever tab is active, instead
+	// of being erased/faked behind a filled box. Coordinates are measured
+	// pixels (no viewBox) so they line up 1:1 with the tab-row's own box.
+	let tabRowEl: HTMLDivElement | undefined = $state();
+	const tabRefs = new SvelteMap<string, HTMLAnchorElement>();
+	let curveD = $state('');
+	let fillD = $state('');
+
+	function tabRef(node: HTMLAnchorElement, href: string) {
+		tabRefs.set(href, node);
+		return {
+			destroy() {
+				tabRefs.delete(href);
+			}
+		};
+	}
+
+	function updateCurve() {
+		if (!tabRowEl) return;
+		const active = allTabs.find((t) => isActive(t.href, t.exact));
+		const el = active && tabRefs.get(active.href);
+		if (!el) {
+			curveD = '';
+			fillD = '';
+			return;
+		}
+		const container = tabRowEl.getBoundingClientRect();
+		const tab = el.getBoundingClientRect();
+		const H = container.height;
+		const W = container.width;
+		const left = tab.left - container.left;
+		const right = tab.right - container.left;
+		// Short, sleek transition — a small horizontal spread rather than a wide dome.
+		const spread = window.innerWidth < 640 ? 10 : 16;
+		const x1 = Math.max(0, left - spread);
+		const x2 = Math.min(W, right + spread);
+		const midL = (x1 + left) / 2;
+		const midR = (right + x2) / 2;
+		curveD =
+			`M0,${H} L${x1},${H} ` +
+			`C${midL},${H} ${midL},0 ${left},0 ` +
+			`L${right},0 ` +
+			`C${midR},0 ${midR},${H} ${x2},${H} ` +
+			`L${W},${H}`;
+		fillD = `${curveD} L${W},${H} L0,${H} Z`;
+	}
 
 	onMount(() => {
 		initTheme();
@@ -34,7 +86,18 @@
 			if (vp) vp.content = 'width=device-width, initial-scale=1';
 		}
 		window.addEventListener('resize', fixViewport);
-		return () => window.removeEventListener('resize', fixViewport);
+		window.addEventListener('resize', updateCurve);
+		updateCurve();
+		return () => {
+			window.removeEventListener('resize', fixViewport);
+			window.removeEventListener('resize', updateCurve);
+		};
+	});
+
+	$effect(() => {
+		// Re-measure whenever the active tab changes (route change).
+		void page.url.pathname;
+		tick().then(updateCurve);
 	});
 </script>
 
@@ -49,29 +112,40 @@
 <div class="min-h-screen w-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
 	<nav class="sticky top-0 z-50 bg-white/90 backdrop-blur dark:bg-gray-900/90">
 		<div
-			class="mx-auto flex h-11 max-w-5xl items-stretch gap-1.5 border-b border-gray-200 px-3 sm:h-14 sm:gap-6 sm:px-4 dark:border-gray-800"
+			bind:this={tabRowEl}
+			class="relative mx-auto flex h-11 max-w-5xl items-stretch gap-1.5 px-3 sm:h-14 sm:gap-6 sm:px-4"
 		>
+			<svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+				<path d={fillD} class="fill-gray-50 dark:fill-gray-950" />
+				<path
+					d={curveD}
+					class="stroke-gray-200 dark:stroke-gray-800"
+					fill="none"
+					stroke-width="1"
+					vector-effect="non-scaling-stroke"
+				/>
+			</svg>
+
 			<a
-				class="flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white"
+				class="relative z-10 flex items-center text-base font-bold tracking-tight text-gray-900 sm:text-xl dark:text-white"
 				href={resolve('/')}
 			>
 				Queu<span class="text-orange-400">est</span>
 			</a>
 
 			{#if !isLanding}
-				<!-- Folder-tab strip: active link is a raised, connected piece of the content
-				     area below it — filled with the page background (so it visually merges with
-				     what's under the nav) and rounded at the top. `items-end` + `-mb-px` on the
-				     active tab is what sells the illusion: the tab's own background paints over
-				     that single pixel of the nav's bottom border, breaking it exactly where the
-				     tab sits, as if the tab were a physical continuation of the page below. -->
+				<!-- Folder-tab strip: the active link's "raised, connected" look comes from the
+				     SVG line drawn above, which curves up into a short hill under whichever tab
+				     is active and fills the area under it with the page background — a real
+				     continuous line, not a corner cut out of a straight border. -->
 				<div class="flex items-end gap-0.5 sm:gap-1">
 					{#each navLinks as link (link.href)}
 						{@const active = isActive(link.href, link.exact)}
 						<a
-							class="relative flex items-center rounded-t-md px-1.5 py-1.5 text-xs font-medium transition-colors sm:rounded-t-lg sm:px-3.5 sm:py-2 sm:text-sm
+							use:tabRef={link.href}
+							class="relative z-10 flex items-center px-1.5 py-1.5 text-xs font-medium transition-colors sm:px-3.5 sm:py-2 sm:text-sm
 								{active
-								? '-mb-px bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-white'
+								? 'text-gray-900 dark:text-white'
 								: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 							href={resolve(link.href)}
 						>
@@ -93,14 +167,12 @@
 			{/if}
 
 			{#if !isLanding}
-				{@const settingsActive = isActive('/settings', false)}
-				<!-- "Half tab": same lifted/connected mechanism as the primary tabs, but tighter
-				     padding and a smaller radius so an active Settings reads as secondary to the
-				     5 main tabs rather than a 6th peer. Inactive gets no tab chrome at all. -->
+				{@const settingsActive = isActive(settingsLink.href, settingsLink.exact)}
 				<a
-					class="relative flex items-center self-end rounded-t px-1 py-1 text-xs font-medium transition-colors sm:px-2 sm:py-1.5 sm:text-sm
+					use:tabRef={settingsLink.href}
+					class="relative z-10 flex items-center self-end px-1 py-1 text-xs font-medium transition-colors sm:px-2 sm:py-1.5 sm:text-sm
 					{settingsActive
-						? '-mb-px bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-white'
+						? 'text-gray-900 dark:text-white'
 						: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 					href={resolve('/settings')}
 					aria-label="Settings"
