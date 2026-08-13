@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.7.2] — 2026-08-13
+
+### Accessibility
+
+- **Cards and rows no longer nest interactive elements inside `role="button"`** — the Grid/List queue-item wrappers were `role="button"` divs containing four more real `<button>`s, which meant a screen reader announced the whole card as one button and swallowed the title, runtime, providers, and release chip inside it. Each card/row already has a real focusable trigger (the poster/title button) doing the same "open detail" action, so the wrapper just needed its role/tabindex/aria-label/keydown handling removed. (#130)
+- **Keyboard-closable overlays** — new `use:trapFocus` action (`src/lib/focus-trap.ts`) provides Escape-to-close, a Tab focus trap, and focus return to whatever triggered the overlay. Wired into the detail panel, its poster lightbox, and the Settings feedback modal — the only three overlay components left after #119's earlier DetailPanel consolidation. (#130)
+- **Toggles no longer convey state by color alone** — `aria-pressed` on subscribed-service and Share filter pills, `role="switch" aria-checked` on the Watched toggle, `aria-expanded`/`aria-controls` on the filter popover button. (#130)
+- **17 unlabeled form controls** now have `aria-label` — Settings' queue name/rename/color/passphrase/feedback fields, the import panel's restore/CSV/URL/paste-list fields, and the Budget hrs/weeks number inputs, which previously had no placeholder either. (#130)
+- **A real `h1` on every route** — added as visually-hidden (`sr-only`) so there's no visual change; most routes previously started at `h2`, and `/app` had no heading at all. (#130)
+- **Gantt bars now show a focus ring** — `focus:outline-none` had no replacement; keyboard users tabbing through the timeline saw nothing. (#130)
+
+### Bug fixes
+
+- **Collection "Change…" did nothing** — the detail panel's per-item reset effect tracked `item.id`, but Svelte reruns an effect whenever a *prop* it reads is reassigned, including to a new object with an unchanged id — exactly what happens after every successful collection change. Fixed by tracking the last-seen id explicitly. Also hardened all three collection-change call sites with try/finally, so a failed request can no longer leave every collection button in the panel permanently disabled. (#171)
+- **Anchor-scroll to `#suggest` didn't work** — `/budget` is `ssr = false`, so the section didn't exist in the DOM yet when the browser's native fragment-scroll fired at initial load. New reusable `scrollToHashTarget()` (`src/lib/scroll-to-hash.ts`) is called once the section's data has actually loaded. (#161)
+
+### Feature polish
+
+- **Budget-aware framing for Suggest** — each ranked provider now shows "≈N months of your budget" alongside the existing runtime total. (#160)
+- **`Alt+←/→` keyboard shortcut** — the desktop equivalent of #162's swipe navigation, same order and boundary behavior, sharing one `stepTab()` helper with the swipe handler. (#168)
+- **One-time onboarding hint** pointing at swipe/keyboard tab navigation, shown once the queue actually has something in it; text adapts to touch vs. desktop and persists its own dismissal. (#169)
+- **Collection group headers show a remaining-time total** — e.g. "Sci-Fi 3 · 4h 12m" — next to the existing item count, in both Grid and List. (#170)
+
+---
+
 ## [0.7.1] — 2026-08-12
 
 ### UI polish
