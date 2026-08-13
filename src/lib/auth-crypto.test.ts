@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeEmail, emailSalt, deriveAuthKey } from './auth-crypto';
+import { normalizeEmail, emailSalt, deriveAuthKey, generateRecoveryCode } from './auth-crypto';
 
 describe('normalizeEmail', () => {
 	it('lowercases and trims', () => {
@@ -55,5 +55,22 @@ describe('deriveAuthKey', () => {
 	it('returns a URL-safe base64 string with no padding', async () => {
 		const key = await deriveAuthKey('user@example.com', 'hunter2');
 		expect(key).toMatch(/^[A-Za-z0-9_-]+$/);
+	});
+});
+
+describe('generateRecoveryCode', () => {
+	it('returns 6 groups of 4 Crockford-base32 characters, dash-separated', () => {
+		const code = generateRecoveryCode();
+		expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){5}$/);
+	});
+
+	it('excludes the visually-confusable I, L, O, U characters', () => {
+		const code = generateRecoveryCode();
+		expect(code).not.toMatch(/[ILOU]/);
+	});
+
+	it('is different on every call (random, not derived from anything)', () => {
+		const codes = new Set(Array.from({ length: 20 }, () => generateRecoveryCode()));
+		expect(codes.size).toBe(20);
 	});
 });

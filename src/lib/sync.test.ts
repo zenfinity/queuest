@@ -172,7 +172,7 @@ describe('enableSyncWithDek / isSyncEnabled / disableSync', () => {
 
 	it('enables after importing a DEK, and disables again after clearing it', async () => {
 		const dek = await generateShareKey();
-		await enableSyncWithDek(dek);
+		await enableSyncWithDek(dek, 'user@example.com');
 		expect(await isSyncEnabled()).toBe(true);
 
 		await disableSync();
@@ -214,7 +214,7 @@ describe('syncNow', () => {
 
 	it('pushes local state as the first-ever sync (empty remote, version 0)', async () => {
 		const dek = await generateShareKey();
-		await enableSyncWithDek(dek);
+		await enableSyncWithDek(dek, 'user@example.com');
 		await db.addItem(makeBackupItem({ tmdb_id: 1 }) as never);
 
 		let putUrl = '';
@@ -239,7 +239,7 @@ describe('syncNow', () => {
 
 	it('pulls, merges, and applies a remote item alongside the local one', async () => {
 		const dek = await generateShareKey();
-		await enableSyncWithDek(dek);
+		await enableSyncWithDek(dek, 'user@example.com');
 		await db.addItem(makeBackupItem({ tmdb_id: 1, title: 'Local Item' }) as never);
 
 		const remoteBlob = await buildRemoteBlob(dek, {
@@ -272,7 +272,7 @@ describe('syncNow', () => {
 
 	it('retries once on a 409 version conflict, then succeeds', async () => {
 		const dek = await generateShareKey();
-		await enableSyncWithDek(dek);
+		await enableSyncWithDek(dek, 'user@example.com');
 		await db.addItem(makeBackupItem({ tmdb_id: 1 }) as never);
 
 		let getCalls = 0;

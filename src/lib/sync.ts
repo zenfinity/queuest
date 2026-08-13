@@ -29,16 +29,56 @@ const BLOB_URL = '/api/sync/blob';
 const MAX_RETRIES = 5;
 const DEBOUNCE_MS = 3000;
 const LAST_PUSHED_AT_KEY = 'sync_last_pushed_at';
+const SYNC_EMAIL_KEY = 'sync_email';
+
+// ── Status broadcasting ──────────────────────────────────────────────────
+// A plain listener list, not a Svelte $state store — this module has to stay
+// importable from plain vitest (no Svelte plugin loaded there, same reason
+// db.ts's mutation hook is a callback list rather than a rune; see #128).
+// The Settings UI mirrors this into its own local $state via
+// onSyncStatusChange() rather than importing reactive state directly.
+export interface SyncStatus {
+	status: 'idle' | 'syncing' | 'offline' | 'error';
+	lastSyncedAt: string | null;
+	error: string;
+	email: string | null;
+}
+
+let status: SyncStatus = { status: 'idle', lastSyncedAt: null, error: '', email: null };
+const statusListeners: ((s: SyncStatus) => void)[] = [];
+
+function updateStatus(patch: Partial<SyncStatus>): void {
+	status = { ...status, ...patch };
+	for (const cb of statusListeners) cb(status);
+}
+
+export function getSyncStatus(): SyncStatus {
+	return status;
+}
+
+/** Subscribes to status changes; immediately replays the current status so a
+ * late subscriber isn't stuck showing stale defaults. Returns an unsubscribe. */
+export function onSyncStatusChange(cb: (s: SyncStatus) => void): () => void {
+	statusListeners.push(cb);
+	cb(status);
+	return () => {
+		const i = statusListeners.indexOf(cb);
+		if (i >= 0) statusListeners.splice(i, 1);
+	};
+}
 
 // ── Enable / disable ─────────────────────────────────────────────────────
-// Enabling sync (generating the DEK, wrapping it under the passphrase-derived
-// key, and calling POST /api/auth/signup) is #103's (Sync settings UI) job —
-// this module just needs somewhere to hand the already-generated DEK once
-// that flow has it.
+// Generating the DEK, wrapping it under the passphrase-derived key, and
+// calling the signup/signin/recover endpoints is #103's (Sync settings UI)
+// / sync-account-actions.ts's job — this module just needs somewhere to
+// hand the already-generated DEK (and the email it belongs to, for display)
+// once that flow has them.
 
-export async function enableSyncWithDek(dekB64url: string): Promise<void> {
+export async function enableSyncWithDek(dekB64url: string, email: string): Promise<void> {
 	const dek = await importDek(dekB64url, false);
 	await setSyncDek(dek);
+	await setMeta(SYNC_EMAIL_KEY, email);
+	updateStatus({ email, status: 'idle', error: '' });
 }
 
 export async function isSyncEnabled(): Promise<boolean> {
@@ -47,6 +87,20 @@ export async function isSyncEnabled(): Promise<boolean> {
 
 export async function disableSync(): Promise<void> {
 	await clearSyncDek();
+	updateStatus({ email: null, status: 'idle', error: '', lastSyncedAt: null });
+}
+
+/** Restores the status (email, last-synced time) from IndexedDB on app
+ * startup, so the UI shows the right thing before the first sync cycle of
+ * this page load has run. No-op if sync was never enabled on this device. */
+export async function restoreSyncState(): Promise<void> {
+	const dek = await getSyncDek();
+	if (!dek) return;
+	const [email, lastSyncedAt] = await Promise.all([
+		getMeta(SYNC_EMAIL_KEY),
+		getMeta(LAST_PUSHED_AT_KEY)
+	]);
+	updateStatus({ email: email ?? null, lastSyncedAt: lastSyncedAt ?? null });
 }
 
 // ── Merge (the reviewable core) ──────────────────────────────────────────
@@ -211,6 +265,22 @@ async function runSync(): Promise<void> {
 	const dek = await getSyncDek();
 	if (!dek) return; // sync not enabled on this device
 
+	if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+		updateStatus({ status: 'offline' });
+		return;
+	}
+
+	updateStatus({ status: 'syncing' });
+	try {
+		await runSyncCycle(dek);
+		updateStatus({ status: 'idle', error: '' });
+	} catch (e) {
+		updateStatus({ status: 'error', error: e instanceof Error ? e.message : 'Sync failed' });
+		throw e;
+	}
+}
+
+async function runSyncCycle(dek: CryptoKey): Promise<void> {
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 		const pulled = await getBlob();
 
@@ -270,7 +340,9 @@ async function runSync(): Promise<void> {
 
 		const result = await putBlob(ciphertext, pulled.version);
 		if (result.ok) {
-			await setMeta(LAST_PUSHED_AT_KEY, new Date().toISOString());
+			const now = new Date().toISOString();
+			await setMeta(LAST_PUSHED_AT_KEY, now);
+			updateStatus({ lastSyncedAt: now });
 			return;
 		}
 		// 409: another write landed between our GET and PUT. Loop — re-GET,
@@ -299,7 +371,7 @@ export function initSyncTriggers(): void {
 	if (triggersInitialized) return;
 	triggersInitialized = true;
 
-	void syncNow(); // app load
+	void restoreSyncState().then(() => syncNow()); // app load
 
 	document.addEventListener('visibilitychange', () => {
 		if (document.visibilityState === 'visible') void syncNow();
