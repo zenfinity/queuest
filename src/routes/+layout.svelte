@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { initTheme } from '$lib/theme.svelte';
@@ -63,21 +64,77 @@
 		const left = tab.left - container.left;
 		const right = tab.right - container.left;
 		// Rounder bezel — a wider spread reads as a smoother, sleeker curve.
-		const spread = window.innerWidth < 640 ? 16 : 24;
+		const spread = window.innerWidth < 640 ? 40 : 50;
+		// The cubic bezier below is nearly flat for the first several px out of
+		// the plateau — that's wasted as pure-flat plateau otherwise. Letting
+		// the plateau undercut the text by `overlap` lets the text's own edges
+		// sit on that already-flat-looking curve start instead, shrinking the
+		// total horizontal footprint without changing the slope's run (spread)
+		// or curvature at all.
+		const overlap = window.innerWidth < 640 ? 8 : 10;
+		// Clamp so a very narrow tab (or a future shorter label) can't invert
+		// the plateau — collapses to a single point at the tab's center instead.
+		const mid = (left + right) / 2;
+		const plateauLeft = Math.min(left + overlap, mid);
+		const plateauRight = Math.max(right - overlap, mid);
 		// Hug the tab's own text box (a few px of breathing room above it) instead
 		// of a fixed inset, so the hill's height tracks the text's actual height.
 		const top = Math.max(4, tab.top - container.top - 4);
-		const x1 = Math.max(0, left - spread);
-		const x2 = Math.min(W, right + spread);
-		const midL = (x1 + left) / 2;
-		const midR = (right + x2) / 2;
+		const x1 = Math.max(0, plateauLeft - spread);
+		const x2 = Math.min(W, plateauRight + spread);
+		const midL = (x1 + plateauLeft) / 2;
+		const midR = (plateauRight + x2) / 2;
 		curveD =
 			`M0,${H} L${x1},${H} ` +
-			`C${midL},${H} ${midL},${top} ${left},${top} ` +
-			`L${right},${top} ` +
+			`C${midL},${H} ${midL},${top} ${plateauLeft},${top} ` +
+			`L${plateauRight},${top} ` +
 			`C${midR},${top} ${midR},${H} ${x2},${H} ` +
 			`L${W},${H}`;
 		fillD = `${curveD} L${W},${H} L0,${H} Z`;
+	}
+
+	// ── Swipe navigation (#162) ────────────────────────────────────────────
+	// Horizontal swipe on the page body moves between the main tabs, in the
+	// same left-to-right order as the nav strip. The tab curve's own
+	// transition (see the `d`/`fill` transitions on the <path>s below) is
+	// what sells "the tab is moving" — no separate page-content animation.
+	const SWIPE_MIN_DISTANCE = 60;
+	const SWIPE_MAX_OFF_AXIS = 60;
+	const SWIPE_MAX_DURATION_MS = 600;
+
+	let touchStartX = 0;
+	let touchStartY = 0;
+	let touchStartTime = 0;
+
+	function handleTouchStart(e: TouchEvent) {
+		const target = e.target as Element;
+		// data-detail-panel: DetailPanel's cast list scrolls horizontally.
+		// data-queue-dock: the floating filter dock — dense controls, not a swipe surface.
+		if (target.closest('[data-detail-panel], [data-queue-dock]')) return;
+		const t = e.touches[0];
+		touchStartX = t.clientX;
+		touchStartY = t.clientY;
+		touchStartTime = Date.now();
+	}
+
+	function handleTouchEnd(e: TouchEvent) {
+		if (!touchStartTime) return;
+		const t = e.changedTouches[0];
+		const dx = t.clientX - touchStartX;
+		const dy = t.clientY - touchStartY;
+		const dt = Date.now() - touchStartTime;
+		touchStartTime = 0;
+
+		if (dt > SWIPE_MAX_DURATION_MS) return;
+		if (Math.abs(dy) > SWIPE_MAX_OFF_AXIS) return; // vertical scroll, not a swipe
+		if (Math.abs(dx) < SWIPE_MIN_DISTANCE) return;
+
+		const currentIndex = navLinks.findIndex((l) => isActive(l.href, l.exact));
+		if (currentIndex === -1) return; // not on a main-tab page (settings, search, landing)
+
+		const nextIndex = dx < 0 ? currentIndex + 1 : currentIndex - 1;
+		const target = navLinks[nextIndex];
+		if (target) void goto(resolve(target.href));
 	}
 
 	onMount(() => {
@@ -122,13 +179,16 @@
 	<nav class="sticky top-0 z-50 bg-white/90 backdrop-blur dark:bg-gray-900/90">
 		<div
 			bind:this={tabRowEl}
-			class="relative mx-auto flex h-11 max-w-5xl items-stretch gap-1.5 px-3 sm:h-14 sm:gap-6 sm:px-4"
+			class="relative mx-auto flex h-8 max-w-5xl items-stretch gap-5 px-1 sm:h-10 sm:gap-6 sm:px-2"
 		>
 			<svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-				<path d={fillD} class="fill-gray-50 dark:fill-gray-950" />
+				<path
+					d={fillD}
+					class="fill-gray-50 transition-[d] duration-200 ease-out dark:fill-gray-950"
+				/>
 				<path
 					d={curveD}
-					class="stroke-gray-200 dark:stroke-gray-800"
+					class="stroke-gray-200 transition-[d] duration-200 ease-out dark:stroke-gray-800"
 					fill="none"
 					stroke-width="1"
 					vector-effect="non-scaling-stroke"
@@ -143,16 +203,21 @@
 			</a>
 
 			{#if !isLanding}
+				<!-- Extra breathing room after the logo, on top of the container's own
+				     gap — isolated here rather than raising that gap, which would space
+				     out every item in the row (tabs, dock, Settings), not just this one. -->
+				<div class="w-2 sm:w-3" aria-hidden="true"></div>
+
 				<!-- Folder-tab strip: the active link's "raised, connected" look comes from the
 				     SVG line drawn above, which curves up into a short hill under whichever tab
 				     is active and fills the area under it with the page background — a real
 				     continuous line, not a corner cut out of a straight border. -->
-				<div class="flex items-end gap-0.5 sm:gap-1">
+				<div class="flex items-end gap-5 sm:gap-6">
 					{#each navLinks as link (link.href)}
 						{@const active = isActive(link.href, link.exact)}
 						<a
 							use:tabRef={link.href}
-							class="relative z-10 flex items-center px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-5 sm:py-2 sm:text-sm
+							class="relative z-10 flex items-center px-0 py-1.5 text-xs font-medium transition-colors sm:px-0.5 sm:py-2 sm:text-sm
 								{active
 								? 'text-gray-900 dark:text-white'
 								: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
@@ -179,7 +244,7 @@
 				{@const settingsActive = isActive(settingsLink.href, settingsLink.exact)}
 				<a
 					use:tabRef={settingsLink.href}
-					class="relative z-10 flex items-center self-end px-1 py-1 text-xs font-medium transition-colors sm:px-2 sm:py-1.5 sm:text-sm
+					class="relative z-10 flex items-center self-end py-1 pl-1 pr-2 text-xs font-medium transition-colors sm:py-1.5 sm:pl-2 sm:pr-4 sm:text-sm
 					{settingsActive
 						? 'text-gray-900 dark:text-white'
 						: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
@@ -207,7 +272,11 @@
 		</div>
 	{/if}
 
-	<main class="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-8">
+	<main
+		class="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-8"
+		ontouchstart={handleTouchStart}
+		ontouchend={handleTouchEnd}
+	>
 		{@render children()}
 	</main>
 

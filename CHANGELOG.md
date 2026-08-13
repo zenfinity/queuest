@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.7.1] — 2026-08-12
+
+### UI polish
+
+- **Swipe navigation** — a horizontal swipe on the page body now moves between Budget/Add/Queue/Share, in nav order. Guarded against false positives (minimum travel distance, vertical-drag rejection, a time limit, and explicit ignores for the detail panel's horizontally-scrolling cast list and the floating filter dock) and inert on `/settings`, `/search`, and the landing page. The existing folder-tab curve now animates (`transition: d`) between tabs on every navigation, click or swipe, to sell "the tab is moving." (#162)
+- **Favicon Q centered** — was positioned by text baseline (`y='60'` in a 100-height viewBox), which sat visibly low in the browser tab; now uses `dominant-baseline='central'`. (#166)
+
+---
+
+## [0.7] — 2026-08-12
+
+### Sync epic — server & client (#100, #101)
+
+- **Encrypted blob API** (`GET`/`PUT /api/sync/blob`), following `api/share`'s opaque-bytes precedent but adding what a share link doesn't need: ownership, an update path, and concurrency control. A single `INSERT ... ON CONFLICT DO UPDATE ... WHERE version = ? RETURNING version` does the whole compare-and-swap in one round trip — a version mismatch returns no row, which is the 409 signal for the client to re-fetch, re-merge, and retry. 2 MB cap, per-user KV-backed rate limiting, and an entitlement seam on `PUT` only (`GET` always stays open — a lapsed subscription must never look indistinguishable from data loss).
+- **Client sync engine** (`src/lib/sync.ts`) — the DEK is held as a non-extractable `CryptoKey` (structured-cloned into IndexedDB, raw bytes never touch JS after import). Merge is keyed by `[tmdb_id, media_type]`, field-group rather than whole-item last-write-wins: whichever side has the newer `updated_at` wins every field except `watched_seasons`, which unions — so device A marking something watched and device B updating its own copy of the same title don't clobber each other. Push/pull cycle re-GETs, re-merges, and re-PUTs on a 409, bounded to 5 attempts; clock skew is corrected from the PUT response's `Date` header. Triggers (app load, `visibilitychange`, debounced-after-mutation) are wired but inert until a passphrase-derived DEK actually exists — there's no user-facing toggle yet (that's the still-open Sync settings UI issue).
+
+### UI
+
+- **Clear (×) button** on the `/add` search box and the IMDb-export-link field in the import panel; Chrome's native `type="search"` cancel button is suppressed so the two don't visually stack. (#163)
+
+---
+
+## [0.6.1] — 2026-08-12
+
+### Sync epic — client track (#97, #99, #98)
+
+- **Soft-delete tombstones** — `removeItem` now writes a `deleted_at` timestamp instead of hard-deleting, so deletions can propagate through sync instead of being silently undone by a device that hasn't seen them yet. `getAll()` filters tombstones automatically; `getAllIncludingDeleted()` and a 90-day `gcTombstones()` horizon were added for the sync engine. Found and fixed a real bug along the way: Settings' collection rename/delete flows did `getAll()` → mutate → `replaceAll()`, which — now that `getAll()` excludes tombstones — would have silently wiped them on every rename.
+- **Canonical app-state snapshot module** (`src/lib/app-state.ts`) — collapses the "full app state" payload shape, previously defined separately for export and restore, into one module owning both. `SYNCED_KEYS`/`LOCAL_KEYS` make the sync-vs-device-local `localStorage` key partition explicit and tested (a new test greps the whole source tree for `sq:` literals and fails if one exists in neither set). Payload version bumped to 2 with an actual version check.
+- **Auth: email + passphrase-derived session** — one passphrase splits into an `authKey` (sent to the server, which stores only a hash) and a DEK-wrapping key, reusing the app's existing PBKDF2+AES-GCM primitives; the server never holds anything that can decrypt user data. New `/api/auth/{signup,signin,signout}` routes and KV-backed sessions.
+
+### Navigation
+
+- **Folder-tab nav restyle** — the top nav's active-tab indicator is now a smooth, continuous curve rising into a short "hill" under the active tab (rather than a straight underline that got erased/faked behind a filled box), with the tab's own background merging into the page canvas below it. Went through three follow-up polish passes: air above the peak, tighter hug to the tab text, wider tab padding, and a rounder bezel. (#143)
+
+---
+
+## [0.6] — 2026-08-12
+
+### Sync epic groundwork (#93, #95)
+
+- **IndexedDB v3** — a real `oldVersion`-based upgrade ladder, `updated_at` stamped on user-driven mutations (deliberately *not* the background provider-refresh path, which would otherwise let the most-recently-refreshed device win every future conflict), and a new `meta` store.
+- **D1 binding + sync schema** — `wrangler.toml` D1 binding and `migrations/0001_sync_schema.sql` (`users`, `sync_blobs` with an optimistic-concurrency `version` column, `wrapped_dek`). Infrastructure only at this point — nothing reads or writes D1 yet.
+
+### Collections (#110, #111)
+
+- **Filter by collection** — a new Collection section in the queue dock's filter popover: All / each collection with its color dot / Uncategorized.
+- **Group by collection** — Grid and List can show section headers (name, color, count) instead of a flat list, toggled from the same popover.
+
+### Maintenance
+
+- **Dependency vulnerabilities** — patch-bumped `@sveltejs/kit`, `svelte`, `vite`, `postcss` within existing semver ranges (13 → 9 known vulnerabilities). (#141)
+- **Lint cleanup** — `svelte/no-navigation-without-resolve`, `svelte/prefer-svelte-reactivity`, and `@typescript-eslint/no-explicit-any` all driven to zero project-wide. (#137, #138, #139, #140)
+- Found and fixed two real bugs along the way: `setSubscribedIds()` silently no-op'd on in-place `Set` mutations after the SvelteSet migration, and three pages (`/`, `/settings`, `/share`) had page-option exports sitting after `</script>` instead of inside `<script module>`, which Svelte silently renders as visible page text instead of applying.
+
+---
+
 ## [0.5.5] — 2026-08-11
 
 ### Collections
