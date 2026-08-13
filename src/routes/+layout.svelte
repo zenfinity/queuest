@@ -64,18 +64,30 @@
 		const left = tab.left - container.left;
 		const right = tab.right - container.left;
 		// Rounder bezel — a wider spread reads as a smoother, sleeker curve.
-		const spread = window.innerWidth < 640 ? 16 : 24;
+		const spread = window.innerWidth < 640 ? 40 : 50;
+		// The cubic bezier below is nearly flat for the first several px out of
+		// the plateau — that's wasted as pure-flat plateau otherwise. Letting
+		// the plateau undercut the text by `overlap` lets the text's own edges
+		// sit on that already-flat-looking curve start instead, shrinking the
+		// total horizontal footprint without changing the slope's run (spread)
+		// or curvature at all.
+		const overlap = window.innerWidth < 640 ? 8 : 10;
+		// Clamp so a very narrow tab (or a future shorter label) can't invert
+		// the plateau — collapses to a single point at the tab's center instead.
+		const mid = (left + right) / 2;
+		const plateauLeft = Math.min(left + overlap, mid);
+		const plateauRight = Math.max(right - overlap, mid);
 		// Hug the tab's own text box (a few px of breathing room above it) instead
 		// of a fixed inset, so the hill's height tracks the text's actual height.
 		const top = Math.max(4, tab.top - container.top - 4);
-		const x1 = Math.max(0, left - spread);
-		const x2 = Math.min(W, right + spread);
-		const midL = (x1 + left) / 2;
-		const midR = (right + x2) / 2;
+		const x1 = Math.max(0, plateauLeft - spread);
+		const x2 = Math.min(W, plateauRight + spread);
+		const midL = (x1 + plateauLeft) / 2;
+		const midR = (plateauRight + x2) / 2;
 		curveD =
 			`M0,${H} L${x1},${H} ` +
-			`C${midL},${H} ${midL},${top} ${left},${top} ` +
-			`L${right},${top} ` +
+			`C${midL},${H} ${midL},${top} ${plateauLeft},${top} ` +
+			`L${plateauRight},${top} ` +
 			`C${midR},${top} ${midR},${H} ${x2},${H} ` +
 			`L${W},${H}`;
 		fillD = `${curveD} L${W},${H} L0,${H} Z`;
@@ -167,7 +179,7 @@
 	<nav class="sticky top-0 z-50 bg-white/90 backdrop-blur dark:bg-gray-900/90">
 		<div
 			bind:this={tabRowEl}
-			class="relative mx-auto flex h-11 max-w-5xl items-stretch gap-1.5 px-3 sm:h-14 sm:gap-6 sm:px-4"
+			class="relative mx-auto flex h-8 max-w-5xl items-stretch gap-5 px-1 sm:h-10 sm:gap-6 sm:px-2"
 		>
 			<svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
 				<path
@@ -191,16 +203,21 @@
 			</a>
 
 			{#if !isLanding}
+				<!-- Extra breathing room after the logo, on top of the container's own
+				     gap — isolated here rather than raising that gap, which would space
+				     out every item in the row (tabs, dock, Settings), not just this one. -->
+				<div class="w-2 sm:w-3" aria-hidden="true"></div>
+
 				<!-- Folder-tab strip: the active link's "raised, connected" look comes from the
 				     SVG line drawn above, which curves up into a short hill under whichever tab
 				     is active and fills the area under it with the page background — a real
 				     continuous line, not a corner cut out of a straight border. -->
-				<div class="flex items-end gap-0.5 sm:gap-1">
+				<div class="flex items-end gap-5 sm:gap-6">
 					{#each navLinks as link (link.href)}
 						{@const active = isActive(link.href, link.exact)}
 						<a
 							use:tabRef={link.href}
-							class="relative z-10 flex items-center px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-5 sm:py-2 sm:text-sm
+							class="relative z-10 flex items-center px-0 py-1.5 text-xs font-medium transition-colors sm:px-0.5 sm:py-2 sm:text-sm
 								{active
 								? 'text-gray-900 dark:text-white'
 								: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
@@ -227,7 +244,7 @@
 				{@const settingsActive = isActive(settingsLink.href, settingsLink.exact)}
 				<a
 					use:tabRef={settingsLink.href}
-					class="relative z-10 flex items-center self-end px-1 py-1 text-xs font-medium transition-colors sm:px-2 sm:py-1.5 sm:text-sm
+					class="relative z-10 flex items-center self-end py-1 pl-1 pr-2 text-xs font-medium transition-colors sm:py-1.5 sm:pl-2 sm:pr-4 sm:text-sm
 					{settingsActive
 						? 'text-gray-900 dark:text-white'
 						: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
