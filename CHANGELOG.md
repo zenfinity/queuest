@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0] — 2026-08-13
+
+### Sync epic — key custody, recovery, and settings UI (#79 milestone complete)
+
+- **Key custody and recovery** — a printed high-entropy recovery code (120 bits, Crockford base32, grouped for readability) stands in for a forgotten passphrase. It's a second wrapped copy of the same DEK (`wrapped_dek`, `method='recovery'`), generated and shown once immediately after signup, before the DEK is ever imported as a non-extractable CryptoKey. New `recovery_auth` table (migration `0002`, additive only — passphrase signin is untouched) plus four routes: `POST /api/auth/recovery-code` (store it), `POST /api/auth/recover` (the actual recovery signin — a fully independent credential check, same constant-time-compare/dummy-hash pattern as normal signin), `PUT /api/auth/passphrase` (required to finish recovery — the old passphrase no longer works once a code has been used), and `DELETE /api/account` (removes the sync blob, both wrapped-DEK rows, the recovery credential, and the user row; never touches local IndexedDB). (#102)
+- **Sync settings UI** — a new Sync section in Settings, next to Export Watchlist: enable/sign-in/recover/sign-out flows, the mandatory "save your recovery code" screen, a status indicator (synced/syncing/offline/error) with last-synced time and a manual "Sync now", and account deletion in the Danger Zone using the same arm/confirm pattern as "Reset everything." Ships labeled "Free during beta" from day one. This is the point sync goes from built-but-inert to actually usable — #100/#101 (server API and client engine) had no UI to enable them until now. (#103)
+
+---
+
 ## [0.7.2] — 2026-08-13
 
 ### Accessibility

@@ -61,3 +61,35 @@ export async function deriveAuthKey(email: string, passphrase: string): Promise<
 	);
 	return b64urlEncode(new Uint8Array(bits) as Uint8Array<ArrayBuffer>);
 }
+
+// ── Recovery code (#102) ─────────────────────────────────────────────────
+// A high-entropy secret the user prints and stores offline, standing in for
+// a forgotten passphrase. Deliberately just a random string, not derived
+// from anything — deriveAuthKey() above treats it exactly like a passphrase
+// (same PBKDF2 derivation, same crypto.ts encrypt()/decrypt() for wrapping
+// the DEK), so no new crypto is needed to support it, only a way to
+// generate one that's easy to transcribe correctly by hand.
+//
+// Crockford's base32 alphabet (excludes I/L/O/U — the letters most often
+// misread or mistyped, and confusable with 1/0) at 120 bits of entropy:
+// enough to make guessing infeasible while staying short enough to print
+// and retype without a QR code or file download.
+const RECOVERY_CODE_BYTES = 15; // 120 bits, divides evenly into 5-bit groups (24, no padding)
+const CROCKFORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+export function generateRecoveryCode(): string {
+	const bytes = crypto.getRandomValues(new Uint8Array(RECOVERY_CODE_BYTES));
+	let bitBuffer = 0;
+	let bitCount = 0;
+	let out = '';
+	for (const byte of bytes) {
+		bitBuffer = (bitBuffer << 8) | byte;
+		bitCount += 8;
+		while (bitCount >= 5) {
+			out += CROCKFORD_ALPHABET[(bitBuffer >>> (bitCount - 5)) & 0x1f];
+			bitCount -= 5;
+		}
+	}
+	if (bitCount > 0) out += CROCKFORD_ALPHABET[(bitBuffer << (5 - bitCount)) & 0x1f];
+	return out.match(/.{1,4}/g)!.join('-');
+}

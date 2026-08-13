@@ -11,6 +11,21 @@
 		submitFeedback as submitFeedbackAction,
 		resetEverything
 	} from '$lib/settings-actions';
+	import {
+		isSyncEnabled,
+		syncNow,
+		onSyncStatusChange,
+		getSyncStatus,
+		type SyncStatus
+	} from '$lib/sync';
+	import {
+		signUp,
+		signIn,
+		recoverAccount,
+		finishRecovery,
+		signOut,
+		deleteAccount
+	} from '$lib/sync-account-actions';
 
 	import {
 		getQueueName,
@@ -242,11 +257,163 @@
 		collectionCounts = counts;
 	}
 
+	// ── Sync (#102, #103) ────────────────────────────────────────────────────
+	type SyncView =
+		| 'choose'
+		| 'signup'
+		| 'signin'
+		| 'recover'
+		| 'recover-new-passphrase'
+		| 'recovery-code'
+		| 'status';
+
+	let syncEnabled = $state(false);
+	let syncView = $state<SyncView>('choose');
+	let syncBusy = $state(false);
+	let syncError = $state('');
+	let syncStatus = $state<SyncStatus>(getSyncStatus());
+
+	let syncEmail = $state('');
+	let syncPassphrase = $state('');
+	let syncPassphraseConfirm = $state('');
+	let syncRecoveryCodeInput = $state('');
+	let syncNewPassphrase = $state('');
+	let recoveryCodeToShow = $state('');
+	let recoveryCodeSaved = $state(false);
+	let recoveredDek = ''; // held in memory only between recoverAccount() and finishRecovery() — never a $state, never rendered
+	let deleteAccountArmed = $state(false);
+	let deletingAccount = $state(false);
+	let deleteAccountError = $state('');
+
+	const syncActionDeps = {
+		setBusy: (b: boolean) => (syncBusy = b),
+		setError: (e: string) => (syncError = e)
+	};
+
+	function backToSyncChoose() {
+		syncError = '';
+		syncEmail = '';
+		syncPassphrase = '';
+		syncPassphraseConfirm = '';
+		syncRecoveryCodeInput = '';
+		syncView = 'choose';
+	}
+
+	async function submitSyncSignup() {
+		syncError = '';
+		if (syncPassphrase.length < 8) {
+			syncError = 'Use at least 8 characters';
+			return;
+		}
+		if (syncPassphrase !== syncPassphraseConfirm) {
+			syncError = 'Passphrases do not match';
+			return;
+		}
+		const result = await signUp(syncEmail, syncPassphrase, syncActionDeps);
+		if (result) {
+			recoveryCodeToShow = result.recoveryCode;
+			recoveryCodeSaved = false;
+			syncEmail = result.email;
+			syncPassphrase = '';
+			syncPassphraseConfirm = '';
+			syncView = 'recovery-code';
+		}
+	}
+
+	async function submitSyncSignin() {
+		const ok = await signIn(syncEmail, syncPassphrase, syncActionDeps);
+		if (ok) {
+			syncPassphrase = '';
+			syncEnabled = true;
+			syncView = 'status';
+		}
+	}
+
+	async function submitSyncRecover() {
+		const result = await recoverAccount(syncEmail, syncRecoveryCodeInput, syncActionDeps);
+		if (result) {
+			recoveredDek = result.dek;
+			syncEmail = result.email;
+			syncRecoveryCodeInput = '';
+			syncView = 'recover-new-passphrase';
+		}
+	}
+
+	async function submitSyncNewPassphrase() {
+		syncError = '';
+		if (syncNewPassphrase.length < 8) {
+			syncError = 'Use at least 8 characters';
+			return;
+		}
+		if (syncNewPassphrase !== syncPassphraseConfirm) {
+			syncError = 'Passphrases do not match';
+			return;
+		}
+		const ok = await finishRecovery(syncEmail, syncNewPassphrase, recoveredDek, syncActionDeps);
+		if (ok) {
+			recoveredDek = '';
+			syncNewPassphrase = '';
+			syncPassphraseConfirm = '';
+			syncEnabled = true;
+			syncView = 'status';
+		}
+	}
+
+	function confirmRecoveryCodeSaved() {
+		recoveryCodeToShow = '';
+		syncEnabled = true;
+		syncView = 'status';
+	}
+
+	async function doSyncSignOut() {
+		await signOut(syncActionDeps);
+		syncEnabled = false;
+		backToSyncChoose();
+	}
+
+	async function doDeleteAccount() {
+		if (!deleteAccountArmed) {
+			deleteAccountArmed = true;
+			return;
+		}
+		deletingAccount = true;
+		deleteAccountError = '';
+		const ok = await deleteAccount({
+			setBusy: () => {},
+			setError: (e) => (deleteAccountError = e)
+		});
+		deletingAccount = false;
+		if (ok) {
+			deleteAccountArmed = false;
+			syncEnabled = false;
+			backToSyncChoose();
+		}
+	}
+
+	function formatSyncTime(iso: string | null): string {
+		if (!iso) return 'never';
+		const ms = Date.now() - new Date(iso).getTime();
+		if (ms < 60_000) return 'just now';
+		if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+		if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+		return new Date(iso).toLocaleDateString();
+	}
+
+	// Separate from the async onMount below — an async callback's return value
+	// is a Promise, not a function, so Svelte can't use it for cleanup. This
+	// one stays sync so the onSyncStatusChange() unsubscribe actually runs.
+	onMount(() => {
+		return onSyncStatusChange((s) => (syncStatus = s));
+	});
+
 	// ── Persistence ───────────────────────────────────────────────────────────
 	onMount(async () => {
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		myQueueName = getQueueName();
 		queueColors = getQueueColors();
+
+		syncEnabled = await isSyncEnabled();
+		if (syncEnabled) syncView = 'status';
 
 		items = await getAll();
 		collections = listCollections(items);
@@ -451,6 +618,283 @@
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
+	<!-- Sync -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Sync</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Keep your queue in sync across devices. End-to-end encrypted — Queuest never sees your data,
+			only ciphertext. <span class="font-medium text-teal-600 dark:text-teal-400"
+				>Free during beta.</span
+			>
+		</p>
+
+		{#if syncView === 'choose'}
+			<div class="flex flex-wrap gap-2">
+				<button
+					onclick={() => {
+						syncError = '';
+						syncView = 'signup';
+					}}
+					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+				>
+					Enable sync
+				</button>
+				<button
+					onclick={() => {
+						syncError = '';
+						syncView = 'signin';
+					}}
+					class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+				>
+					Sign in
+				</button>
+			</div>
+		{:else if syncView === 'signup'}
+			<div class="space-y-3">
+				<div
+					class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+				>
+					Your passphrase encrypts your data — Queuest never sees it and cannot reset it.
+					<strong>If you lose it, your synced data is gone for good</strong> unless you've saved the recovery
+					code you'll get on the next screen.
+				</div>
+				<input
+					type="email"
+					aria-label="Email"
+					placeholder="Email"
+					bind:value={syncEmail}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				<input
+					type="password"
+					aria-label="Passphrase"
+					placeholder="Passphrase (min. 8 characters)"
+					bind:value={syncPassphrase}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				<input
+					type="password"
+					aria-label="Confirm passphrase"
+					placeholder="Confirm passphrase"
+					bind:value={syncPassphraseConfirm}
+					onkeydown={(e) => e.key === 'Enter' && submitSyncSignup()}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				{#if syncError}<p class="text-xs text-red-500">{syncError}</p>{/if}
+				<div class="flex gap-2">
+					<button
+						onclick={submitSyncSignup}
+						disabled={!syncEmail || !syncPassphrase || syncBusy}
+						class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					>
+						{syncBusy ? 'Creating…' : 'Create account'}
+					</button>
+					<button
+						onclick={backToSyncChoose}
+						class="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+					>
+						Back
+					</button>
+				</div>
+			</div>
+		{:else if syncView === 'signin'}
+			<div class="space-y-3">
+				<input
+					type="email"
+					aria-label="Email"
+					placeholder="Email"
+					bind:value={syncEmail}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				<input
+					type="password"
+					aria-label="Passphrase"
+					placeholder="Passphrase"
+					bind:value={syncPassphrase}
+					onkeydown={(e) => e.key === 'Enter' && submitSyncSignin()}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				{#if syncError}<p class="text-xs text-red-500">{syncError}</p>{/if}
+				<div class="flex flex-wrap items-center gap-2">
+					<button
+						onclick={submitSyncSignin}
+						disabled={!syncEmail || !syncPassphrase || syncBusy}
+						class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					>
+						{syncBusy ? 'Signing in…' : 'Sign in'}
+					</button>
+					<button
+						onclick={backToSyncChoose}
+						class="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+					>
+						Back
+					</button>
+					<button
+						onclick={() => {
+							syncError = '';
+							syncView = 'recover';
+						}}
+						class="ml-auto text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+					>
+						Forgot your passphrase?
+					</button>
+				</div>
+			</div>
+		{:else if syncView === 'recover'}
+			<div class="space-y-3">
+				<p class="text-xs text-gray-500">
+					Enter the recovery code you saved when you enabled sync. You'll be asked to set a new
+					passphrase afterward.
+				</p>
+				<input
+					type="email"
+					aria-label="Email"
+					placeholder="Email"
+					bind:value={syncEmail}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				<input
+					type="text"
+					aria-label="Recovery code"
+					placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+					bind:value={syncRecoveryCodeInput}
+					onkeydown={(e) => e.key === 'Enter' && submitSyncRecover()}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 font-mono text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				{#if syncError}<p class="text-xs text-red-500">{syncError}</p>{/if}
+				<div class="flex gap-2">
+					<button
+						onclick={submitSyncRecover}
+						disabled={!syncEmail || !syncRecoveryCodeInput || syncBusy}
+						class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					>
+						{syncBusy ? 'Verifying…' : 'Continue'}
+					</button>
+					<button
+						onclick={backToSyncChoose}
+						class="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+					>
+						Back
+					</button>
+				</div>
+			</div>
+		{:else if syncView === 'recover-new-passphrase'}
+			<div class="space-y-3">
+				<p class="text-xs text-gray-500">
+					You're back in. Set a new passphrase to finish — the old one no longer works.
+				</p>
+				<input
+					type="password"
+					aria-label="New passphrase"
+					placeholder="New passphrase (min. 8 characters)"
+					bind:value={syncNewPassphrase}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				<input
+					type="password"
+					aria-label="Confirm new passphrase"
+					placeholder="Confirm new passphrase"
+					bind:value={syncPassphraseConfirm}
+					onkeydown={(e) => e.key === 'Enter' && submitSyncNewPassphrase()}
+					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				/>
+				{#if syncError}<p class="text-xs text-red-500">{syncError}</p>{/if}
+				<button
+					onclick={submitSyncNewPassphrase}
+					disabled={!syncNewPassphrase || syncBusy}
+					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+				>
+					{syncBusy ? 'Saving…' : 'Set new passphrase'}
+				</button>
+			</div>
+		{:else if syncView === 'recovery-code'}
+			<div class="space-y-3">
+				<div
+					class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+				>
+					<strong>Save this recovery code somewhere safe — print it or write it down.</strong> It's the
+					only way back into your account if you forget your passphrase. It won't be shown again.
+				</div>
+				<div class="rounded-lg bg-gray-100 px-4 py-4 text-center dark:bg-gray-900">
+					<p class="text-xs text-gray-500 dark:text-gray-400">Account</p>
+					<p class="mb-2 text-sm font-medium">{syncEmail}</p>
+					<p class="text-xs text-gray-500 dark:text-gray-400">Recovery code</p>
+					<p class="font-mono text-base font-semibold tracking-wide sm:text-lg">
+						{recoveryCodeToShow}
+					</p>
+				</div>
+				<button
+					onclick={() => navigator.clipboard?.writeText(recoveryCodeToShow)}
+					class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+				>
+					Copy to clipboard
+				</button>
+				<label class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+					<input type="checkbox" bind:checked={recoveryCodeSaved} class="mt-0.5" />
+					I've saved this recovery code somewhere safe.
+				</label>
+				<button
+					onclick={confirmRecoveryCodeSaved}
+					disabled={!recoveryCodeSaved}
+					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+				>
+					Continue
+				</button>
+			</div>
+		{:else if syncView === 'status'}
+			<div class="space-y-3">
+				<div class="flex items-center gap-2 text-sm">
+					<span
+						class="h-2 w-2 shrink-0 rounded-full {syncStatus.status === 'idle'
+							? 'bg-teal-500'
+							: syncStatus.status === 'syncing'
+								? 'animate-pulse bg-orange-400'
+								: syncStatus.status === 'offline'
+									? 'bg-gray-400'
+									: 'bg-red-500'}"
+						aria-hidden="true"
+					></span>
+					<span class="font-medium">
+						{#if syncStatus.status === 'idle'}
+							Synced
+						{:else if syncStatus.status === 'syncing'}
+							Syncing…
+						{:else if syncStatus.status === 'offline'}
+							Offline
+						{:else}
+							Sync error
+						{/if}
+					</span>
+					<span class="text-gray-400">· {syncEmail || syncStatus.email}</span>
+				</div>
+				<p class="text-xs text-gray-500 dark:text-gray-400">
+					Last synced: {formatSyncTime(syncStatus.lastSyncedAt)}
+				</p>
+				{#if syncStatus.status === 'error' && syncStatus.error}
+					<p class="text-xs text-red-500">{syncStatus.error}</p>
+				{/if}
+				<div class="flex flex-wrap gap-2">
+					<button
+						onclick={() => syncNow()}
+						disabled={syncStatus.status === 'syncing'}
+						class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+					>
+						Sync now
+					</button>
+					<button
+						onclick={doSyncSignOut}
+						disabled={syncBusy}
+						class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+					>
+						Sign out
+					</button>
+				</div>
+			</div>
+		{/if}
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
 	<!-- Export -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Export Watchlist</h2>
@@ -559,6 +1003,51 @@
 		{/if}
 		{#if resetError}
 			<p class="text-xs text-red-600 dark:text-red-400">{resetError}</p>
+		{/if}
+
+		{#if syncEnabled}
+			<div class="border-t border-red-100 pt-3 dark:border-red-900/30">
+				<p class="text-sm text-gray-600 dark:text-gray-400">
+					Permanently deletes your account and everything synced to it — the encrypted blob, both
+					recovery credentials, all of it.
+					<span class="font-medium text-red-500">This cannot be undone.</span> Local data on this device
+					is untouched; this only stops syncing.
+				</p>
+				{#if deleteAccountArmed}
+					<div
+						class="mt-2 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/40 dark:bg-red-950/20"
+					>
+						<span class="text-sm text-red-700 dark:text-red-400"
+							>Are you sure? Your account will be gone.</span
+						>
+						<div class="ml-auto flex gap-2">
+							<button
+								onclick={() => (deleteAccountArmed = false)}
+								class="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-600 ring-1 ring-gray-300 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700"
+							>
+								Cancel
+							</button>
+							<button
+								onclick={doDeleteAccount}
+								disabled={deletingAccount}
+								class="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-400 disabled:opacity-50"
+							>
+								{deletingAccount ? 'Deleting…' : 'Yes, delete my account'}
+							</button>
+						</div>
+					</div>
+				{:else}
+					<button
+						onclick={doDeleteAccount}
+						class="mt-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-950/30"
+					>
+						Delete account
+					</button>
+				{/if}
+				{#if deleteAccountError}
+					<p class="mt-2 text-xs text-red-600 dark:text-red-400">{deleteAccountError}</p>
+				{/if}
+			</div>
 		{/if}
 	</section>
 
