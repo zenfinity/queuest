@@ -1,13 +1,14 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { getAll, getServices, toggleService } from '$lib/db';
 	import { services, setSubscribedIds } from '$lib/services.svelte';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { aggregateByProvider, saveBudgetPrefs } from '$lib/progress';
+	import { aggregateByProvider, saveBudgetPrefs, formatMonthsEquivalent } from '$lib/progress';
 	import { readNumber } from '$lib/storage';
+	import { scrollToHashTarget } from '$lib/scroll-to-hash';
 	import type { Provider, Suggestion } from '$lib/types';
 
 	// ── Onboarding ────────────────────────────────────────────────────────────
@@ -118,6 +119,12 @@
 			}))
 			.sort((a, b) => b.runtime_minutes - a.runtime_minutes);
 		suggestionsLoaded = true;
+
+		// #suggest only exists in the DOM from here on (ssr=false + this async
+		// fetch means the browser's native anchor-scroll had nothing to jump to
+		// at initial load) — wait for the {#if} below to actually render it.
+		await tick();
+		scrollToHashTarget();
 	});
 </script>
 
@@ -285,6 +292,11 @@
 									{formatRuntime(suggestion.runtime_minutes, 'tv')} remaining · {suggestion.title_count}
 									{suggestion.title_count === 1 ? 'title' : 'titles'}
 								</p>
+								{#if budgetHours > 0}
+									<p class="text-xs text-gray-400">
+										≈ {formatMonthsEquivalent(suggestion.runtime_minutes, budgetHours)} of your budget
+									</p>
+								{/if}
 							</div>
 
 							<!-- Bar — only meaningful with 3+ providers -->

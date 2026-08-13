@@ -1,6 +1,36 @@
 import { describe, it, expect } from 'vitest';
-import { releaseChip, remainingRuntime, cancelCandidates } from './progress';
+import {
+	releaseChip,
+	remainingRuntime,
+	cancelCandidates,
+	formatMonthsEquivalent
+} from './progress';
 import type { WatchlistItem, ReleaseInfo } from './types';
+
+describe('formatMonthsEquivalent', () => {
+	it('returns empty string when there is no budget to divide by', () => {
+		expect(formatMonthsEquivalent(600, 0)).toBe('');
+		expect(formatMonthsEquivalent(600, -5)).toBe('');
+	});
+
+	it('formats a whole number of months without a decimal', () => {
+		// 40 budget hours/month, 4800 minutes = 80 hours = 2 months
+		expect(formatMonthsEquivalent(4800, 40)).toBe('2 months');
+	});
+
+	it('formats a fractional month to one decimal place', () => {
+		// 40 budget hours/month, 3600 minutes = 60 hours = 1.5 months
+		expect(formatMonthsEquivalent(3600, 40)).toBe('1.5 months');
+	});
+
+	it('uses singular "month" for exactly 1', () => {
+		expect(formatMonthsEquivalent(2400, 40)).toBe('1 month');
+	});
+
+	it('floors very small amounts to "<0.1 months" instead of "0 months"', () => {
+		expect(formatMonthsEquivalent(30, 40)).toBe('<0.1 months');
+	});
+});
 
 function makeItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
 	return {

@@ -29,6 +29,7 @@
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
+	import NavHint from '$lib/components/NavHint.svelte';
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	function loadPref<T extends string>(key: string, fallback: T): T {
@@ -296,6 +297,8 @@
 		</div>
 	{/if}
 {/snippet}
+
+<NavHint show={loaded && items.length > 0} />
 
 <div class="space-y-4 xs:space-y-6 {loaded && items.length > 0 ? 'pb-24 lg:pb-0' : ''}">
 	<!-- Storage error -->
