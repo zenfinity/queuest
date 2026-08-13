@@ -117,6 +117,8 @@
 
 <svelte:head><title>Queuest — Share</title></svelte:head>
 
+<h1 class="sr-only">Share</h1>
+
 <div class="space-y-5 xs:space-y-8">
 	<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Share Your Queue</h2>
 
@@ -151,6 +153,7 @@
 				<div class="flex gap-0.5 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
 					{#each [['all', 'All'], ['movie', 'Movies'], ['tv', 'TV']] as const as [key, label] (key)}
 						<button
+							aria-pressed={shareType === key}
 							class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
 							{shareType === key
 								? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white dark:shadow-none'

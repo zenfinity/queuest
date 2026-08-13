@@ -33,6 +33,7 @@
 		<div class="flex gap-0.5 rounded-full bg-gray-100 p-[3px] dark:bg-white/5">
 			<button
 				aria-label="Card view"
+				aria-pressed={queueControls.viewMode === 'grid'}
 				onclick={() => (queueControls.viewMode = 'grid')}
 				class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {queueControls.viewMode ===
 				'grid'
@@ -58,6 +59,7 @@
 			</button>
 			<button
 				aria-label="List view"
+				aria-pressed={queueControls.viewMode === 'list'}
 				onclick={() => (queueControls.viewMode = 'list')}
 				class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {queueControls.viewMode ===
 				'list'
@@ -76,6 +78,7 @@
 			</button>
 			<button
 				aria-label="Timeline view"
+				aria-pressed={queueControls.viewMode === 'lanes'}
 				onclick={() => (queueControls.viewMode = 'lanes')}
 				class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {queueControls.viewMode ===
 				'lanes'
@@ -98,6 +101,9 @@
 
 		<!-- Watched toggle -->
 		<button
+			role="switch"
+			aria-checked={queueControls.watchedOn}
+			aria-label="Show watched items"
 			onclick={() => (queueControls.watchedOn = !queueControls.watchedOn)}
 			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-colors
 				{queueControls.watchedOn
@@ -112,6 +118,8 @@
 		<div class="relative">
 			<button
 				aria-label="Sort and filter"
+				aria-expanded={queueControls.filterOpen}
+				aria-controls="queue-filter-popover"
 				onclick={() => (queueControls.filterOpen = !queueControls.filterOpen)}
 				class="relative flex items-center rounded-full px-2.5 py-1.5 text-gray-500 dark:text-gray-400"
 			>
@@ -128,6 +136,7 @@
 
 			{#if queueControls.filterOpen}
 				<div
+					id="queue-filter-popover"
 					class="{floating
 						? 'fixed bottom-20 left-1/2 -translate-x-1/2'
 						: 'absolute right-0 top-full mt-2'} z-[55] w-52 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-gray-900"
@@ -148,6 +157,7 @@
 						<div class="flex items-center gap-0.5">
 							<button
 								onclick={() => setSortBy(key)}
+								aria-pressed={queueControls.sortBy === key}
 								class="flex flex-1 items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
 									{queueControls.sortBy === key
 									? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
@@ -183,6 +193,7 @@
 								if (!isDisabled) queueControls.serviceFilter = key;
 							}}
 							disabled={isDisabled}
+							aria-pressed={queueControls.serviceFilter === key && !isDisabled}
 							title={isDisabled ? 'Select services on the Budget page first' : undefined}
 							class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
 								{isDisabled
@@ -209,6 +220,7 @@
 							>
 							<button
 								onclick={() => (queueControls.groupByCollection = !queueControls.groupByCollection)}
+								aria-pressed={queueControls.groupByCollection}
 								class="text-[10px] font-medium transition-colors {queueControls.groupByCollection
 									? 'text-orange-500 hover:text-orange-400'
 									: 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}"
@@ -219,6 +231,7 @@
 						{#each [[null, 'All'], ...queueControls.collectionNames.map( (c) => [c, c] ), [UNCATEGORIZED, 'Uncategorized']] as [key, label] (key ?? '__all__')}
 							<button
 								onclick={() => (queueControls.collectionFilter = key)}
+								aria-pressed={queueControls.collectionFilter === key}
 								class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
 									{queueControls.collectionFilter === key
 									? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'

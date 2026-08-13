@@ -130,6 +130,8 @@
 
 <svelte:head><title>Queuest — Budget</title></svelte:head>
 
+<h1 class="sr-only">Budget</h1>
+
 <div class="mx-auto max-w-md space-y-8">
 	<!-- Viewing Budget -->
 	<section class="space-y-3">
@@ -146,6 +148,7 @@
 		<div class="flex flex-wrap items-center gap-2 text-sm">
 			<input
 				type="number"
+				aria-label="Hours per week"
 				min="1"
 				max="24"
 				step="0.5"
@@ -155,6 +158,7 @@
 			<span class="text-gray-600 dark:text-gray-400">hrs ×</span>
 			<input
 				type="number"
+				aria-label="Weeks per month"
 				min="1"
 				max="6"
 				step="0.5"
@@ -193,6 +197,7 @@
 					{#each providers as provider (provider.provider_id)}
 						<button
 							onclick={() => handleToggle(provider)}
+							aria-pressed={subscribedIds.has(provider.provider_id)}
 							style:border-color={subscribedIds.has(provider.provider_id)
 								? '#22c55e'
 								: 'transparent'}

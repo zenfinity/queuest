@@ -4,7 +4,7 @@
 	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
-	import { remainingRuntime, releaseChip } from '$lib/progress';
+	import { remainingRuntime, releaseChip, hms } from '$lib/progress';
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import { groupIntoCollections, type CollectionSection } from '$lib/queue-actions';
@@ -202,6 +202,7 @@
 <div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 	{#if groupByCollection}
 		{#each sections as section (section.name)}
+			{@const sectionRemainingMins = section.items.reduce((sum, i) => sum + remainingRuntime(i), 0)}
 			<div class="col-span-full flex items-center gap-2 pt-3 first:pt-0">
 				<span
 					class="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -211,9 +212,17 @@
 					{section.name}
 				</h3>
 				<span class="text-[10px] text-gray-400 dark:text-gray-600">{section.items.length}</span>
+				<span class="text-[10px] text-gray-400 dark:text-gray-600"
+					>· {hms(sectionRemainingMins)}</span
+				>
 			</div>
 			{#each section.items as item (item.id)}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				<!-- Card click is a convenience only — the poster button inside cardContent
+				     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
+				     action, so this div is deliberately not a second, nested interactive element. -->
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer"
@@ -221,14 +230,6 @@
 					onclick={(e) => {
 						e.stopPropagation();
 						onOpenDetail(item);
-					}}
-					role="button"
-					tabindex="0"
-					aria-label="View details for {item.title}"
-					onkeydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							onOpenDetail(item);
-						}
 					}}
 				>
 					{@render cardContent(item, tagColor)}
@@ -238,6 +239,9 @@
 	{:else}
 		{#each items as item (item.id)}
 			{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+			<!-- Card click is a convenience only — see the grouped branch above. -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 				class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer"
@@ -245,14 +249,6 @@
 				onclick={(e) => {
 					e.stopPropagation();
 					onOpenDetail(item);
-				}}
-				role="button"
-				tabindex="0"
-				aria-label="View details for {item.title}"
-				onkeydown={(e) => {
-					if (e.key === 'Enter' || e.key === ' ') {
-						onOpenDetail(item);
-					}
 				}}
 			>
 				{@render cardContent(item, tagColor)}
