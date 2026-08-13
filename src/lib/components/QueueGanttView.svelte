@@ -198,7 +198,7 @@
 							data-item
 						>
 							<button
-								class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none {isActive
+								class="group relative flex h-full w-full items-stretch overflow-hidden transition-all duration-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-orange-400 {isActive
 									? 'ring-2 ring-white/50 brightness-125'
 									: 'hover:brightness-110'}"
 								style="background:{colors.barGradient}; box-shadow: inset 0 0 0 1px {colors.barStroke.replace(

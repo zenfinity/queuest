@@ -4,6 +4,7 @@
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { releaseChip, remainingRuntime } from '$lib/progress';
 	import { providerHue } from '$lib/colors';
+	import { trapFocus } from '$lib/focus-trap';
 
 	// Structural subset shared by WatchlistItem (queue) and SearchResult (add) —
 	// both satisfy this without adapting, since Svelte/TS typing is structural.
@@ -63,8 +64,19 @@
 	// A caller can switch `item` directly (e.g. clicking a different poster
 	// while the panel is already open) without the panel ever closing, so this
 	// component — not just `close()` — has to clear per-item UI state itself.
+	//
+	// #171: reset only when `item.id`'s *value* actually changes, not merely
+	// when `item` is a new object with the same id — a caller can (and does,
+	// e.g. app/+page.svelte's onSetCollection callback) reassign `item` to a
+	// fresh object reference for the same title after a reload. Reading
+	// `item.id` alone doesn't protect against that: Svelte reruns this effect
+	// whenever the `item` prop itself is reassigned, regardless of whether
+	// the id it reads back out is unchanged, so a naive version could still
+	// stomp `collectionOpen` back to false immediately after Change… sets it.
+	let lastItemId: number | undefined;
 	$effect(() => {
-		void item.id;
+		if (item.id === lastItemId) return;
+		lastItemId = item.id;
 		overviewExpanded = false;
 		posterExpanded = false;
 		releasePopupOpen = false;
@@ -109,12 +121,22 @@
 <div
 	class="fixed bottom-0 inset-x-0 z-50 flex max-h-[90vh] flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-gray-900 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[22rem] sm:max-h-none sm:rounded-t-none sm:rounded-l-2xl"
 	data-detail-panel
+	role="dialog"
+	aria-modal="true"
+	aria-labelledby="detail-panel-title"
+	tabindex="-1"
+	use:trapFocus={{ onEscape: close }}
 >
 	<!-- Title bar -->
 	<div
 		class="shrink-0 flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800"
 	>
-		<h2 class="truncate pr-2 text-sm font-semibold text-gray-900 dark:text-white">{item.title}</h2>
+		<h2
+			id="detail-panel-title"
+			class="truncate pr-2 text-sm font-semibold text-gray-900 dark:text-white"
+		>
+			{item.title}
+		</h2>
 		<button
 			onclick={close}
 			class="shrink-0 rounded-full p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
@@ -189,9 +211,12 @@
 							<button
 								onclick={async () => {
 									collectionBusy = true;
-									await onSetCollection(null);
-									collectionBusy = false;
-									collectionOpen = false;
+									try {
+										await onSetCollection(null);
+										collectionOpen = false;
+									} finally {
+										collectionBusy = false;
+									}
 								}}
 								disabled={collectionBusy}
 								class="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
@@ -210,9 +235,12 @@
 							<button
 								onclick={async () => {
 									collectionBusy = true;
-									await onSetCollection(collection);
-									collectionBusy = false;
-									collectionOpen = false;
+									try {
+										await onSetCollection(collection);
+										collectionOpen = false;
+									} finally {
+										collectionBusy = false;
+									}
 								}}
 								disabled={collectionBusy}
 								class="text-left text-xs px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
@@ -229,10 +257,13 @@
 								if (e.key === 'Enter' && newCollectionInput.trim()) {
 									e.preventDefault();
 									collectionBusy = true;
-									await onSetCollection(newCollectionInput.trim());
-									collectionBusy = false;
-									collectionOpen = false;
-									newCollectionInput = '';
+									try {
+										await onSetCollection(newCollectionInput.trim());
+										collectionOpen = false;
+										newCollectionInput = '';
+									} finally {
+										collectionBusy = false;
+									}
 								}
 							}}
 							class="text-xs px-2 py-1.5 rounded border border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
@@ -465,10 +496,14 @@
 <!-- Poster lightbox -->
 {#if posterExpanded && item.poster_path}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm cursor-zoom-out"
 		onclick={() => (posterExpanded = false)}
+		role="dialog"
+		aria-modal="true"
+		aria-label="{item.title} poster, enlarged"
+		tabindex="-1"
+		use:trapFocus={{ onEscape: () => (posterExpanded = false) }}
 	>
 		<img
 			src="{TMDB_IMG}/w500{item.poster_path}"

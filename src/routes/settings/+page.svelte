@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
+	import { trapFocus } from '$lib/focus-trap';
 	import {
 		buildExportBlob,
 		refreshProviders,
@@ -255,6 +256,8 @@
 
 <svelte:head><title>Queuest — Settings</title></svelte:head>
 
+<h1 class="sr-only">Settings</h1>
+
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
 	<!-- Appearance -->
 	<section class="space-y-3">
@@ -280,6 +283,7 @@
 		</p>
 		<input
 			type="text"
+			aria-label="Queue name"
 			placeholder="My Queue"
 			bind:value={myQueueName}
 			oninput={saveQueueName}
@@ -312,8 +316,10 @@
 						<div class="flex items-center gap-2.5 min-w-0 flex-1">
 							<span class="h-3 w-3 shrink-0 rounded-full" style="background:{color};"></span>
 							{#if isRenaming}
+								<!-- svelte-ignore a11y_autofocus -->
 								<input
 									type="text"
+									aria-label="New collection name"
 									maxlength="40"
 									value={renameInput}
 									oninput={(e) => (renameInput = e.currentTarget.value)}
@@ -376,6 +382,7 @@
 									></span>
 									<input
 										type="color"
+										aria-label="Collection color"
 										value={color}
 										oninput={(e) =>
 											updateCollectionColor(
@@ -428,6 +435,7 @@
 			<button
 				role="switch"
 				aria-checked={cancelAlertsEnabled}
+				aria-label="Show cancellation alerts"
 				onclick={toggleCancelAlerts}
 				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors
 					{cancelAlertsEnabled ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}"
@@ -454,6 +462,7 @@
 		<div class="flex gap-2">
 			<input
 				type="password"
+				aria-label="Export passphrase"
 				placeholder="Passphrase"
 				bind:value={exportPassphrase}
 				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
@@ -611,12 +620,21 @@
 		onclick={closeFeedback}
 	>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900"
 			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="feedback-modal-title"
+			tabindex="-1"
+			use:trapFocus={{ onEscape: closeFeedback }}
 		>
-			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Send Feedback</h2>
+			<h2
+				id="feedback-modal-title"
+				class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
+			>
+				Send Feedback
+			</h2>
 			<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
 				This opens a public GitHub issue — don't include personal info. Check
 				<a
@@ -631,11 +649,13 @@
 			<div class="space-y-3">
 				<input
 					type="text"
+					aria-label="Feedback title"
 					placeholder="Title (required)"
 					bind:value={feedbackTitle}
 					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
 				/>
 				<textarea
+					aria-label="Feedback details"
 					placeholder="Details (optional)"
 					bind:value={feedbackBody}
 					rows="4"

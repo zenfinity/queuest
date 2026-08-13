@@ -55,6 +55,8 @@
 	<title>Queuest — Add</title>
 </svelte:head>
 
+<h1 class="sr-only">Add</h1>
+
 <div class="space-y-5 xs:space-y-8">
 	<div class="space-y-2">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Search</h2>

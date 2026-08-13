@@ -82,6 +82,25 @@ export function hms(mins: number): string {
 }
 
 /**
+ * Frames a runtime as "how many months of my viewing budget is this worth" —
+ * e.g. "1.5 months" — rather than a raw hour/minute count. `budgetHoursPerMonth`
+ * is the same `hoursPerWeek * weeksPerMonth` derivation already used on the
+ * Budget page. Returns '' when there's no budget to divide by (caller should
+ * skip rendering rather than show a nonsense "of your budget" line).
+ */
+export function formatMonthsEquivalent(
+	runtimeMinutes: number,
+	budgetHoursPerMonth: number
+): string {
+	if (budgetHoursPerMonth <= 0) return '';
+	const months = runtimeMinutes / 60 / budgetHoursPerMonth;
+	if (months < 0.1) return '<0.1 months';
+	const rounded = Math.round(months * 10) / 10;
+	const label = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+	return `${label} month${rounded === 1 ? '' : 's'}`;
+}
+
+/**
  * Returns the remaining watch time for an item in minutes.
  *
  * For movies: always returns total runtime (or default).

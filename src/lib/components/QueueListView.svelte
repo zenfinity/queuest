@@ -217,6 +217,7 @@
 {#if groupByCollection}
 	<div class="space-y-4">
 		{#each sections as section (section.name)}
+			{@const sectionRemainingMins = section.items.reduce((sum, i) => sum + remainingRuntime(i), 0)}
 			<div>
 				<div class="flex items-center gap-2 pb-1.5">
 					<span
@@ -229,10 +230,18 @@
 						{section.name}
 					</h3>
 					<span class="text-[10px] text-gray-400 dark:text-gray-600">{section.items.length}</span>
+					<span class="text-[10px] text-gray-400 dark:text-gray-600"
+						>· {hms(sectionRemainingMins)}</span
+					>
 				</div>
 				<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
 					{#each section.items as item (item.id)}
 						{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+						<!-- Row click is a convenience only — the title button inside rowContent
+						     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
+						     action, so this div is deliberately not a second, nested interactive element. -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 							class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer"
@@ -240,14 +249,6 @@
 							onclick={(e) => {
 								e.stopPropagation();
 								onOpenDetail(item);
-							}}
-							role="button"
-							tabindex="0"
-							aria-label="View details for {item.title}"
-							onkeydown={(e) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									onOpenDetail(item);
-								}
 							}}
 						>
 							{@render rowContent(item, tagColor)}
@@ -261,6 +262,9 @@
 	<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
 		{#each items as item (item.id)}
 			{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+			<!-- Row click is a convenience only — see the grouped branch above. -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 				class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer"
@@ -268,14 +272,6 @@
 				onclick={(e) => {
 					e.stopPropagation();
 					onOpenDetail(item);
-				}}
-				role="button"
-				tabindex="0"
-				aria-label="View details for {item.title}"
-				onkeydown={(e) => {
-					if (e.key === 'Enter' || e.key === ' ') {
-						onOpenDetail(item);
-					}
 				}}
 			>
 				{@render rowContent(item, tagColor)}

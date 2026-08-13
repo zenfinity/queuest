@@ -29,6 +29,7 @@
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
+	import NavHint from '$lib/components/NavHint.svelte';
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	function loadPref<T extends string>(key: string, fallback: T): T {
@@ -297,6 +298,10 @@
 	{/if}
 {/snippet}
 
+<NavHint show={loaded && items.length > 0} />
+
+<h1 class="sr-only">My Queue</h1>
+
 <div class="space-y-4 xs:space-y-6 {loaded && items.length > 0 ? 'pb-24 lg:pb-0' : ''}">
 	<!-- Storage error -->
 	{#if dbError}
@@ -376,6 +381,7 @@
 			<div class="flex flex-wrap items-center gap-2 text-sm">
 				<input
 					type="number"
+					aria-label="Hours per week"
 					min="1"
 					max="24"
 					step="0.5"
@@ -385,6 +391,7 @@
 				<span class="text-orange-700 dark:text-orange-400">hrs ×</span>
 				<input
 					type="number"
+					aria-label="Weeks per month"
 					min="1"
 					max="6"
 					step="0.5"

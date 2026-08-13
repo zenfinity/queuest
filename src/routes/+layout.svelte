@@ -106,6 +106,15 @@
 	let touchStartY = 0;
 	let touchStartTime = 0;
 
+	/** Shared by swipe and the #168 keyboard shortcut: step to the adjacent
+	 * main tab, or no-op past the first/last one or off a main-tab page. */
+	function stepTab(direction: 1 | -1) {
+		const currentIndex = navLinks.findIndex((l) => isActive(l.href, l.exact));
+		if (currentIndex === -1) return; // not on a main-tab page (settings, search, landing)
+		const target = navLinks[currentIndex + direction];
+		if (target) void goto(resolve(target.href));
+	}
+
 	function handleTouchStart(e: TouchEvent) {
 		const target = e.target as Element;
 		// data-detail-panel: DetailPanel's cast list scrolls horizontally.
@@ -129,12 +138,25 @@
 		if (Math.abs(dy) > SWIPE_MAX_OFF_AXIS) return; // vertical scroll, not a swipe
 		if (Math.abs(dx) < SWIPE_MIN_DISTANCE) return;
 
-		const currentIndex = navLinks.findIndex((l) => isActive(l.href, l.exact));
-		if (currentIndex === -1) return; // not on a main-tab page (settings, search, landing)
+		stepTab(dx < 0 ? 1 : -1);
+	}
 
-		const nextIndex = dx < 0 ? currentIndex + 1 : currentIndex - 1;
-		const target = navLinks[nextIndex];
-		if (target) void goto(resolve(target.href));
+	// ── Keyboard navigation (#168) — the desktop equivalent of swipe. ───────
+	// Alt+ArrowRight/Left steps between tabs, same order and boundary
+	// behavior as the swipe. Skipped while focus is in a text input/textarea
+	// so it doesn't fight the OS/browser's own Alt+arrow text-navigation
+	// shortcuts, and skipped on Mac's Option+Arrow-as-word-jump equivalent
+	// for the same reason (both land here as e.altKey).
+	function handleKeydown(e: KeyboardEvent) {
+		if (!e.altKey || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
+		// e.target is `document` itself, not an Element, when nothing has focus.
+		if (
+			e.target instanceof Element &&
+			e.target.closest('input, textarea, [contenteditable="true"]')
+		)
+			return;
+		e.preventDefault();
+		stepTab(e.key === 'ArrowRight' ? 1 : -1);
 	}
 
 	onMount(() => {
@@ -173,6 +195,7 @@
 		if (queueControls.filterOpen && !t.closest('[data-queue-dock]'))
 			queueControls.filterOpen = false;
 	}}
+	onkeydown={handleKeydown}
 />
 
 <div class="min-h-screen w-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">

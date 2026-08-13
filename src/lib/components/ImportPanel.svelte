@@ -185,6 +185,7 @@
 		</p>
 		<input
 			type="file"
+			aria-label="Backup file"
 			accept=".queuest"
 			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
 			onchange={onRestoreFileChange}
@@ -192,6 +193,7 @@
 		<div class="flex gap-2">
 			<input
 				type="password"
+				aria-label="Restore passphrase"
 				placeholder="Passphrase"
 				bind:value={restorePassphrase}
 				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
@@ -248,6 +250,7 @@
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Upload CSV</h2>
 		<input
 			type="file"
+			aria-label="CSV file"
 			accept=".csv"
 			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
 			onchange={onCsvFileChange}
@@ -261,6 +264,7 @@
 			<div class="relative flex-1">
 				<input
 					type="url"
+					aria-label="IMDb export link"
 					placeholder="https://… (IMDb export link)"
 					bind:value={csvUrl}
 					onkeydown={(e) => e.key === 'Enter' && fetchCsvUrl()}
@@ -321,6 +325,7 @@
 		</p>
 		<!-- eslint-disable svelte/no-useless-mustaches -- literal \n only survives inside an expression; Svelte collapses whitespace in static attribute text -->
 		<textarea
+			aria-label="Titles to import"
 			bind:value={textInput}
 			onpaste={(e) => {
 				const paste = e.clipboardData?.getData('text') ?? '';
