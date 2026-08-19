@@ -174,6 +174,7 @@
 	let renameInput = $state('');
 	let deleteArmed = $state<string | null>(null);
 	let manageBusy = $state(false);
+	let newCollectionInput = $state('');
 
 	function saveQueueName() {
 		setQueueName(myQueueName);
@@ -182,6 +183,22 @@
 	function updateCollectionColor(tag: string, color: string) {
 		setQueueColor(tag, color);
 		queueColors = { ...queueColors, [tag]: color };
+	}
+
+	// Collections aren't a stored entity of their own — a name only "exists"
+	// via items tagged with it, or (for one created here with nothing tagged
+	// yet) via a color-palette entry. Assigning a palette color is therefore
+	// enough to create an empty collection; see listCollections's extraNames.
+	function createCollection() {
+		const name = newCollectionInput.trim();
+		if (!name || collections.includes(name)) {
+			newCollectionInput = '';
+			return;
+		}
+		updateCollectionColor(name, queueColors[name] ?? '#888888');
+		collections = listCollections(items, Object.keys(queueColors));
+		updateCounts();
+		newCollectionInput = '';
 	}
 
 	async function renameCollection(oldName: string, newName: string) {
@@ -212,7 +229,7 @@
 			renameCollectionColor(oldName, newName);
 			// Update local state
 			queueColors = { ...queueColors };
-			collections = listCollections(items);
+			collections = listCollections(items, Object.keys(queueColors));
 			updateCounts();
 			renamingCollection = null;
 			renameInput = '';
@@ -241,7 +258,7 @@
 			deleteCollectionColor(name);
 			// Update local state
 			queueColors = { ...queueColors };
-			collections = listCollections(items);
+			collections = listCollections(items, Object.keys(queueColors));
 			updateCounts();
 			deleteArmed = null;
 		} finally {
@@ -416,7 +433,7 @@
 		if (syncEnabled) syncView = 'status';
 
 		items = await getAll();
-		collections = listCollections(items);
+		collections = listCollections(items, Object.keys(queueColors));
 		updateCounts();
 	});
 </script>
@@ -462,12 +479,34 @@
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
 	<!-- Collections -->
-	<section class="space-y-3">
+	<section id="collections" class="space-y-3 scroll-mt-4">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Collections</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Organize your queue into collections. Create new ones from the detail panel or by assigning
-			items. Importing a shared list automatically creates a collection.
+			Organize your queue into collections, then assign items to them from the detail panel.
+			Importing a shared list automatically creates a collection.
 		</p>
+		<form
+			class="flex gap-2"
+			onsubmit={(e) => {
+				e.preventDefault();
+				createCollection();
+			}}
+		>
+			<input
+				type="text"
+				maxlength="40"
+				placeholder="New collection…"
+				bind:value={newCollectionInput}
+				class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+			/>
+			<button
+				type="submit"
+				disabled={!newCollectionInput.trim()}
+				class="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-400 disabled:opacity-50"
+			>
+				Create
+			</button>
+		</form>
 		{#if collections.length === 0}
 			<p class="text-sm text-gray-400 dark:text-gray-600">No collections yet.</p>
 		{:else}

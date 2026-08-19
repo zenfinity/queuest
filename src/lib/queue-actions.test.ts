@@ -235,6 +235,14 @@ describe('listCollections', () => {
 
 		expect(result).toEqual([]);
 	});
+
+	it('merges in extraNames, deduped and sorted, for collections with no items yet', () => {
+		const items = [makeItem({ queue_tag: 'Favorites' })];
+
+		const result = listCollections(items, ['Weekend Watch', 'Favorites']);
+
+		expect(result).toEqual(['Favorites', 'Weekend Watch']);
+	});
 });
 
 describe('groupIntoCollections', () => {

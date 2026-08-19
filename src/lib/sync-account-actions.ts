@@ -52,19 +52,30 @@ export async function signUp(
 		await throwIfNotOk(res);
 		const { email: confirmedEmail } = (await res.json()) as { email: string };
 
-		const recoveryCode = generateRecoveryCode();
-		const recoveryAuthKey = await deriveAuthKey(normalizedEmail, recoveryCode);
-		const recoveryWrappedDek = b64urlEncode(new Uint8Array(await encrypt(dek, recoveryCode)));
-		const recRes = await postJson('/api/auth/recovery-code', {
-			recoveryAuthKey,
-			wrappedDek: recoveryWrappedDek
-		});
-		await throwIfNotOk(recRes);
+		// The account row now exists server-side, so any failure past this
+		// point can't be reported as a generic signup failure — retrying
+		// signUp() would just 409 against the account that was just created,
+		// while the user still has no recovery code. Sign-in already works at
+		// this point, so point them there instead of back through this form.
+		try {
+			const recoveryCode = generateRecoveryCode();
+			const recoveryAuthKey = await deriveAuthKey(normalizedEmail, recoveryCode);
+			const recoveryWrappedDek = b64urlEncode(new Uint8Array(await encrypt(dek, recoveryCode)));
+			const recRes = await postJson('/api/auth/recovery-code', {
+				recoveryAuthKey,
+				wrappedDek: recoveryWrappedDek
+			});
+			await throwIfNotOk(recRes);
 
-		await enableSyncWithDek(dek, confirmedEmail);
-		void syncNow();
+			await enableSyncWithDek(dek, confirmedEmail);
+			void syncNow();
 
-		return { email: confirmedEmail, recoveryCode };
+			return { email: confirmedEmail, recoveryCode };
+		} catch {
+			throw new Error(
+				'Your account was created, but setting up a recovery code failed. Sign in with your passphrase to finish setup.'
+			);
+		}
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not create your account.');
 		return null;
