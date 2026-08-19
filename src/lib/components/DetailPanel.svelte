@@ -5,6 +5,7 @@
 	import { releaseChip, remainingRuntime } from '$lib/progress';
 	import { providerHue } from '$lib/colors';
 	import { trapFocus } from '$lib/focus-trap';
+	import { goto } from '$app/navigation';
 
 	// Structural subset shared by WatchlistItem (queue) and SearchResult (add) —
 	// both satisfy this without adapting, since Svelte/TS typing is structural.
@@ -57,8 +58,6 @@
 	let overviewExpanded = $state(false);
 	let posterExpanded = $state(false);
 	let releasePopupOpen = $state(false);
-	let collectionOpen = $state(false);
-	let newCollectionInput = $state('');
 	let collectionBusy = $state(false);
 
 	// A caller can switch `item` directly (e.g. clicking a different poster
@@ -80,8 +79,6 @@
 		overviewExpanded = false;
 		posterExpanded = false;
 		releasePopupOpen = false;
-		collectionOpen = false;
-		newCollectionInput = '';
 	});
 
 	function close() {
@@ -195,98 +192,48 @@
 			<!-- Collection -->
 			{#if onSetCollection}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-				<div class="flex items-center justify-between">
+				<div class="flex items-center justify-between gap-2">
 					<span
 						class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
 						>Collection</span
 					>
-					{#if item.queue_tag}
-						<div class="flex items-center gap-2">
+					<div class="flex min-w-0 items-center gap-2">
+						{#if item.queue_tag}
 							<span
-								class="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold text-white"
+								class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold text-white"
 								style="background-color: {tagColor || '#6b7280'};"
 							>
 								{item.queue_tag}
 							</span>
-							<button
-								onclick={async () => {
-									collectionBusy = true;
-									try {
-										await onSetCollection(null);
-										collectionOpen = false;
-									} finally {
-										collectionBusy = false;
-									}
-								}}
-								disabled={collectionBusy}
-								class="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-								title="Remove collection"
-							>
-								✕
-							</button>
-						</div>
-					{:else}
-						<span class="text-xs text-gray-400">None</span>
-					{/if}
-				</div>
-				{#if collectionOpen}
-					<div class="flex flex-col gap-2">
-						{#each existingCollections.filter((c) => c !== item.queue_tag) as collection (collection)}
-							<button
-								onclick={async () => {
-									collectionBusy = true;
-									try {
-										await onSetCollection(collection);
-										collectionOpen = false;
-									} finally {
-										collectionBusy = false;
-									}
-								}}
-								disabled={collectionBusy}
-								class="text-left text-xs px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
-							>
-								{collection}
-							</button>
-						{/each}
-						<input
-							type="text"
-							maxlength="40"
-							placeholder="New collection…"
-							bind:value={newCollectionInput}
-							onkeydown={async (e) => {
-								if (e.key === 'Enter' && newCollectionInput.trim()) {
-									e.preventDefault();
-									collectionBusy = true;
-									try {
-										await onSetCollection(newCollectionInput.trim());
-										collectionOpen = false;
-										newCollectionInput = '';
-									} finally {
-										collectionBusy = false;
-									}
+						{/if}
+						<select
+							value={item.queue_tag ?? ''}
+							disabled={collectionBusy}
+							aria-label="Collection"
+							onchange={async (e) => {
+								const value = e.currentTarget.value;
+								if (value === '__manage__') {
+									e.currentTarget.value = item.queue_tag ?? '';
+									await goto('/settings#collections');
+									return;
+								}
+								collectionBusy = true;
+								try {
+									await onSetCollection(value || null);
+								} finally {
+									collectionBusy = false;
 								}
 							}}
-							class="text-xs px-2 py-1.5 rounded border border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-						/>
-						<button
-							onclick={() => {
-								collectionOpen = false;
-								newCollectionInput = '';
-							}}
-							class="text-xs px-2 py-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+							class="min-w-0 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
 						>
-							Close
-						</button>
+							<option value="">None</option>
+							{#each existingCollections as collection (collection)}
+								<option value={collection}>{collection}</option>
+							{/each}
+							<option value="__manage__">Manage collections…</option>
+						</select>
 					</div>
-				{:else}
-					<button
-						onclick={() => (collectionOpen = true)}
-						disabled={collectionBusy}
-						class="text-xs text-orange-500 hover:text-orange-400 disabled:opacity-50"
-					>
-						Change…
-					</button>
-				{/if}
+				</div>
 			{/if}
 
 			<!-- Overview -->

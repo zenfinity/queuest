@@ -97,8 +97,10 @@
 	// "queued" always means unwatched, independent of the Watched toggle — used for cancel alerts.
 	let queued = $derived(items.filter((i) => !i.watched_at));
 
-	// Existing collections in the queue for the detail panel picker.
-	let existingCollections = $derived(listCollections(items));
+	// Existing collections in the queue for the detail panel picker — includes
+	// collections created empty in Settings (Object.keys(queueColors)), which
+	// have no items tagged yet so listCollections(items) alone would miss them.
+	let existingCollections = $derived(listCollections(items, Object.keys(queueColors)));
 
 	// Watched toggle is inclusive: off shows only unwatched titles, on mixes in watched titles too.
 	let baseItems = $derived(queueControls.watchedOn ? items : queued);

@@ -82,12 +82,17 @@ export async function toggleSeasonProgress(
 	}
 }
 
-/** Returns sorted, deduped list of collection names found in items. */
-export function listCollections(items: WatchlistItem[]): string[] {
+/**
+ * Returns sorted, deduped list of collection names found in items, plus any
+ * `extraNames` (e.g. collections created empty in Settings via the color
+ * palette — see queue-colors.ts — that have no items tagged yet).
+ */
+export function listCollections(items: WatchlistItem[], extraNames: string[] = []): string[] {
 	const names = new Set<string>();
 	for (const item of items) {
 		if (item.queue_tag) names.add(item.queue_tag);
 	}
+	for (const name of extraNames) names.add(name);
 	return Array.from(names).sort();
 }
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.1] — 2026-08-19
+
+### Bug fixes
+
+- **Sync sign-up failed on first attempt** — production D1 never had the `0001_sync_schema.sql`/`0002_recovery_auth.sql` migrations applied, so the `users` table (and everything else sync needs) didn't exist server-side. Applied both migrations to production. Also hardened `signUp()`: if account creation succeeds but the follow-up recovery-code request fails, the error now says so explicitly and points at signing in, instead of a generic message that invited a retry into a confusing 409 against the account that was just created. (#175)
+- **`Alt+←/→` tab-nav shortcut didn't work on the Add tab** — the search input there had `autofocus`, and the shortcut deliberately skips firing while focus is in a text field (so it doesn't fight the OS/Firefox's own Option+Arrow word-jump). Removing `autofocus` was enough — Queue and Share never had this problem because neither auto-focuses a field. (#174)
+
+### Collections UX
+
+- **"Change…" in the detail panel replaced with a dropdown** — select an existing collection, "None", or "Manage collections…" (jumps to Settings). The old free-text "type a new name" flow was also the last place in the app that could create a new collection, and separately had a bug where clicking Change… would just close the whole panel; both are gone with this rework rather than debugged, since the dropdown has no open/close picker state left to interact badly with the panel's outside-click handling. (#176)
+- **Collections can now be created from Settings** — a "+ New collection" field creates an empty collection (0 items) that immediately shows up in the detail panel dropdown, restoring the creation path removed above. Collections aren't a stored entity of their own; an empty one exists via a color-palette entry until an item is tagged with it. The Collections section also has a stable anchor (`/settings#collections`) so the dropdown's "Manage collections…" lands in the right place. (#177)
+
+---
+
 ## [0.8.0] — 2026-08-13
 
 ### Sync epic — key custody, recovery, and settings UI (#79 milestone complete)
