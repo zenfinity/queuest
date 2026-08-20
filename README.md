@@ -117,8 +117,8 @@ Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API re
 ## Known limitations
 
 - Provider data is US-only (JustWatch regional restriction via TMDB)
-- Bundle-only availability (e.g. Hulu + Disney+ bundle) is filtered where detected; Disney+ data is inferred rather than sourced directly — see [#5](https://github.com/zenfinity/streamq/issues/5)
-- Importing watchlists from other sources (Plex, additional Trakt-style feeds) is still open — see [#4](https://github.com/zenfinity/streamq/issues/4). Letterboxd, Criterion, and IMDb are already supported via **Add → Import**.
+- Bundle-only availability (e.g. Hulu + Disney+ bundle) is filtered where detected; Disney+ data is inferred rather than sourced directly — see [#5](https://github.com/zenfinity/queuest/issues/5)
+- Importing watchlists from other sources (Plex, additional Trakt-style feeds) is still open — see [#4](https://github.com/zenfinity/queuest/issues/4). Letterboxd, Criterion, and IMDb are already supported via **Add → Import**.
 
 ---
 

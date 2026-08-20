@@ -23,7 +23,7 @@
 	let { floating }: { floating: boolean } = $props();
 </script>
 
-<div data-queue-dock class={floating ? 'fixed bottom-4 left-1/2 z-50 -translate-x-1/2' : 'pt-2'}>
+<div data-queue-dock class={floating ? 'fixed bottom-4 left-1/2 z-50 -translate-x-1/2' : ''}>
 	<div
 		class="flex items-center gap-2.5 rounded-full border border-gray-200 bg-white/90 px-1.5 py-1 backdrop-blur-md dark:border-white/10 dark:bg-gray-900/90 {floating
 			? 'shadow-lg'
