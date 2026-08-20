@@ -6,7 +6,12 @@ import { importDek } from './crypto';
 
 vi.mock('./keypair', () => ({ ensureKeypair: vi.fn() }));
 import { ensureKeypair } from './keypair';
-import { createInvite, removeMemberAndRotate, joinCollection } from './collection-actions';
+import {
+	createInvite,
+	removeMemberAndRotate,
+	joinCollection,
+	promoteCollection
+} from './collection-actions';
 
 const noop = { setBusy: () => {}, setError: () => {} };
 function capture() {
@@ -33,6 +38,10 @@ beforeEach(async () => {
 	await setUserPrivateKey(await importPrivateKey(alice.privateKeyPkcs8));
 	await setSyncDek(await importDek(await generateShareKey(), false));
 	vi.mocked(ensureKeypair).mockResolvedValue(alice.publicKey);
+
+	// promoteCollection writes real tombstones, so each test needs a clean store.
+	const { replaceAll } = await import('./db');
+	await replaceAll([], { silent: true });
 });
 
 function collection(over = {}) {
@@ -147,5 +156,136 @@ describe('removeMemberAndRotate', () => {
 		const c = capture();
 		expect(await removeMemberAndRotate(collection(), BOB, c.deps)).toBe(false);
 		expect(c.err()).toMatch(/account key|sign in/i);
+	});
+});
+
+describe('promoteCollection', () => {
+	const dbMod = () => import('./db');
+
+	/** Fake server: POST /api/collections mints one, then blob GET/PUT round-trip. */
+	function stubPromoteFetch(opts: { failBlobPut?: boolean } = {}) {
+		let version = 0;
+		let stored: ArrayBuffer | null = null;
+		const mock = vi.fn(async (url: string, init?: RequestInit) => {
+			const u = String(url);
+			if (u === '/api/collections' && init?.method === 'POST') {
+				return Response.json({
+					id: COLL,
+					name: JSON.parse(String(init.body)).name,
+					ownerUserId: ALICE,
+					role: 'owner',
+					wrappedKey: JSON.parse(String(init.body)).wrappedKey,
+					dekVersion: 1,
+					memberDekVersion: 1
+				});
+			}
+			if (u.includes('/blob') && (!init || init.method === undefined)) {
+				return new Response(stored ?? new ArrayBuffer(0), {
+					status: 200,
+					headers: {
+						'X-Sync-Version': String(version),
+						'X-Collection-Dek-Version': '1'
+					}
+				});
+			}
+			if (u.includes('/blob') && init?.method === 'PUT') {
+				if (opts.failBlobPut) return new Response('nope', { status: 500 });
+				stored = await new Response(init.body as BodyInit).arrayBuffer();
+				version++;
+				return Response.json({ version });
+			}
+			throw new Error(`unexpected request: ${u}`);
+		});
+		return { mock, seeded: () => stored };
+	}
+
+	async function seedLocal(entries: { tmdb_id: number; queue_tag: string | null }[]) {
+		const { addItem } = await dbMod();
+		for (const e of entries) {
+			await addItem({
+				tmdb_id: e.tmdb_id,
+				media_type: 'movie',
+				title: `Title ${e.tmdb_id}`,
+				poster_path: null,
+				overview: null,
+				providers: [],
+				runtime_minutes: 100,
+				seasons: [],
+				watched_seasons: [],
+				queue_tag: e.queue_tag
+			} as never);
+		}
+		const { getAll } = await dbMod();
+		return getAll();
+	}
+
+	async function decryptSeeded(bytes: ArrayBuffer, wrappedKey: string) {
+		const { unwrapKeyForMember, importDek, decryptBytesWithDek } = await import('./crypto');
+		const priv = await importPrivateKey(alice.privateKeyPkcs8);
+		const dek = await importDek(await unwrapKeyForMember(wrappedKey, priv), false);
+		const { gunzip } = await import('./gzip');
+		const plain = await decryptBytesWithDek(bytes, dek);
+		return JSON.parse(new TextDecoder().decode(await gunzip(plain))) as {
+			items: { tmdb_id: number; watch: Record<string, string>; added_by_account_id: string }[];
+		};
+	}
+
+	it('seeds only the tagged items, attributed to the promoter', async () => {
+		const items = await seedLocal([
+			{ tmdb_id: 1, queue_tag: 'Date night' },
+			{ tmdb_id: 2, queue_tag: 'Date night' },
+			{ tmdb_id: 3, queue_tag: 'Solo' },
+			{ tmdb_id: 4, queue_tag: null }
+		]);
+		const { mock, seeded } = stubPromoteFetch();
+		vi.stubGlobal('fetch', mock);
+
+		const created = await promoteCollection('Date night', items, noop);
+		expect(created?.name).toBe('Date night');
+
+		const { items: blob } = await decryptSeeded(seeded()!, created!.wrappedKey);
+		expect(blob.map((i) => i.tmdb_id).sort()).toEqual([1, 2]);
+		expect(blob.every((i) => i.added_by_account_id === ALICE)).toBe(true);
+	});
+
+	it('tombstones the promoted items locally, leaving the rest alone', async () => {
+		const items = await seedLocal([
+			{ tmdb_id: 10, queue_tag: 'Date night' },
+			{ tmdb_id: 11, queue_tag: 'Solo' }
+		]);
+		vi.stubGlobal('fetch', stubPromoteFetch().mock);
+
+		await promoteCollection('Date night', items, noop);
+
+		const { getAll } = await dbMod();
+		const left = await getAll();
+		expect(left.map((i) => i.tmdb_id)).toEqual([11]);
+	});
+
+	// The whole point of writing the blob first: a failure must not eat titles.
+	it('leaves the personal collection intact when the blob write fails', async () => {
+		const items = await seedLocal([{ tmdb_id: 20, queue_tag: 'Date night' }]);
+		vi.stubGlobal('fetch', stubPromoteFetch({ failBlobPut: true }).mock);
+
+		const c = capture();
+		expect(await promoteCollection('Date night', items, c.deps)).toBeNull();
+		expect(c.err()).toBeTruthy();
+
+		const { getAll } = await dbMod();
+		expect((await getAll()).map((i) => i.tmdb_id)).toEqual([20]);
+	});
+
+	it('carries a watched title across as this account’s own watch mark', async () => {
+		const items = await seedLocal([{ tmdb_id: 30, queue_tag: 'Date night' }]);
+		const { setWatched } = await dbMod();
+		await setWatched(items[0].id, true);
+		const { getAll } = await dbMod();
+
+		const { mock, seeded } = stubPromoteFetch();
+		vi.stubGlobal('fetch', mock);
+		const created = await promoteCollection('Date night', await getAll(), noop);
+
+		const { items: blob } = await decryptSeeded(seeded()!, created!.wrappedKey);
+		expect(blob[0].watch[ALICE]).toBeTruthy();
 	});
 });

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.2] — 2026-08-20
+
+### Shared collections start by promoting a personal one (#145)
+
+v0.9.0 shipped shared collections with their own "New shared collection…" form, which left Settings with two unrelated sections both called Collections — the naming collision #145 flagged and asked to resolve. Promotion is now the only way a shared collection comes into existence:
+
+- **`Share` on any personal collection** promotes it. A confirmation names the collection, counts the titles, and says plainly what the move costs: the titles leave this queue, live online from then on, and are **gone for good if you lose both your passphrase and your recovery code**. Shared collections are server-held and reachable only through this account's keys, so that is worth saying out loud rather than burying.
+- **The titles genuinely move.** They are seeded into the collection blob and then tombstoned locally, so the shared copy is the single source of truth and each member's progress lives in the per-account `watch` map instead of a personal `watched_at`. A watched title carries across as the promoter's own watch mark, and every item records who added it.
+- **The blob is written before anything is deleted.** A failure at any step — network, auth, a rejected push — leaves the personal collection exactly as it was; the tests cover that path specifically.
+- **The standalone create form is gone**, and the promoted name no longer lingers in the personal list: an empty collection exists only as a palette entry, so promotion clears that too. Without it the same name showed in both sections, which is the duplication this change exists to end.
+
+### Fixed
+
+- **Invite-link errors surface next to the invite.** They were being written into the create form's error state, so a failed invite rendered its message in a different section of the page — and became invisible entirely once that form was removed.
+
 ## [0.9.1] — 2026-08-20
 
 ### Fixed
