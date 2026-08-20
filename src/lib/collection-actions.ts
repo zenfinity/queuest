@@ -16,6 +16,7 @@ import { ensureKeypair } from './keypair';
 import { throwIfNotOk } from './http';
 import { syncCollectionItems, fetchCollectionItems, type CollectionItem } from './collection-sync';
 import type { WatchlistItem } from './types';
+import { getSyncStatus } from './sync';
 
 export interface CollectionActionDeps {
 	setBusy: (busy: boolean) => void;
@@ -450,6 +451,59 @@ export async function renameSharedCollection(
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not rename this list.');
 		return null;
+	} finally {
+		deps.setBusy(false);
+	}
+}
+
+/**
+ * Assigns items to an existing shared collection — the general form of what
+ * promoting a whole personal list already does for all of its items at once
+ * (see promoteCollection above), now for an arbitrary subset, as few as one.
+ * Same ordering guarantee: the blob write happens before anything is removed
+ * locally, so a failure at any point leaves the personal queue untouched.
+ *
+ * Mirrors "assign to a personal list" in the UI — a shared list is just
+ * another option in the same picker, not a separate flow. The difference is
+ * what happens underneath: a personal tag is a local field, so setting it is
+ * instant; a shared list lives in a collection blob only members can open,
+ * so it costs a member lookup (to attribute authorship) and a pull-merge-push.
+ */
+export async function addItemsToSharedCollection(
+	collection: SharedCollection,
+	items: WatchlistItem[],
+	deps: CollectionActionDeps
+): Promise<boolean> {
+	if (items.length === 0) return true;
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const status = getSyncStatus();
+		const members = await listMembers(collection.id, { setBusy: () => {}, setError: () => {} });
+		const me = members.find((m) => m.email === status.email)?.userId;
+		if (!me) {
+			deps.setError('Could not confirm your membership in this list. Try reopening it first.');
+			return false;
+		}
+
+		const dekB64 = await openCollectionKey(collection.wrappedKey);
+		const dek = await importDek(dekB64, false);
+
+		await syncCollectionItems(collection.id, dek, [], (merged) => {
+			const existingKeys = new Set(merged.map((i) => `${i.media_type}:${i.tmdb_id}`));
+			const additions = items
+				.filter((item) => !existingKeys.has(`${item.media_type}:${item.tmdb_id}`))
+				.map((item) => toCollectionItem(item, me));
+			return [...merged, ...additions];
+		});
+
+		for (const item of items) {
+			await removeItem(item.id);
+		}
+		return true;
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not add to this shared list.');
+		return false;
 	} finally {
 		deps.setBusy(false);
 	}

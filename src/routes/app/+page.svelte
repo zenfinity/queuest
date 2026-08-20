@@ -25,6 +25,13 @@
 		DEFAULT_BUDGET_HOURS
 	} from '$lib/progress';
 	import { getQueueColors } from '$lib/queue-colors';
+	import {
+		listCollections as listSharedCollections,
+		addItemsToSharedCollection,
+		type SharedCollection,
+		type CollectionActionDeps
+	} from '$lib/collection-actions';
+	import { isSyncEnabled } from '$lib/sync';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 	import { queueControls, SORT_DEFAULT_DIR, UNCATEGORIZED } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
@@ -48,6 +55,7 @@
 	let loaded = $state(false);
 	let queueColors = $state<Record<string, string>>({});
 	let busy = new SvelteSet<number>();
+	let sharedCollections = $state<SharedCollection[]>([]);
 
 	// ── Bulk selection (#113) ────────────────────────────────────────────────
 	let selectMode = $state(false);
@@ -76,10 +84,18 @@
 	}
 
 	async function bulkAssign() {
-		const tag = bulkNewTag.trim() || bulkTargetTag || null;
 		bulkBusy = true;
 		try {
-			await bulkSetCollection(selectedItems(), tag, actionDeps);
+			if (bulkTargetTag.startsWith('shared:') && !bulkNewTag.trim()) {
+				const coll = sharedCollections.find((c) => c.id === bulkTargetTag.slice(7));
+				if (coll) {
+					const ok = await addItemsToSharedCollection(coll, selectedItems(), collectionActionDeps);
+					if (ok) await reload();
+				}
+			} else {
+				const tag = bulkNewTag.trim() || bulkTargetTag || null;
+				await bulkSetCollection(selectedItems(), tag, actionDeps);
+			}
 		} finally {
 			bulkBusy = false;
 		}
@@ -241,6 +257,17 @@
 		await reloadQueue(actionDeps);
 	}
 
+	const collectionActionDeps: CollectionActionDeps = {
+		setBusy: () => {},
+		setError: (message) => {
+			dbError = message;
+		}
+	};
+
+	async function loadSharedCollections() {
+		sharedCollections = await listSharedCollections({ setBusy: () => {}, setError: () => {} });
+	}
+
 	onMount(() => {
 		queueControls.sortBy = loadPref<SortKey>('sq:sort', 'added');
 		queueControls.sortDir = loadPref<'asc' | 'desc'>(
@@ -266,6 +293,10 @@
 
 		Promise.all([reload(), ensureSubscribedLoaded()]).then(() => {
 			loaded = true;
+		});
+
+		isSyncEnabled().then((enabled) => {
+			if (enabled) loadSharedCollections();
 		});
 
 		return () => window.removeEventListener('beforeunload', onBeforeUnload);
@@ -543,6 +574,13 @@
 					{#each existingCollections as collection (collection)}
 						<option value={collection}>{collection}</option>
 					{/each}
+					{#if sharedCollections.length > 0}
+						<optgroup label="Shared">
+							{#each sharedCollections as coll (coll.id)}
+								<option value={`shared:${coll.id}`}>{coll.name}</option>
+							{/each}
+						</optgroup>
+					{/if}
 				</select>
 				<input
 					type="text"
@@ -682,6 +720,16 @@
 		onSetCollection={async (tag) => {
 			await setItemCollection(di, tag, actionDeps);
 			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
+		{sharedCollections}
+		onAssignShared={async (collectionId) => {
+			const coll = sharedCollections.find((c) => c.id === collectionId);
+			if (!coll) return;
+			const ok = await addItemsToSharedCollection(coll, [di], collectionActionDeps);
+			if (ok) {
+				await reload();
+				detailItem = null;
+			}
 		}}
 	>
 		{#snippet footer(item)}
