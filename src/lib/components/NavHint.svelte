@@ -1,10 +1,12 @@
 <script lang="ts">
 	// One-time onboarding nudge (#169) toward the swipe (#162) / Alt+←→ (#168)
 	// tab-switching gestures — neither is discoverable without being told.
-	// Shown the first time the caller decides "the queue actually has
-	// something in it now" (see app/+page.svelte); persists its own
-	// dismissed state in `sq:nav-hint-dismissed` so it never reappears once
-	// shown, whether dismissed manually or by the auto-hide timer.
+	// Shown right after the first successful add (see add/+page.svelte) —
+	// on the Queue page it fired too late, after the user had already
+	// navigated there by tapping the nav link once with no idea swipe/Alt+
+	// arrow existed. Persists its own dismissed state in
+	// `sq:nav-hint-dismissed` so it never reappears once shown, whether
+	// dismissed manually or by the auto-hide timer.
 	const DISMISS_KEY = 'sq:nav-hint-dismissed';
 	const AUTO_HIDE_MS = 5000;
 

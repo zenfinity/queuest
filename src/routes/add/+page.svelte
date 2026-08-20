@@ -8,6 +8,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
+	import NavHint from '$lib/components/NavHint.svelte';
 	import { addSearchResultToQueue } from '$lib/add-actions';
 
 	let isOnboarding = $derived(page.url.searchParams.has('onboarding'));
@@ -54,6 +55,8 @@
 <svelte:head>
 	<title>Queuest — Add</title>
 </svelte:head>
+
+<NavHint show={added.size > 0} />
 
 <h1 class="sr-only">Add</h1>
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.5] — 2026-08-20
+
+### Nav-switching hint moved to the Add page
+
+The one-time "Alt+←→ / swipe to switch tabs" nudge showed on the Queue page once it had items — but by then, the user had already navigated there by tapping the nav link once, with no idea the gesture existed. Moved to the Add page, triggered right after the first successful add: the moment right before someone would naturally want to go check their Queue, which is exactly when telling them they can swipe there actually lands.
+
+### README brought current
+
+Hadn't caught up with anything from #145 onward — the entire collaborative Lists feature (shared lists, per-member wrapped keys, invite links, QR codes, activity badges, key rotation on member removal) was undocumented, "Collections" was renamed to "Lists" nowhere in the doc, and the "Encrypted share links" feature description was for the old filtered-multi-provider `/share` page that no longer exists. Rewrote the relevant sections: a new "Watch something together" step in How It Works, corrected Features bullets (Shared lists, Read-only links, bulk-assign, list colors throughout), a Known Limitations note that shared lists need accounts on both sides, and the Crypto stack row now mentions RSA-OAEP alongside AES-GCM/PBKDF2. Screenshots weren't regenerated — `docs/screenshots/landing-hero.png` still shows the old "Collections" copy.
+
 ## [0.9.4] — 2026-08-20
 
 ### Bulk assign to a collection (#113)
