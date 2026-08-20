@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.1] — 2026-08-20
+
+### Fixed
+
+- **`npm run lint` is green again on main.** The v0.9.0 Settings markup (#197) was assembled with scripted edits whose output did not match Prettier, and the PR was merged over the resulting red CI check by mistake. Formatting only — no behavior change.
+
 ## [0.9.0] — 2026-08-20
 
 ### Shared Collections: complete Settings UI (#189)
