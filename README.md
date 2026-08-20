@@ -29,31 +29,48 @@ The **Gantt view** groups your queue by provider. Each bar's width represents wa
 The **Suggest** tab ranks providers by total remaining watch time across your unwatched titles — useful for deciding what to subscribe to first. Checking off seasons reduces a show's contribution automatically.
 
 ### 3. Your data, your device
-Everything is stored locally in your browser's IndexedDB — no account, no server, no tracking. Use **Settings → Export** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and shared queue colors — a complete restore.
+Everything is stored locally in your browser's IndexedDB. No account is required and nothing is tracked — the whole app works signed-out. Use **Settings → Export** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and collection colors — a complete restore.
+
+If you want the same queue on more than one device, **Settings → Sync** adds an optional account. Your queue is encrypted on your device before it's sent, under a key derived from a passphrase that never leaves your browser — so the server stores ciphertext it has no way to read.
 
 ---
 
 ## Features
 
-- 🔍 **Search** movies and TV shows (TMDB) with a detail panel showing cast, providers, seasons, and release dates before you add
-- 📺 **Streaming providers** per title (JustWatch / US) — with bundle filtering and Disney+ inference (see below); Rent/Buy indicator when a title isn't on subscription services; Kanopy and Hoopla library links when it isn't streaming at all
-- 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season/next-episode dates surfaced on every card; mid-season episodes distinguished from season premieres
-- 📊 **Gantt view** — lane-per-provider, bar width = remaining watch time vs. monthly budget; runtime sparklines in Grid and List too
-- 📋 **List & Grid views** with sort (A–Z, runtime, date added, watched)
-- 🧭 **Queue dock** — floating filter/view-switcher on the queue page: Card/List/Timeline mode, an inclusive Watched toggle, and a Sort-by/Services filter popover
-- 🎬 **Detail panel** — tap any title for poster lightbox, full overview, cast, genres, provider list, and per-season progress
-- ✅ **Watch tracking** — mark titles done, filter To Watch / Watched; season-level progress (with episode counts) shrinks bar widths automatically
-- 🏷️ **Collections** — tag items into named collections and assign each a custom color; imported shared lists land in their own color-coded collection automatically
-- 🏆 **Suggest** — providers ranked by total remaining watch time in your queue
-- 📥 **Import** — bring in an existing watchlist from Letterboxd, Criterion, or IMDb (CSV, URL, or pasted list) from Add → Import
-- 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL; filter by provider, type, or queue before sharing; decryption key lives only in the URL fragment; links expire after 30 days
-- 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto API; restores queue, preferences, view settings, and shared queue colors completely
-- 🌙 **Dark / light mode** — persisted in preferences and backup file
-- ⏱ **Viewing budget** — configurable monthly hours (hrs/week × weeks/month) on the Budget page, used to normalise bar widths
-- 🔔 **Cancellation alerts** — a banner nudges you to consider pausing a subscription once you've nearly cleared everything queued on it
-- 🚪 **Guided onboarding** — first-time visitors are walked from the landing page through setting a budget to adding their first titles
-- 🔄 **Refresh provider data** — re-fetches streaming info for every queued title in one click (Settings)
-- 💬 **In-app feedback** — files a GitHub issue directly from Settings
+### The core idea
+
+- 📊 **Gantt view** — one lane per service, bar width = remaining watch time against your monthly budget. If a lane fits inside one bar-width, one month of that subscription clears it. Lanes can group by service or by collection.
+- ⏱ **Viewing budget** — set hrs/week × weeks/month on the Budget page; every runtime in the app is framed against it.
+- 🏆 **Suggest** — services ranked by total remaining watch time in your queue, so you know what to subscribe to next.
+- 🔔 **Cancellation alerts** — a nudge when you've nearly cleared everything queued on a service.
+
+### Sync and privacy
+
+- 🔐 **End-to-end encrypted sync** — opt in and your queue follows you across devices. Encrypted client-side under a passphrase-derived key that never reaches the server; the server stores only ciphertext it cannot read. Includes a printed recovery code, because a forgotten passphrase is otherwise unrecoverable by design.
+- 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto. Restores queue, preferences, view settings, and collection colors completely.
+- 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL. The decryption key lives only in the URL fragment, so it never reaches the server. Links expire after 30 days.
+
+### Organising the queue
+
+- 🏷️ **Collections** — group titles into named, colour-coded collections (date night, with the kids, horror October). Each shows its own runtime total. Imported shared lists land in their own collection automatically.
+- 📋 **Grid, List, and Gantt views** with sort (A–Z, runtime, date added, watched) and optional grouping by collection.
+- 🧭 **Queue dock** — the main filter surface: view switcher, inclusive Watched toggle, and sort/service/collection filters.
+- ✅ **Watch tracking** — mark titles done; season-level progress (with episode counts) shrinks bar widths automatically.
+
+### Finding and adding titles
+
+- 🔍 **Search** movies and TV (TMDB), with a detail panel showing cast, providers, seasons, and release dates before you add.
+- 📥 **Import** an existing watchlist from Letterboxd, Criterion, or IMDb — CSV, URL, or pasted list.
+- 📺 **Streaming providers** per title (JustWatch / US), with bundle filtering and Disney+ inference (see below). Rent/Buy indicator when a title isn't on subscription, and Kanopy/Hoopla library links when it isn't streaming at all.
+- 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season/next-episode dates; mid-season episodes distinguished from premieres.
+- 🎬 **Detail panel** — poster lightbox, full overview, cast, genres, providers, per-season progress, and IMDb links for the title.
+
+### Everything else
+
+- 🚪 **Guided onboarding** for first-time visitors, from the landing page through setting a budget to adding a first title.
+- 🌙 **Dark / light mode**, persisted in preferences and backup file.
+- 🔄 **Refresh provider data** — re-fetch streaming info for every queued title in one click (Settings).
+- 💬 **In-app feedback** — files a GitHub issue directly from Settings.
 
 ---
 
@@ -63,7 +80,7 @@ Everything is stored locally in your browser's IndexedDB — no account, no serv
 |---|---|
 | Framework | [SvelteKit 2](https://kit.svelte.dev) + [Svelte 5](https://svelte.dev) (runes) |
 | Styling | [Tailwind CSS v4](https://tailwindcss.com) (Vite plugin, class-based dark mode) |
-| Storage | [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) (client-side, no server DB) |
+| Storage | [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) client-side; [Cloudflare D1](https://developers.cloudflare.com/d1/) + KV server-side for opt-in sync (ciphertext only) |
 | Crypto | [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) — AES-GCM encryption, PBKDF2 key derivation |
 | Data | [TMDB API](https://developer.themoviedb.org) — search, metadata, JustWatch provider data |
 | Hosting | [Cloudflare Pages](https://pages.cloudflare.com) |
@@ -103,8 +120,9 @@ npm run preview   # uses wrangler pages dev
 
 ## Data & Privacy
 
-- No user accounts. No analytics. No cookies.
-- All watch data lives in your browser's IndexedDB and never leaves your device unless you export it.
+- **No account required, and none by default.** No analytics, no tracking cookies. Everything works signed-out.
+- **Your watch data lives in your browser's IndexedDB.** It leaves your device only if you export it, share a link, or turn on sync — all three encrypt on your device first.
+- **Sync is opt-in and end-to-end encrypted.** Turning it on creates an account (email + passphrase). Your queue is encrypted client-side under a key derived from your passphrase, which is never sent to the server — the server only ever stores ciphertext it cannot read. See [Sync and encryption](#sync-and-privacy).
 - Provider data is sourced from TMDB/JustWatch and reflects US availability only. It can lag real-world changes by a few days.
 - This product uses the TMDB API but is not endorsed or certified by TMDB.
 

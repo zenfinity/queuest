@@ -24,12 +24,22 @@ const FALLBACK_CSP =
 
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = null;
-	// adapter-cloudflare throws on any platform.env access for a prerenderable
-	// route during the build's static-generation pass (there's no real Worker
-	// request to bind env to yet) — `building` is true for that pass, so skip
-	// session resolution entirely rather than touch platform.env at all.
+	// adapter-cloudflare installs a throwing getter on every platform.env key
+	// for prerenderable routes (`/` is one — see routes/+page.ts), so *reading*
+	// SHARE_KV throws rather than returning undefined.
+	//
+	// `building` covers the build's static-generation pass, but not `vite dev`,
+	// where `building` is false and the same throwing getters are installed —
+	// which made the landing page 500 in local dev while working fine in
+	// production. Catching the access covers both: a prerenderable route has no
+	// per-request session to resolve anyway, so there is nothing to fall back to.
 	if (!building) {
-		const kv = event.platform?.env?.SHARE_KV;
+		let kv: NonNullable<App.Platform['env']>['SHARE_KV'];
+		try {
+			kv = event.platform?.env?.SHARE_KV;
+		} catch {
+			kv = undefined;
+		}
 		const token = event.cookies.get(SESSION_COOKIE);
 		if (kv && token) {
 			const session = await getSession(kv, token);

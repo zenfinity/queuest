@@ -3,8 +3,110 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { motion } from '$lib/motion.svelte';
+	import { DEFAULT_BUDGET_HOURS } from '$lib/progress';
 
 	let tab = $state<'timeline' | 'list' | 'cards'>('timeline');
+
+	// ── Product mock data ─────────────────────────────────────────────────
+	// The mock is a deliberately miniature, stylized impression of the three
+	// queue views — not a render of the real components. Those need real
+	// WatchlistItems, live handlers, and TMDB image loads, none of which
+	// belong on a marketing page. Driving all three tabs from these two
+	// arrays instead keeps them from drifting apart from each other, which
+	// is what happened when each tab hand-wrote its own near-identical
+	// rows and cards (#131).
+
+	type MockBar = { title: string; time: string; width: string };
+	type MockLane = {
+		label: string;
+		meta: string;
+		accent: string;
+		rowBg: string;
+		rowBorder: string;
+		barBg: string;
+		barBorder: string;
+		logoBg: string;
+		logoBorder: string;
+		logoText: string;
+		logoTextColor: string;
+		logoTextSize: string;
+		bars: MockBar[];
+		over: string | null;
+	};
+
+	const mockLanes: MockLane[] = [
+		{
+			label: 'Hulu',
+			meta: '2 titles · 27h 43m',
+			accent: '#1ce783',
+			rowBg: '#0c1a0f',
+			rowBorder: '#1a3020',
+			barBg: '#112218',
+			barBorder: '#1c3a24',
+			logoBg: '#1ce783',
+			logoBorder: '#1ce783',
+			logoText: 'hulu',
+			logoTextColor: '#000',
+			logoTextSize: '9px',
+			bars: [{ title: 'The Bear', time: '~26h', width: '62%' }],
+			over: null
+		},
+		{
+			label: 'Apple TV',
+			meta: '2 titles · 41h 38m',
+			accent: '#4da6ff',
+			rowBg: '#0c1420',
+			rowBorder: '#1a2436',
+			barBg: '#0e1e30',
+			barBorder: '#1a2e44',
+			logoBg: '#1d1d1f',
+			logoBorder: '#333',
+			logoText: '📺',
+			logoTextColor: '#fff',
+			logoTextSize: '13px',
+			bars: [
+				{ title: 'Severance', time: '~13h', width: '30%' },
+				{ title: 'Ted Lasso', time: '~29h', width: '40%' }
+			],
+			over: '+1.6h over'
+		}
+	];
+
+	type MockTitle = {
+		title: string;
+		listPoster: string;
+		cardPoster: string;
+		providers: { label: string; bg: string; color: string }[];
+		seasons: boolean;
+		pct: number;
+		time: string;
+	};
+
+	const mockTitles: MockTitle[] = [
+		{
+			title: 'The Princess Bride',
+			listPoster: 'linear-gradient(145deg,#2a3a1a,#3d5c28)',
+			cardPoster: 'linear-gradient(160deg,#2a4018,#3d5c28,#1a2a10)',
+			providers: [
+				{ label: 'hulu', bg: '#1ce783', color: '#000' },
+				{ label: 'fubo', bg: '#e8242d', color: '#fff' }
+			],
+			seasons: false,
+			pct: 18,
+			time: '1h 39m'
+		},
+		{
+			title: 'The Bear',
+			listPoster: 'linear-gradient(145deg,#1a2535,#2a3d55)',
+			cardPoster: 'linear-gradient(160deg,#1a2535,#2a3d55,#0d1825)',
+			providers: [{ label: 'hulu', bg: '#1ce783', color: '#000' }],
+			seasons: true,
+			pct: 82,
+			time: '~26h'
+		}
+	];
+
+	const WATCHED_SEASONS = ['S1', 'S2', 'S3', 'S4'];
 
 	onMount(() => {
 		try {
@@ -117,14 +219,15 @@
 					</a>
 				</div>
 				<p data-reveal class="mt-5 text-[13px] text-gray-500">
-					No card required · Free while in beta
+					No card required · Free while in beta · End-to-end encrypted
 				</p>
 			</div>
 
 			<!-- Product mock — always dark -->
 			<div data-reveal class="relative z-10">
 				<div
-					class="{motion.reduced ? '' : 'mock-float'} overflow-hidden rounded-[20px]"
+					class="overflow-hidden rounded-[20px]"
+					class:mock-float={!motion.reduced}
 					style="background:#0c1117;border:1px solid #1d2535;box-shadow:0 32px 64px -24px rgba(0,0,0,0.55)"
 				>
 					<!-- Mock header + tab switcher -->
@@ -151,275 +254,199 @@
 							<div
 								style="display:flex;justify-content:space-between;font-size:10px;color:#4b5563;margin-bottom:8px;padding-left:118px"
 							>
-								<span>0</span><span>40h / mo</span>
+								<span>0</span><span>{DEFAULT_BUDGET_HOURS}h / mo</span>
 							</div>
-							<!-- Hulu -->
-							<div
-								style="background:#0c1a0f;border:1px solid #1a3020;border-radius:11px;margin-bottom:8px;display:flex;overflow:hidden"
-							>
-								<div style="width:108px;flex:none;padding:12px;border-right:1px solid #1a3020">
-									<div
-										style="width:32px;height:32px;border-radius:9px;background:#1ce783;display:flex;align-items:center;justify-content:center;margin-bottom:6px"
-									>
-										<span style="font-size:9px;font-weight:900;color:#000">hulu</span>
-									</div>
-									<div style="font-size:11px;font-weight:700;color:#1ce783;margin-bottom:2px">
-										Hulu
-									</div>
-									<div style="font-size:9px;color:#4b5563">2 titles · 27h 43m</div>
-								</div>
-								<div style="flex:1;padding:12px;display:flex;align-items:center">
-									<div
-										style="display:flex;align-items:center;gap:7px;background:#112218;border:1px solid #1c3a24;border-radius:7px;padding:7px 10px;width:62%"
-									>
-										<div
-											style="width:22px;height:30px;border-radius:4px;background:#1c3a24;flex:none"
-										></div>
-										<div>
-											<div style="font-size:11px;font-weight:600;color:#e5e7eb">The Bear</div>
-											<div style="font-size:9px;color:#1ce783">~26h</div>
-										</div>
-									</div>
-								</div>
-							</div>
-							<!-- Apple TV -->
-							<div
-								style="background:#0c1420;border:1px solid #1a2436;border-radius:11px;display:flex;overflow:hidden;position:relative"
-							>
-								<div style="width:108px;flex:none;padding:12px;border-right:1px solid #1a2436">
-									<div
-										style="width:32px;height:32px;border-radius:9px;background:#1d1d1f;border:1px solid #333;display:flex;align-items:center;justify-content:center;margin-bottom:6px"
-									>
-										<span style="font-size:13px">📺</span>
-									</div>
-									<div style="font-size:11px;font-weight:700;color:#4da6ff;margin-bottom:2px">
-										Apple TV
-									</div>
-									<div style="font-size:9px;color:#4b5563">2 titles · 41h 38m</div>
-								</div>
+							{#each mockLanes as lane, i (lane.label)}
 								<div
-									style="flex:1;padding:12px;display:flex;align-items:center;gap:4px;overflow:hidden;position:relative"
+									style="background:{lane.rowBg};border:1px solid {lane.rowBorder};border-radius:11px;display:flex;overflow:hidden;position:relative;{i <
+									mockLanes.length - 1
+										? 'margin-bottom:8px'
+										: ''}"
 								>
 									<div
-										style="display:flex;align-items:center;gap:7px;background:#0e1e30;border:1px solid #1a2e44;border-radius:7px;padding:7px 9px;flex:none;width:30%"
+										style="width:108px;flex:none;padding:12px;border-right:1px solid {lane.rowBorder}"
 									>
 										<div
-											style="width:22px;height:30px;border-radius:4px;background:#1a2e44;flex:none"
-										></div>
-										<div>
-											<div style="font-size:11px;font-weight:600;color:#e5e7eb">Severance</div>
-											<div style="font-size:9px;color:#4da6ff">~13h</div>
+											style="width:32px;height:32px;border-radius:9px;background:{lane.logoBg};border:1px solid {lane.logoBorder};display:flex;align-items:center;justify-content:center;margin-bottom:6px"
+										>
+											<span
+												style="font-size:{lane.logoTextSize};font-weight:900;color:{lane.logoTextColor}"
+												>{lane.logoText}</span
+											>
 										</div>
-									</div>
-									<div
-										style="display:flex;align-items:center;gap:7px;background:#0e1e30;border:1px solid #1a2e44;border-radius:7px;padding:7px 9px;flex:none;width:40%"
-									>
 										<div
-											style="width:22px;height:30px;border-radius:4px;background:#1a2e44;flex:none"
-										></div>
-										<div>
-											<div style="font-size:11px;font-weight:600;color:#e5e7eb">Ted Lasso</div>
-											<div style="font-size:9px;color:#4da6ff">~29h</div>
+											style="font-size:11px;font-weight:700;color:{lane.accent};margin-bottom:2px"
+										>
+											{lane.label}
 										</div>
+										<div style="font-size:9px;color:#4b5563">{lane.meta}</div>
 									</div>
 									<div
-										style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:#f97316;color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap"
+										style="flex:1;padding:12px;display:flex;align-items:center;gap:4px;overflow:hidden;position:relative"
 									>
-										+1.6h over
+										{#each lane.bars as bar (bar.title)}
+											<div
+												style="display:flex;align-items:center;gap:7px;background:{lane.barBg};border:1px solid {lane.barBorder};border-radius:7px;padding:7px 10px;flex:none;width:{bar.width}"
+											>
+												<div
+													style="width:22px;height:30px;border-radius:4px;background:{lane.barBorder};flex:none"
+												></div>
+												<div>
+													<div style="font-size:11px;font-weight:600;color:#e5e7eb">
+														{bar.title}
+													</div>
+													<div style="font-size:9px;color:{lane.accent}">{bar.time}</div>
+												</div>
+											</div>
+										{/each}
+										{#if lane.over}
+											<div
+												style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:#f97316;color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap"
+											>
+												{lane.over}
+											</div>
+										{/if}
 									</div>
 								</div>
-							</div>
+							{/each}
 							<div style="text-align:center;font-size:9px;color:#374151;margin-top:9px">
-								bar width = runtime · budget = 40h / mo
+								bar width = runtime · budget = {DEFAULT_BUDGET_HOURS}h / mo
 							</div>
 						</div>
 
 						<!-- LIST tab -->
 					{:else if tab === 'list'}
 						<div style="padding:6px 8px 8px">
-							<div
-								style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #1d2535"
-							>
+							{#each mockTitles as t, i (t.title)}
 								<div
-									style="width:30px;height:44px;border-radius:5px;flex:none;background:linear-gradient(145deg,#2a3a1a,#3d5c28)"
-								></div>
-								<div style="flex:1;min-width:0">
-									<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">
-										The Princess Bride
-									</div>
-									<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
-										<span
-											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#1ce783;color:#000"
-											>hulu</span
-										>
-										<span
-											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#e8242d;color:#fff"
-											>fubo</span
-										>
-									</div>
-									<div style="display:flex;align-items:center;gap:7px">
-										<div
-											style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative"
-										>
-											<div style="width:18%;height:100%;border-radius:2px;background:#1ce783"></div>
-											<div
-												style="position:absolute;left:18%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"
-											></div>
-										</div>
-										<span style="font-size:10px;color:#6b7280;white-space:nowrap">1h 39m</span>
-									</div>
-								</div>
-								<div style="display:flex;gap:3px">
-									<button
-										style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
-										>✓</button
-									>
-									<button
-										style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
-										>×</button
-									>
-								</div>
-							</div>
-							<div style="display:flex;align-items:center;gap:10px;padding:10px">
-								<div
-									style="width:30px;height:44px;border-radius:5px;flex:none;background:linear-gradient(145deg,#1a2535,#2a3d55)"
-								></div>
-								<div style="flex:1;min-width:0">
-									<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">
-										The Bear
-									</div>
+									style="display:flex;align-items:center;gap:10px;padding:10px;{i <
+									mockTitles.length - 1
+										? 'border-bottom:1px solid #1d2535'
+										: ''}"
+								>
 									<div
-										style="display:flex;align-items:center;gap:4px;margin-bottom:5px;flex-wrap:wrap"
-									>
-										<span
-											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:#1ce783;color:#000"
-											>hulu</span
+										style="width:30px;height:44px;border-radius:5px;flex:none;background:{t.listPoster}"
+									></div>
+									<div style="flex:1;min-width:0">
+										<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:4px">
+											{t.title}
+										</div>
+										<div
+											style="display:flex;align-items:center;gap:4px;margin-bottom:5px;flex-wrap:wrap"
 										>
-										<div style="display:flex;gap:2px">
-											{#each ['S1', 'S2', 'S3', 'S4'] as s (s)}
+											{#each t.providers as p (p.label)}
 												<span
-													style="font-size:8px;padding:2px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600"
-													>{s}</span
+													style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;background:{p.bg};color:{p.color}"
+													>{p.label}</span
 												>
 											{/each}
-											<span
-												style="font-size:8px;padding:2px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600"
-												>S5</span
-											>
+											{#if t.seasons}
+												<div style="display:flex;gap:2px">
+													{#each WATCHED_SEASONS as s (s)}
+														<span
+															style="font-size:8px;padding:2px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600"
+															>{s}</span
+														>
+													{/each}
+													<span
+														style="font-size:8px;padding:2px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600"
+														>S5</span
+													>
+												</div>
+											{/if}
 										</div>
-									</div>
-									<div style="display:flex;align-items:center;gap:7px">
-										<div
-											style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative"
-										>
-											<div style="width:82%;height:100%;border-radius:2px;background:#1ce783"></div>
+										<div style="display:flex;align-items:center;gap:7px">
 											<div
-												style="position:absolute;left:82%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"
-											></div>
+												style="flex:1;height:4px;border-radius:2px;background:#1d2535;position:relative"
+											>
+												<div
+													style="width:{t.pct}%;height:100%;border-radius:2px;background:#1ce783"
+												></div>
+												<div
+													style="position:absolute;left:{t.pct}%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#1ce783"
+												></div>
+											</div>
+											<span style="font-size:10px;color:#6b7280;white-space:nowrap">{t.time}</span>
 										</div>
-										<span style="font-size:10px;color:#6b7280;white-space:nowrap">~26h</span>
+									</div>
+									<div style="display:flex;gap:3px">
+										<button
+											aria-label="Mark watched"
+											style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
+											>✓</button
+										>
+										<button
+											aria-label="Remove"
+											style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
+											>×</button
+										>
 									</div>
 								</div>
-								<div style="display:flex;gap:3px">
-									<button
-										style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
-										>✓</button
-									>
-									<button
-										style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center"
-										>×</button
-									>
-								</div>
-							</div>
+							{/each}
 						</div>
 
 						<!-- CARDS tab -->
 					{:else}
 						<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:11px">
-							<div
-								style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden"
-							>
+							{#each mockTitles as t (t.title)}
 								<div
-									style="height:110px;background:linear-gradient(160deg,#2a4018,#3d5c28,#1a2a10)"
-								></div>
-								<div style="padding:9px">
-									<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">
-										The Princess Bride
-									</div>
-									<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
-										<div style="flex:1;height:3px;border-radius:2px;background:#1d2535">
-											<div style="width:18%;height:100%;border-radius:2px;background:#1ce783"></div>
+									style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden"
+								>
+									<div style="height:110px;background:{t.cardPoster}"></div>
+									<div style="padding:9px">
+										<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">
+											{t.title}
 										</div>
-										<span style="font-size:9px;color:#6b7280">1h 39m</span>
-									</div>
-									<div style="display:flex;gap:3px;margin-bottom:7px">
-										<span
-											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#1ce783;color:#000"
-											>hulu</span
-										>
-										<span
-											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#e8242d;color:#fff"
-											>fubo</span
-										>
-									</div>
-									<div style="display:flex;gap:3px">
-										<button
-											style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer"
-											>✓ Watched</button
-										>
-										<button
-											style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer"
-											>×</button
-										>
-									</div>
-								</div>
-							</div>
-							<div
-								style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden"
-							>
-								<div
-									style="height:110px;background:linear-gradient(160deg,#1a2535,#2a3d55,#0d1825)"
-								></div>
-								<div style="padding:9px">
-									<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">
-										The Bear
-									</div>
-									<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
-										<div style="flex:1;height:3px;border-radius:2px;background:#1d2535">
-											<div style="width:82%;height:100%;border-radius:2px;background:#1ce783"></div>
+										<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
+											<div style="flex:1;height:3px;border-radius:2px;background:#1d2535">
+												<div
+													style="width:{t.pct}%;height:100%;border-radius:2px;background:#1ce783"
+												></div>
+											</div>
+											<span style="font-size:9px;color:#6b7280">{t.time}</span>
 										</div>
-										<span style="font-size:9px;color:#6b7280">~26h</span>
-									</div>
-									<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:4px">
-										<span
-											style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:#1ce783;color:#000"
-											>hulu</span
+										<!-- Trailing gap sits on the last element before the buttons, so a
+										     card with no seasons row keeps the same 7px as one with it. -->
+										<div
+											style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:{t.seasons
+												? '4px'
+												: '7px'}"
 										>
-									</div>
-									<div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:7px">
-										{#each ['S1', 'S2', 'S3', 'S4'] as s (s)}
-											<span
-												style="font-size:7px;padding:1px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600"
-												>{s}</span
+											{#each t.providers as p (p.label)}
+												<span
+													style="font-size:8px;font-weight:800;padding:2px 5px;border-radius:3px;background:{p.bg};color:{p.color}"
+													>{p.label}</span
+												>
+											{/each}
+										</div>
+										{#if t.seasons}
+											<div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:7px">
+												{#each WATCHED_SEASONS as s (s)}
+													<span
+														style="font-size:7px;padding:1px 4px;border-radius:3px;background:#1d2535;color:#6b7280;font-weight:600"
+														>{s}</span
+													>
+												{/each}
+												<span
+													style="font-size:7px;padding:1px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600"
+													>S5</span
+												>
+											</div>
+										{/if}
+										<div style="display:flex;gap:3px">
+											<button
+												style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer"
+												>✓ Watched</button
 											>
-										{/each}
-										<span
-											style="font-size:7px;padding:1px 4px;border-radius:3px;border:1px solid #f97316;color:#f97316;font-weight:600"
-											>S5</span
-										>
-									</div>
-									<div style="display:flex;gap:3px">
-										<button
-											style="flex:1;border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;padding:4px 0;font-size:9px;cursor:pointer"
-											>✓ Watched</button
-										>
-										<button
-											style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer"
-											>×</button
-										>
+											<button
+												aria-label="Remove"
+												style="border:1px solid #374151;background:transparent;color:#6b7280;border-radius:5px;width:24px;font-size:9px;cursor:pointer"
+												>×</button
+											>
+										</div>
 									</div>
 								</div>
-							</div>
+							{/each}
 						</div>
 					{/if}
 				</div>
@@ -504,6 +531,50 @@
 					class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
 					style="background:color-mix(in srgb,#f97316 12%,transparent)"
 				>
+					<div class="grid grid-cols-2 gap-1">
+						<span class="h-2.5 w-2.5 rounded-[3px] bg-orange-500"></span>
+						<span class="h-2.5 w-2.5 rounded-[3px] bg-orange-500 opacity-70"></span>
+						<span class="h-2.5 w-2.5 rounded-[3px] bg-orange-500 opacity-40"></span>
+						<span class="h-2.5 w-2.5 rounded-[3px] bg-orange-500 opacity-25"></span>
+					</div>
+				</div>
+				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Group it into Collections</h3>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+					Date night, with the kids, horror October — organise your queue the way you actually think
+					about it. Each collection carries its own runtime total, so you know what you're signing
+					up for.
+				</p>
+			</div>
+
+			<div
+				data-reveal
+				class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+			>
+				<div
+					class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)"
+				>
+					<div class="flex items-end gap-1">
+						<span class="h-4 w-5 rounded-[3px] border-[2.5px] border-orange-500"></span>
+						<span class="h-3 w-2.5 rounded-[2px] bg-orange-500"></span>
+					</div>
+				</div>
+				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Sync, without us reading it</h3>
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+					Turn on sync and your queue follows you to every device. It's encrypted on your device
+					before it leaves — we only ever store ciphertext, so we can't read your queue even if we
+					wanted to.
+				</p>
+			</div>
+
+			<div
+				data-reveal
+				class="rounded-[18px] border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+			>
+				<div
+					class="mb-4 flex h-[46px] w-[46px] items-center justify-center rounded-[13px]"
+					style="background:color-mix(in srgb,#f97316 12%,transparent)"
+				>
 					<div class="flex flex-col items-center">
 						<div class="h-2 w-3 rounded-t-full border-[2.5px] border-b-0 border-orange-500"></div>
 						<div class="flex h-3.5 w-5 items-center justify-center rounded-sm bg-orange-500">
@@ -514,10 +585,10 @@
 						</div>
 					</div>
 				</div>
-				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Private by design</h3>
+				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Yours, not ours</h3>
 				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-					No account, no login. Your queue lives on your device and leaves as an encrypted file you
-					own. Nothing personal ever touches our servers.
+					No account needed to start — your queue lives on your device. Export it any time as an
+					encrypted file you own, and delete everything in one click.
 				</p>
 			</div>
 		</div>

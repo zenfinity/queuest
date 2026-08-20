@@ -18,7 +18,8 @@
 		releaseChip,
 		cancelCandidates,
 		hms,
-		saveBudgetPrefs
+		saveBudgetPrefs,
+		DEFAULT_BUDGET_HOURS
 	} from '$lib/progress';
 	import { getQueueColors } from '$lib/queue-colors';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
@@ -48,7 +49,7 @@
 	let releasePopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
 
-	let budgetHours = $state(40); // user-adjustable month budget
+	let budgetHours = $state(DEFAULT_BUDGET_HOURS); // user-adjustable month budget
 
 	// ── Budget callout (first visit) ─────────────────────────────────────────
 	let showBudgetCallout = $state(false);
@@ -168,7 +169,7 @@
 		);
 		queueControls.viewMode = loadPref<ViewKey>('sq:view', 'grid');
 		queueControls.ready = true;
-		budgetHours = readNumber('sq:budget', 40);
+		budgetHours = readNumber('sq:budget', DEFAULT_BUDGET_HOURS);
 		queueColors = getQueueColors();
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		dismissedAlerts = readRecord('sq:dismiss-cancel', {});

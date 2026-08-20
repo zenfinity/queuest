@@ -3,7 +3,7 @@
 	import type { SearchResult } from '$lib/types';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { releaseChip } from '$lib/progress';
+	import { releaseChip, DEFAULT_BUDGET_HOURS } from '$lib/progress';
 	import { page, navigating } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
@@ -26,9 +26,9 @@
 
 	// DetailPanel's runtime lollipop is relative to the monthly budget, same as
 	// the queue page — read once rather than making this page track budget state.
-	let budgetHours = $state(40);
+	let budgetHours = $state(DEFAULT_BUDGET_HOURS);
 	try {
-		budgetHours = JSON.parse(localStorage.getItem('sq:budget') ?? '40');
+		budgetHours = JSON.parse(localStorage.getItem('sq:budget') ?? String(DEFAULT_BUDGET_HOURS));
 	} catch {
 		// Best-effort localStorage read; app uses default budget if read fails
 	}

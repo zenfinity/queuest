@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.8.5] — 2026-08-20
+
+### Corrected inaccurate privacy claims
+
+Encrypted sync (#79) shipped in v0.8.0, but the landing page and README still described a product with no accounts and no server. Four places said so outright and were plainly wrong for anyone who had turned sync on:
+
+- The landing page's "Private by design" card claimed *"No account, no login… Nothing personal ever touches our servers."*
+- The README's Data & Privacy section led with *"No user accounts"* and *"never leaves your device unless you export it."*
+- The README's "Your data, your device" step said *"no account, no server, no tracking."*
+- The Stack table described storage as *"IndexedDB (client-side, no server DB)"*.
+
+All four now describe what actually happens: no account is required and the app works fully signed-out, but sync is an opt-in account whose data is encrypted client-side before it is sent, leaving the server holding ciphertext it cannot read. That property is a stronger claim than the one it replaces, and it has the advantage of being true. (#192)
+
+### Landing page and README refresh
+
+- **The landing page now mentions sync and Collections at all** — both shipped features were entirely absent, and sync in particular is the app's clearest differentiator. Two new feature cards ("Group it into Collections", "Sync, without us reading it"), and the hero's trust line gains *End-to-end encrypted*. Collaborative Collections (#145) is deliberately not advertised — it hasn't shipped. (#192)
+- **README Features restructured** from a flat 19-item list into five groups, so the things that distinguish this app lead instead of sitting level with dark mode. Adds end-to-end encrypted sync, recovery codes, Collections, Gantt group-by-collection, and IMDb links. (#192)
+
+### Landing page maintenance
+
+Scoped down from the original #131 after establishing that `.design-sync/design-reference.md` was one-time scaffolding rather than a governing spec — the current visual style is the approved one, so the "drift from the reference" findings were dropped and only genuine maintenance issues were fixed. All changes below are visually identical except where noted.
+
+- **The product mock is data-driven.** Its three tabs hand-wrote their own near-identical lanes, rows, and cards — two list rows and two cards were near-copies *within the mock itself*, and had already drifted from each other. All three tabs now render from two shared arrays, so List and Grid can't disagree about the same title. (Using the real `QueueGridView`/`QueueListView`/`QueueGanttView` components was considered and rejected: they need real `WatchlistItem`s, live handlers, and TMDB image loads, none of which belong on a marketing page.) (#131)
+- **The mock no longer hardcodes the monthly budget.** `40h / mo` appeared twice in the landing markup and again as a literal default in two route files. New shared `DEFAULT_BUDGET_HOURS` constant, so the marketing copy can't silently disagree with the app. (#131)
+- **`.mock-float` no longer warns on every build** — it was applied through a ternary the compiler couldn't see statically, so Svelte reported it as an unused selector. Now a `class:` directive. (#131)
+- **The two file inputs in the import panel share one class string** instead of a 274-character string copied verbatim in two places. (#131)
+- **The Budget page's number inputs match the ones in the queue's budget callout** — the two were near-copies differing in three utilities, giving the same control two looks. The queue page's geometry wins (`w-14`, `px-2 py-1.5`, `bg-white`); the Budget page keeps its neutral resting ring, since the orange ring belongs to the callout's theming rather than to the control. This one is a deliberate visual change. (#131)
+
+### Bug fixes
+
+- **The landing page returned 500 in local development.** `adapter-cloudflare` installs a throwing getter on every `platform.env` key for prerenderable routes, and `/` is prerendered — so *reading* `SHARE_KV` threw rather than returning undefined. The existing guard covered the build's static-generation pass (`building`) but not `vite dev`, where `building` is false and the same getters are installed. Production was unaffected, which is why it went unnoticed. Found while trying to view the landing page work above.
+
+---
+
 ## [0.8.4] — 2026-08-20
 
 ### Features
