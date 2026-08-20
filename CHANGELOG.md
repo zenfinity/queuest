@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.3] — 2026-08-20
+
+### Shared collections are viewable and usable (#145)
+
+v0.9.2 let a collection be promoted to shared, but nothing could see what was in it afterward — Settings said "Members coming soon in queue view," and promoting a collection meant its titles vanished from the only place that rendered them. This closes that gap:
+
+- **New `/collections/[id]` view.** Poster, title, runtime, who added it, and a per-account "Mark watched" toggle with small avatar badges showing who's watched it — reading and writing the same `watch` map the collection blob already stores.
+- **`Open` on every shared collection in Settings** links straight there.
+- **The Info panel now actually lists members**, with email and role. It previously rendered a remove-confirmation dialog with no way to trigger it — `removingMember` was set nowhere in the component, so member removal was unreachable dead code since v0.9.0. Owners can now remove a member from the list directly, which drives the existing key-rotation flow.
+
+### Fixed
+
+- Watching-status round-trips correctly through the version-precondition PUT/409 cycle (`toggleCollectionWatched`), touching only the toggling account's own entry in the per-member watch map — verified in dev that marking watched, then unwatched, doesn't disturb another member's mark.
+
 ## [0.9.2] — 2026-08-20
 
 ### Shared collections start by promoting a personal one (#145)

@@ -10,7 +10,9 @@ import {
 	createInvite,
 	removeMemberAndRotate,
 	joinCollection,
-	promoteCollection
+	promoteCollection,
+	loadCollectionItems,
+	toggleCollectionWatched
 } from './collection-actions';
 
 const noop = { setBusy: () => {}, setError: () => {} };
@@ -287,5 +289,93 @@ describe('promoteCollection', () => {
 
 		const { items: blob } = await decryptSeeded(seeded()!, created!.wrappedKey);
 		expect(blob[0].watch[ALICE]).toBeTruthy();
+	});
+});
+
+describe('loadCollectionItems / toggleCollectionWatched', () => {
+	function stubViewFetch(initialItems: unknown[]) {
+		let version = 1;
+		let stored: unknown[] = initialItems;
+		const mock = vi.fn(async (url: string, init?: RequestInit) => {
+			const u = String(url);
+			if (u.includes('/blob') && (!init || init.method === undefined)) {
+				const { gzip } = await import('./gzip');
+				const { encryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const compressed = await gzip(new TextEncoder().encode(JSON.stringify({ items: stored })));
+				const ciphertext = await encryptBytesWithDek(compressed, dek);
+				return new Response(ciphertext, {
+					status: 200,
+					headers: {
+						'X-Sync-Version': String(version),
+						'X-Collection-Dek-Version': '1'
+					}
+				});
+			}
+			if (u.includes('/blob') && init?.method === 'PUT') {
+				const { gunzip } = await import('./gzip');
+				const { decryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const body = await new Response(init.body as BodyInit).arrayBuffer();
+				const plain = await decryptBytesWithDek(body, dek);
+				stored = (JSON.parse(new TextDecoder().decode(await gunzip(plain))) as { items: unknown[] })
+					.items;
+				version++;
+				return Response.json({ version });
+			}
+			throw new Error(`unexpected request: ${u}`);
+		});
+		return { mock, stored: () => stored };
+	}
+
+	function seedItem(tmdb_id: number) {
+		return {
+			tmdb_id,
+			media_type: 'movie',
+			title: `Title ${tmdb_id}`,
+			poster_path: null,
+			overview: null,
+			providers: [],
+			runtime_minutes: 100,
+			seasons: [],
+			watched_seasons: [],
+			added_at: '2026-08-01T00:00:00.000Z',
+			watched_at: null,
+			updated_at: '2026-08-01T00:00:00.000Z',
+			watch: {},
+			added_by_account_id: ALICE
+		};
+	}
+
+	it('loads and decrypts the collection blob', async () => {
+		vi.stubGlobal('fetch', stubViewFetch([seedItem(1)]).mock);
+		const items = await loadCollectionItems(collection(), noop);
+		expect(items).toHaveLength(1);
+		expect(items[0].tmdb_id).toBe(1);
+	});
+
+	it('sets only the toggling account’s own watch entry', async () => {
+		const { mock, stored } = stubViewFetch([seedItem(5)]);
+		vi.stubGlobal('fetch', mock);
+
+		const items = await loadCollectionItems(collection(), noop);
+		const result = await toggleCollectionWatched(collection(), items, items[0], ALICE, true, noop);
+
+		expect(result).not.toBeNull();
+		expect(result![0].watch?.[ALICE]).toBeTruthy();
+		expect((stored()[0] as { watch: Record<string, string> }).watch[ALICE]).toBeTruthy();
+	});
+
+	it('clears only the toggling account’s own watch entry, leaving others alone', async () => {
+		const seeded = seedItem(6);
+		seeded.watch = { [ALICE]: '2026-08-01T00:00:00.000Z', [BOB]: '2026-08-02T00:00:00.000Z' };
+		const { mock } = stubViewFetch([seeded]);
+		vi.stubGlobal('fetch', mock);
+
+		const items = await loadCollectionItems(collection(), noop);
+		const result = await toggleCollectionWatched(collection(), items, items[0], ALICE, false, noop);
+
+		expect(result![0].watch?.[ALICE]).toBeUndefined();
+		expect(result![0].watch?.[BOB]).toBeTruthy();
 	});
 });
