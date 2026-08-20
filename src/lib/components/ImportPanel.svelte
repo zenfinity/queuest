@@ -172,6 +172,12 @@
 			// Best-effort localStorage read; app works fine without missed titles list
 		}
 	});
+	// Shared by both file inputs below (backup restore and CSV upload) — the
+	// same 274-character class string was previously copied verbatim in two
+	// places, so a change to one silently gave the two controls different
+	// looks (#131).
+	const FILE_INPUT_CLASS =
+		'w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700';
 </script>
 
 <div class="space-y-6">
@@ -187,7 +193,7 @@
 			type="file"
 			aria-label="Backup file"
 			accept=".queuest"
-			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
+			class={FILE_INPUT_CLASS}
 			onchange={onRestoreFileChange}
 		/>
 		<div class="flex gap-2">
@@ -252,7 +258,7 @@
 			type="file"
 			aria-label="CSV file"
 			accept=".csv"
-			class="w-full cursor-pointer rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-gray-800 dark:file:text-gray-200 dark:hover:file:bg-gray-700"
+			class={FILE_INPUT_CLASS}
 			onchange={onCsvFileChange}
 		/>
 		<div class="flex items-center gap-2">

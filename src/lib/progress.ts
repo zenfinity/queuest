@@ -74,6 +74,15 @@ export function releaseChip(r: ReleaseInfo | null | undefined): string | null {
 
 export const DEFAULT_RUNTIME: Record<'movie' | 'tv', number> = { movie: 90, tv: 45 };
 
+/**
+ * Monthly viewing budget assumed before the user sets one. Shared so the
+ * landing page's product mock can't advertise a different number than the
+ * app actually defaults to — it was hardcoded in both places independently
+ * (see #131), which would have silently made the marketing wrong the first
+ * time this changed.
+ */
+export const DEFAULT_BUDGET_HOURS = 40;
+
 /** Formats a duration in minutes as e.g. "2h 30m" or "45m", exact (no "~"). */
 export function hms(mins: number): string {
 	const h = Math.floor(mins / 60),
