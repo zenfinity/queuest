@@ -57,6 +57,25 @@ export interface WatchlistItem {
 	director?: string | null; // movie director
 	creator?: string | null; // TV show creator(s)
 	imdb_id?: string | null; // e.g. "tt0111161" — from TMDB external_ids, for a "View on IMDb" link
+
+	// ── Collaborative Collections (#188) ────────────────────────────────────
+	// Unused by a personal (non-collection) item — the personal merge engine
+	// in sync.ts never reads either field. Present here rather than on a
+	// separate CollectionItem type because collection blobs are serialized
+	// through the same BackupItem shape as personal sync (see
+	// app-state.ts's parseBackupItem), and duplicating the whole interface
+	// for two extra optional fields would be the greater evil.
+
+	// Per-account watch marks: account id -> the ISO timestamp they marked
+	// this watched. A map, not a boolean, because a shared item can be
+	// watched by some members and not others, and each mark needs to survive
+	// a concurrent mark by someone else — see mergeCollectionWatch in
+	// collection-sync.ts for why this can't be whole-item LWW.
+	watch?: Record<string, string>;
+	// Which account originally added this title. Attribution, not edit
+	// tracking — kept stable across merges rather than following whichever
+	// side wins the field-group LWW.
+	added_by_account_id?: string | null;
 }
 
 export interface SearchResult {

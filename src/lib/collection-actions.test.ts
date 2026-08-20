@@ -50,7 +50,7 @@ function collection(over = {}) {
 
 describe('createInvite', () => {
 	it('puts the collection key in the fragment, never in the request', async () => {
-		const fetchMock = vi.fn(async () =>
+		const fetchMock = vi.fn(async (..._args: unknown[]) =>
 			Response.json({ token: 'tok123', id: 'h', expiresAt: 'x' })
 		);
 		vi.stubGlobal('fetch', fetchMock);
@@ -73,7 +73,7 @@ describe('createInvite', () => {
 
 describe('joinCollection', () => {
 	it('sends only a wrapped copy of the key, never the key itself', async () => {
-		const fetchMock = vi.fn(async () => Response.json({ collectionId: COLL }));
+		const fetchMock = vi.fn(async (..._args: unknown[]) => Response.json({ collectionId: COLL }));
 		vi.stubGlobal('fetch', fetchMock);
 
 		await joinCollection('tok', collectionDek, noop);
