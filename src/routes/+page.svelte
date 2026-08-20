@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { motion } from '$lib/motion.svelte';
 	import { DEFAULT_BUDGET_HOURS } from '$lib/progress';
+	import { shouldRedirectToApp } from '$lib/landing';
 
 	let tab = $state<'timeline' | 'list' | 'cards'>('timeline');
 
@@ -108,17 +109,21 @@
 
 	const WATCHED_SEASONS = ['S1', 'S2', 'S3', 'S4'];
 
-	onMount(() => {
+	// #196: see landing.ts for the redirect condition itself and why it's
+	// pulled out as a plain function.
+	afterNavigate((navigation) => {
 		try {
 			const isPreview = new URLSearchParams(window.location.search).has('preview');
-			if (!isPreview && localStorage.getItem('sq:welcomed')) {
+			const welcomed = localStorage.getItem('sq:welcomed') === '1';
+			if (shouldRedirectToApp(navigation.type, welcomed, isPreview)) {
 				goto(resolve('/app'), { replaceState: true });
-				return;
 			}
 		} catch {
 			// Best-effort localStorage read; app shows landing page if check fails
 		}
+	});
 
+	onMount(() => {
 		// Parallax blobs
 		const blobs = [...document.querySelectorAll<HTMLElement>('[data-parallax]')];
 		function onScroll() {
