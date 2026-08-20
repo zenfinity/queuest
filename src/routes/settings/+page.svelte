@@ -25,6 +25,13 @@
 		signOut,
 		deleteAccount
 	} from '$lib/sync-account-actions';
+	import {
+		listCollections as listSharedCollections,
+		createCollection as createSharedCollection,
+		createInvite,
+		removeMemberAndRotate,
+		type SharedCollection
+	} from '$lib/collection-actions';
 
 	import {
 		getQueueName,
@@ -150,6 +157,80 @@
 			resetting = false;
 		}
 	}
+
+	// ── Shared Collections ────────────────────────────────────────────────────
+	let sharedCollections: SharedCollection[] = $state([]);
+	let newSharedCollectionName = $state('');
+	let creatingCollection = $state(false);
+	let creatingError = $state('');
+	let openCollection: SharedCollection | null = $state(null);
+	let inviteLink = $state('');
+	let inviteCopied = $state(false);
+	let removingMember: { collectionId: string; userId: string } | null = $state(null);
+	let removalError = $state('');
+
+	async function loadSharedCollections() {
+		sharedCollections = await listSharedCollections({
+			setBusy: () => {},
+			setError: () => {}
+		});
+	}
+
+	async function doCreateSharedCollection() {
+		if (!newSharedCollectionName.trim()) return;
+		creatingCollection = true;
+		creatingError = '';
+		try {
+			const created = await createSharedCollection(newSharedCollectionName, {
+				setBusy: () => {},
+				setError: (e) => (creatingError = e)
+			});
+			if (created) {
+				sharedCollections = [...sharedCollections, created];
+				newSharedCollectionName = '';
+			}
+		} finally {
+			creatingCollection = false;
+		}
+	}
+
+	async function generateInviteLink() {
+		if (!openCollection) return;
+		inviteLink = '';
+		inviteCopied = false;
+		const link = await createInvite(openCollection, window.location.origin, {
+			setBusy: () => {},
+			setError: (e) => (creatingError = e)
+		});
+		if (link) {
+			inviteLink = link;
+		}
+	}
+
+	async function copyInviteLink() {
+		if (!inviteLink) return;
+		await navigator.clipboard.writeText(inviteLink);
+		inviteCopied = true;
+		setTimeout(() => (inviteCopied = false), 2000);
+	}
+
+	async function doRemoveMember() {
+		if (!removingMember || !openCollection) return;
+		const result = await removeMemberAndRotate(openCollection, removingMember.userId, {
+			setBusy: () => {},
+			setError: (e) => (removalError = e)
+		});
+		if (result) {
+			// Reload the collection
+			await loadSharedCollections();
+			openCollection = sharedCollections.find((c) => c.id === openCollection!.id) || null;
+			removingMember = null;
+		}
+	}
+
+	onMount(async () => {
+		await loadSharedCollections();
+	})
 
 	// ── Cancel alerts opt-in ─────────────────────────────────────────────────
 	let cancelAlertsEnabled = $state(false);
@@ -429,7 +510,10 @@
 		queueColors = getQueueColors();
 
 		syncEnabled = await isSyncEnabled();
-		if (syncEnabled) syncView = 'status';
+		if (syncEnabled) {
+			syncView = 'status';
+			await loadSharedCollections();
+		}
 
 		items = await getAll();
 		collections = listCollections(items, Object.keys(queueColors));
@@ -623,6 +707,123 @@
 			</div>
 		{/if}
 	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- Shared Collections -->
+	{#if syncEnabled}
+		<section id="shared-collections" class="space-y-3 scroll-mt-4">
+			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared Collections</h2>
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				Create or join collections to watch titles together.
+			</p>
+			
+			<form
+				class="flex gap-2"
+				onsubmit={(e) => {
+					e.preventDefault();
+					doCreateSharedCollection();
+				}}
+			>
+				<input
+					type="text"
+					maxlength="100"
+					placeholder="New shared collection…"
+					bind:value={newSharedCollectionName}
+					disabled={creatingCollection}
+					class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+				/>
+				<button
+					type="submit"
+					disabled={!newSharedCollectionName.trim() || creatingCollection}
+					class="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-400 disabled:opacity-50"
+				>
+					{creatingCollection ? 'Creating…' : 'Create'}
+				</button>
+			</form>
+			{#if creatingError}
+				<p class="text-xs text-red-600 dark:text-red-400">{creatingError}</p>
+			{/if}
+
+			{#if sharedCollections.length === 0}
+				<p class="text-sm text-gray-400 dark:text-gray-600">No shared collections yet.</p>
+			{:else}
+				<div class="space-y-2">
+					{#each sharedCollections as coll (coll.id)}
+						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60 flex items-center justify-between">
+							<div class="min-w-0 flex-1">
+								<p class="text-sm font-medium text-gray-800 dark:text-gray-200">{coll.name}</p>
+								<p class="text-xs text-gray-500 dark:text-gray-400">{coll.role === 'owner' ? 'You own this' : 'Member'}</p>
+							</div>
+							<div class="flex gap-1 ml-2">
+								{#if coll.role === 'owner'}
+									<button
+										onclick={async () => {
+											openCollection = coll;
+											await generateInviteLink();
+										}}
+										class="text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+									>
+										Invite
+									</button>
+								{/if}
+								<button
+									onclick={() => (openCollection = openCollection?.id === coll.id ? null : coll)}
+									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+								>
+									{openCollection?.id === coll.id ? 'Hide' : 'Info'}
+								</button>
+							</div>
+						</div>
+						{#if openCollection?.id === coll.id}
+							<div class="ml-3 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2 text-xs text-gray-600 dark:text-gray-400">
+								{#if inviteLink && openCollection.id === coll.id}
+									<div class="flex gap-1">
+										<input
+											type="text"
+											readonly
+											value={inviteLink}
+											class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
+										/>
+										<button
+											onclick={copyInviteLink}
+											class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+										>
+											{inviteCopied ? '✓' : 'Copy'}
+										</button>
+									</div>
+								{/if}
+								{#if removingMember?.collectionId === coll.id}
+									<div class="bg-red-50 dark:bg-red-900/20 rounded p-2 space-y-1">
+										<p>Remove member and rotate key?</p>
+										<div class="flex gap-1">
+											<button
+												onclick={doRemoveMember}
+												class="px-2 py-1 rounded text-white text-xs bg-red-600 hover:bg-red-700"
+											>
+												Confirm
+											</button>
+											<button
+												onclick={() => (removingMember = null)}
+												class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+											>
+												Cancel
+											</button>
+										</div>
+										{#if removalError}
+											<p class="text-red-600 dark:text-red-400">{removalError}</p>
+										{/if}
+									</div>
+								{:else}
+									<p>Members coming soon in queue view.</p>
+								{/if}
+							</div>
+						{/if}
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
