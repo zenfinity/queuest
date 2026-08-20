@@ -12,7 +12,8 @@ import {
 	joinCollection,
 	promoteCollection,
 	loadCollectionItems,
-	toggleCollectionWatched
+	toggleCollectionWatched,
+	renameSharedCollection
 } from './collection-actions';
 
 const noop = { setBusy: () => {}, setError: () => {} };
@@ -377,5 +378,38 @@ describe('loadCollectionItems / toggleCollectionWatched', () => {
 
 		expect(result![0].watch?.[ALICE]).toBeUndefined();
 		expect(result![0].watch?.[BOB]).toBeTruthy();
+	});
+});
+
+describe('renameSharedCollection', () => {
+	it('PATCHes the collection and returns it with the new name', async () => {
+		const fetchMock = vi.fn(async (..._args: unknown[]) =>
+			Response.json({ id: COLL, name: 'Movie Night' })
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		const result = await renameSharedCollection(collection(), 'Movie Night', noop);
+
+		expect(result?.name).toBe('Movie Night');
+		expect(result?.id).toBe(COLL);
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe(`/api/collections/${COLL}`);
+		expect((init as RequestInit).method).toBe('PATCH');
+		expect(JSON.parse(String((init as RequestInit).body))).toEqual({ name: 'Movie Night' });
+	});
+
+	it('surfaces a server error instead of throwing', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				Response.json({ error: 'Only the owner can rename this list' }, { status: 403 })
+			)
+		);
+
+		const c = capture();
+		const result = await renameSharedCollection(collection(), 'New name', c.deps);
+
+		expect(result).toBeNull();
+		expect(c.err()).toBeTruthy();
 	});
 });

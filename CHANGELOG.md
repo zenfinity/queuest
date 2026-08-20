@@ -41,6 +41,15 @@ Moved below the list rows, right before the divider into Shared Lists, and style
 
 Each list's name, count, color swatch, and four action buttons (Share, Read-only link, Rename, Delete) were packed into a single horizontal line — the reason names were truncating to "Trilogy …" in a 375px-wide row, and exactly the kind of cramped adjacent-button spacing that causes mis-taps on mobile. Split into two lines within the same card: color + full name + count on top, actions on their own row below with `flex-wrap` so they drop to a third line rather than overflow on narrow screens. The color control itself moved from a plain decorative dot into the actual color-picker swatch — one interactive control living with the name, instead of a redundant static dot up top and a separate bigger clickable swatch buried in the actions row.
 
+Shared Lists got the same two-line treatment: name (+ activity badge) with the ownership label ("You own this" / "Member") right-justified on the same line, actions on their own row below.
+
+### Color and rename for shared lists
+
+Shared lists previously had no color at all, and no way to change the name an owner picked at creation. Both now work the same way personal lists do:
+
+- **Color** — auto-assigned per list on first view (same hashing scheme as personal lists) and changeable from the same swatch-on-the-name-line control. Deliberately its own local, per-device storage bucket, not the personal-list color map keyed by name — reusing that one keyed by a shared list's `id` briefly leaked ids in as phantom empty personal lists (the *first* version of this shipped that bug; fixed before it left this branch). Not synced across devices yet, and not visible to other collaborators — it's your own view, like the personal-list palette used to be before sync existed for it.
+- **Rename** — owner-only, enforced server-side (`PATCH /api/collections/[id]`) since the name is plaintext every member and an invite's unauthenticated preview can see, not a personal preference. Same inline edit-in-place UX as personal lists.
+
 ## [0.9.4] — 2026-08-20
 
 ### Bulk assign to a collection (#113)

@@ -426,3 +426,31 @@ export async function toggleCollectionWatched(
 		deps.setBusy(false);
 	}
 }
+
+/**
+ * Renames a shared collection. Owner-only — enforced server-side, since the
+ * name is a property every member sees, not a personal preference.
+ */
+export async function renameSharedCollection(
+	collection: SharedCollection,
+	name: string,
+	deps: CollectionActionDeps
+): Promise<SharedCollection | null> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const res = await fetch(`/api/collections/${collection.id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ name })
+		});
+		await throwIfNotOk(res);
+		const { name: savedName } = (await res.json()) as { id: string; name: string };
+		return { ...collection, name: savedName };
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not rename this list.');
+		return null;
+	} finally {
+		deps.setBusy(false);
+	}
+}
