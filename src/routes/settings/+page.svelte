@@ -27,7 +27,7 @@
 	} from '$lib/sync-account-actions';
 	import {
 		listCollections as listSharedCollections,
-		createCollection as createSharedCollection,
+		promoteCollection,
 		createInvite,
 		removeMemberAndRotate,
 		type SharedCollection
@@ -160,12 +160,13 @@
 
 	// ── Shared Collections ────────────────────────────────────────────────────
 	let sharedCollections: SharedCollection[] = $state([]);
-	let newSharedCollectionName = $state('');
-	let creatingCollection = $state(false);
-	let creatingError = $state('');
+	let promoteArmed: string | null = $state(null);
+	let promoting = $state(false);
+	let promoteError = $state('');
 	let openCollection: SharedCollection | null = $state(null);
 	let inviteLink = $state('');
 	let inviteCopied = $state(false);
+	let inviteError = $state('');
 	let removingMember: { collectionId: string; userId: string } | null = $state(null);
 	let removalError = $state('');
 
@@ -176,21 +177,32 @@
 		});
 	}
 
-	async function doCreateSharedCollection() {
-		if (!newSharedCollectionName.trim()) return;
-		creatingCollection = true;
-		creatingError = '';
+	// Promotion is the only way a shared collection is born (#145) — there is no
+	// create-from-scratch form, so the two Settings sections can't drift into two
+	// unrelated things both called "Collections".
+	async function doPromoteCollection(name: string) {
+		promoting = true;
+		promoteError = '';
 		try {
-			const created = await createSharedCollection(newSharedCollectionName, {
+			const created = await promoteCollection(name, items, {
 				setBusy: () => {},
-				setError: (e) => (creatingError = e)
+				setError: (e) => (promoteError = e)
 			});
 			if (created) {
 				sharedCollections = [...sharedCollections, created];
-				newSharedCollectionName = '';
+				promoteArmed = null;
+				// Drop the personal collection's color entry too. A name with no
+				// items still "exists" as a palette key (see listCollections's
+				// extraNames), so without this the promoted name keeps showing up
+				// in both sections — the exact duplication promotion exists to end.
+				deleteCollectionColor(name);
+				queueColors = getQueueColors();
+				items = await getAll();
+				collections = listCollections(items, Object.keys(queueColors));
+				updateCounts();
 			}
 		} finally {
-			creatingCollection = false;
+			promoting = false;
 		}
 	}
 
@@ -198,9 +210,10 @@
 		if (!openCollection) return;
 		inviteLink = '';
 		inviteCopied = false;
+		inviteError = '';
 		const link = await createInvite(openCollection, window.location.origin, {
 			setBusy: () => {},
-			setError: (e) => (creatingError = e)
+			setError: (e) => (inviteError = e)
 		});
 		if (link) {
 			inviteLink = link;
@@ -599,109 +612,163 @@
 					{@const count = collectionCounts[collection] ?? 0}
 					{@const isRenaming = renamingCollection === collection}
 					{@const isDeleting = deleteArmed === collection}
-					<div
-						class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60"
-					>
-						<div class="flex items-center gap-2.5 min-w-0 flex-1">
-							<span class="h-3 w-3 shrink-0 rounded-full" style="background:{color};"></span>
-							{#if isRenaming}
-								<!-- svelte-ignore a11y_autofocus -->
-								<input
-									type="text"
-									aria-label="New collection name"
-									maxlength="40"
-									value={renameInput}
-									oninput={(e) => (renameInput = e.currentTarget.value)}
-									onkeydown={(e) => {
-										if (e.key === 'Enter') renameCollection(collection, renameInput);
-										if (e.key === 'Escape') renamingCollection = null;
-									}}
-									autofocus
-									class="flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-								/>
-							{:else}
-								<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200"
-									>{collection}</span
-								>
-								<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">({count})</span>
-							{/if}
-						</div>
-						<div class="flex items-center gap-1 ml-2 shrink-0">
-							{#if isRenaming}
-								<button
-									disabled={manageBusy}
-									onclick={() => renameCollection(collection, renameInput)}
-									class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-								>
-									Save
-								</button>
-								<button
-									disabled={manageBusy}
-									onclick={() => {
-										renamingCollection = null;
-										renameInput = '';
-									}}
-									class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-								>
-									Cancel
-								</button>
-							{:else if isDeleting}
-								<div class="text-xs text-gray-600 dark:text-gray-400 mr-2">
-									Delete collection? Items stay.
-								</div>
-								<button
-									disabled={manageBusy}
-									onclick={() => deleteCollection(collection)}
-									class="text-xs px-2 py-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
-								>
-									Confirm
-								</button>
-								<button
-									disabled={manageBusy}
-									onclick={() => (deleteArmed = null)}
-									class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-								>
-									Cancel
-								</button>
-							{:else}
-								<label class="relative cursor-pointer" title="Change color">
-									<span
-										class="block h-6 w-6 rounded border border-gray-300 shadow-sm dark:border-gray-600"
-										style="background:{color};"
-									></span>
+					{@const isPromoting = promoteArmed === collection}
+					<div>
+						<div
+							class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60"
+						>
+							<div class="flex items-center gap-2.5 min-w-0 flex-1">
+								<span class="h-3 w-3 shrink-0 rounded-full" style="background:{color};"></span>
+								{#if isRenaming}
+									<!-- svelte-ignore a11y_autofocus -->
 									<input
-										type="color"
-										aria-label="Collection color"
-										value={color}
-										oninput={(e) =>
-											updateCollectionColor(
-												collection,
-												(e.currentTarget as HTMLInputElement).value
-											)}
-										class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+										type="text"
+										aria-label="New collection name"
+										maxlength="40"
+										value={renameInput}
+										oninput={(e) => (renameInput = e.currentTarget.value)}
+										onkeydown={(e) => {
+											if (e.key === 'Enter') renameCollection(collection, renameInput);
+											if (e.key === 'Escape') renamingCollection = null;
+										}}
+										autofocus
+										class="flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
 									/>
-								</label>
-								<button
-									disabled={manageBusy}
-									onclick={() => {
-										renamingCollection = collection;
-										renameInput = collection;
-									}}
-									class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-									title="Rename collection"
-								>
-									Rename
-								</button>
-								<button
-									disabled={manageBusy}
-									onclick={() => deleteCollection(collection)}
-									class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
-									title="Delete collection"
-								>
-									Delete
-								</button>
-							{/if}
+								{:else}
+									<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200"
+										>{collection}</span
+									>
+									<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">({count})</span>
+								{/if}
+							</div>
+							<div class="flex items-center gap-1 ml-2 shrink-0">
+								{#if isRenaming}
+									<button
+										disabled={manageBusy}
+										onclick={() => renameCollection(collection, renameInput)}
+										class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+									>
+										Save
+									</button>
+									<button
+										disabled={manageBusy}
+										onclick={() => {
+											renamingCollection = null;
+											renameInput = '';
+										}}
+										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+									>
+										Cancel
+									</button>
+								{:else if isDeleting}
+									<div class="text-xs text-gray-600 dark:text-gray-400 mr-2">
+										Delete collection? Items stay.
+									</div>
+									<button
+										disabled={manageBusy}
+										onclick={() => deleteCollection(collection)}
+										class="text-xs px-2 py-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
+									>
+										Confirm
+									</button>
+									<button
+										disabled={manageBusy}
+										onclick={() => (deleteArmed = null)}
+										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+									>
+										Cancel
+									</button>
+								{:else}
+									<label class="relative cursor-pointer" title="Change color">
+										<span
+											class="block h-6 w-6 rounded border border-gray-300 shadow-sm dark:border-gray-600"
+											style="background:{color};"
+										></span>
+										<input
+											type="color"
+											aria-label="Collection color"
+											value={color}
+											oninput={(e) =>
+												updateCollectionColor(
+													collection,
+													(e.currentTarget as HTMLInputElement).value
+												)}
+											class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+										/>
+									</label>
+									{#if syncEnabled}
+										<button
+											disabled={manageBusy || promoting}
+											onclick={() => {
+												promoteArmed = collection;
+												promoteError = '';
+											}}
+											class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+											title="Share this collection with other people"
+										>
+											Share
+										</button>
+									{/if}
+									<button
+										disabled={manageBusy}
+										onclick={() => {
+											renamingCollection = collection;
+											renameInput = collection;
+										}}
+										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+										title="Rename collection"
+									>
+										Rename
+									</button>
+									<button
+										disabled={manageBusy}
+										onclick={() => deleteCollection(collection)}
+										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
+										title="Delete collection"
+									>
+										Delete
+									</button>
+								{/if}
+							</div>
 						</div>
+						{#if isPromoting}
+							<div
+								class="mt-1 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2.5 text-xs dark:border-orange-900/60 dark:bg-orange-950/30"
+							>
+								<p class="font-medium text-gray-900 dark:text-gray-100">
+									Share “{collection}” with other people?
+								</p>
+								<p class="mt-1 text-gray-700 dark:text-gray-300">
+									Its {collectionCounts[collection] ?? 0} title{(collectionCounts[collection] ??
+										0) === 1
+										? ''
+										: 's'} move into a shared collection and leave this queue. From then on they live
+									online, reachable only through this account —
+									<span class="font-medium"
+										>if you lose both your passphrase and your recovery code, they're gone for good.</span
+									>
+								</p>
+								{#if promoteError}
+									<p class="mt-1.5 text-red-600 dark:text-red-400">{promoteError}</p>
+								{/if}
+								<div class="mt-2 flex items-center gap-1">
+									<button
+										disabled={promoting}
+										onclick={() => doPromoteCollection(collection)}
+										class="rounded px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
+									>
+										{promoting ? 'Sharing…' : 'Share it'}
+									</button>
+									<button
+										disabled={promoting}
+										onclick={() => (promoteArmed = null)}
+										class="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-700"
+									>
+										Cancel
+									</button>
+								</div>
+							</div>
+						{/if}
 					</div>
 				{/each}
 			</div>
@@ -717,35 +784,9 @@
 				Shared Collections
 			</h2>
 			<p class="text-sm text-gray-600 dark:text-gray-400">
-				Create or join collections to watch titles together.
+				Collections you're watching through with other people. To start one, use
+				<span class="font-medium">Share</span> on a collection above.
 			</p>
-
-			<form
-				class="flex gap-2"
-				onsubmit={(e) => {
-					e.preventDefault();
-					doCreateSharedCollection();
-				}}
-			>
-				<input
-					type="text"
-					maxlength="100"
-					placeholder="New shared collection…"
-					bind:value={newSharedCollectionName}
-					disabled={creatingCollection}
-					class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-				/>
-				<button
-					type="submit"
-					disabled={!newSharedCollectionName.trim() || creatingCollection}
-					class="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-400 disabled:opacity-50"
-				>
-					{creatingCollection ? 'Creating…' : 'Create'}
-				</button>
-			</form>
-			{#if creatingError}
-				<p class="text-xs text-red-600 dark:text-red-400">{creatingError}</p>
-			{/if}
 
 			{#if sharedCollections.length === 0}
 				<p class="text-sm text-gray-400 dark:text-gray-600">No shared collections yet.</p>
@@ -800,6 +841,9 @@
 											{inviteCopied ? '✓' : 'Copy'}
 										</button>
 									</div>
+								{/if}
+								{#if inviteError}
+									<p class="text-red-600 dark:text-red-400">{inviteError}</p>
 								{/if}
 								{#if removingMember?.collectionId === coll.id}
 									<div class="bg-red-50 dark:bg-red-900/20 rounded p-2 space-y-1">
