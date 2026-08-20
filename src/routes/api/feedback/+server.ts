@@ -3,7 +3,7 @@ import { env } from '$env/dynamic/private';
 import { apiError, checkSameOrigin } from '$lib/server/api';
 import type { RequestHandler } from './$types';
 
-const REPO = 'zenfinity/streamq';
+const REPO = 'zenfinity/queuest';
 const GITHUB_API = `https://api.github.com/repos/${REPO}/issues`;
 const TITLE_MAX = 200;
 const BODY_MAX = 5_000;

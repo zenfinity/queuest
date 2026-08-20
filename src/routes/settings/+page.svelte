@@ -39,7 +39,7 @@
 	import pkg from '../../../package.json';
 
 	const VERSION = pkg.version;
-	const GITHUB_REPO = 'https://github.com/zenfinity/streamq';
+	const GITHUB_REPO = 'https://github.com/zenfinity/queuest';
 
 	// ── Export ────────────────────────────────────────────────────────────────
 	let exportPassphrase = $state('');

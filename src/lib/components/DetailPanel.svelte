@@ -42,7 +42,6 @@
 		onToggleSeason,
 		onClose,
 		footer,
-		queueColors = {},
 		existingCollections = [],
 		onSetCollection
 	}: {
@@ -52,7 +51,6 @@
 		onToggleSeason?: (seasonNumber: number) => void;
 		onClose: () => void;
 		footer: Snippet<[DetailPanelItem]>;
-		queueColors?: Record<string, string>;
 		existingCollections?: string[];
 		onSetCollection?: (tag: string | null) => Promise<void>;
 	} = $props();
@@ -203,21 +201,12 @@
 		<div class="space-y-4 px-4 pb-4">
 			<!-- Collection -->
 			{#if onSetCollection}
-				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 				<div class="flex items-center justify-between gap-2">
 					<span
 						class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
 						>Collection</span
 					>
 					<div class="flex min-w-0 items-center gap-2">
-						{#if item.queue_tag}
-							<span
-								class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold text-white"
-								style="background-color: {tagColor || '#6b7280'};"
-							>
-								{item.queue_tag}
-							</span>
-						{/if}
 						<select
 							value={item.queue_tag ?? ''}
 							disabled={collectionBusy}

@@ -419,8 +419,13 @@
 
 	<!-- Summary line -->
 	{#if loaded && items.length > 0}
+		{@const collectionLabel =
+			queueControls.collectionFilter === UNCATEGORIZED
+				? 'Uncategorized'
+				: queueControls.collectionFilter}
+		{@const collectionPrefix = collectionLabel ? `${collectionLabel} · ` : ''}
 		<p class="text-xs text-gray-500 dark:text-gray-500">
-			{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(
+			{collectionPrefix}{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(
 				visibleItems.reduce((s, i) => s + remainingRuntime(i), 0)
 			)} remaining{queueControls.watchedOn ? ' · showing watched' : ''}
 		</p>
@@ -505,7 +510,6 @@
 		showSeasons={true}
 		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
 		onClose={() => (detailItem = null)}
-		{queueColors}
 		{existingCollections}
 		onSetCollection={async (tag) => {
 			await setItemCollection(di, tag, actionDeps);

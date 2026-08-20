@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.3] — 2026-08-20
+
+### Bug fixes
+
+- **GitHub repo rename cleanup** — the feedback button's `REPO` constant and the Settings → About link still pointed at the old `zenfinity/streamq` slug after the repo was renamed to `queuest`; a fresh fine-grained PAT scoped to the new repo could fail against the stale path. Updated both, plus two stale issue links in the README. `src/lib/db.ts`'s `DB_NAME` (the client-side IndexedDB database name already live in every user's browser) was deliberately left alone. (#39)
+- **Inline queue dock (lg+) overflowed the nav bar** — the dock's outer wrapper carried a `pt-2` meant for its floating (mobile) placement, but was applied to the inline nav placement too, on top of a parent that already vertically centers it (`self-center`). Pushed the dock to 49px tall inside a fixed 40px nav. Only apply the padding in the floating case. (#183)
+
+### UI cleanup
+
+- **Removed the redundant Collection chip in the detail panel** — the colored chip duplicated what the dropdown right next to it already showed. Dropdown alone remains. (#182)
+- **Filtering the queue to one collection now names it** — the summary line above the queue now reads e.g. "Weekend Watch · 2 titles · ~2h 40m remaining" instead of just the count, matching the level of detail already shown per-section when grouping by collection. (#182)
+
+---
+
 ## [0.8.2] — 2026-08-19
 
 ### Bug fixes
