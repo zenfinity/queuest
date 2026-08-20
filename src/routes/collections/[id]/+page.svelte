@@ -62,7 +62,7 @@
 		const all = await listCollections(noop);
 		collection = all.find((c) => c.id === id) ?? null;
 		if (!collection) {
-			loadError = "You don't have access to this collection, or it doesn't exist.";
+			loadError = "You don't have access to this list, or it doesn't exist.";
 			loading = false;
 			return;
 		}
@@ -96,15 +96,15 @@
 	}
 </script>
 
-<svelte:head><title>Queuest — {collection?.name ?? 'Shared collection'}</title></svelte:head>
+<svelte:head><title>Queuest — {collection?.name ?? 'Shared list'}</title></svelte:head>
 
 <main class="mx-auto max-w-2xl px-4 py-8 space-y-6">
 	<div class="flex items-center justify-between">
 		<a
-			href={resolve('/settings')}
+			href={resolve('/lists')}
 			class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
 		>
-			← Settings
+			← Lists
 		</a>
 	</div>
 
@@ -129,8 +129,8 @@
 
 		{#if items.length === 0}
 			<p class="text-sm text-gray-400 dark:text-gray-600">
-				Nothing here yet. Titles show up here once someone shares a personal collection into this
-				one, or adds to it directly.
+				Nothing here yet. Titles show up here once someone shares a personal list into this one, or
+				adds to it directly.
 			</p>
 		{:else}
 			<div class="space-y-2">

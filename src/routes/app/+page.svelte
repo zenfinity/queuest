@@ -536,7 +536,7 @@
 				<select
 					bind:value={bulkTargetTag}
 					disabled={bulkBusy || selectedIds.size === 0}
-					aria-label="Assign to collection"
+					aria-label="Assign to list"
 					class="min-w-0 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
 				>
 					<option value="">Assign to…</option>
@@ -563,7 +563,7 @@
 					onclick={bulkClearCollection}
 					class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 				>
-					Clear collection
+					Clear list
 				</button>
 				<button
 					disabled={bulkBusy || selectedIds.size === 0}

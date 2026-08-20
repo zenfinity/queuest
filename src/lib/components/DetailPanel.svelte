@@ -199,26 +199,23 @@
 		</div>
 
 		<div class="space-y-4 px-4 pb-4">
-			<!-- Collection -->
+			<!-- List -->
 			{#if onSetCollection}
 				<div class="flex items-center justify-between gap-2">
 					<span
 						class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-						>Collection</span
+						>List</span
 					>
 					<div class="flex min-w-0 items-center gap-2">
 						<select
 							value={item.queue_tag ?? ''}
 							disabled={collectionBusy}
-							aria-label="Collection"
+							aria-label="List"
 							onchange={async (e) => {
 								const value = e.currentTarget.value;
 								if (value === '__manage__') {
 									e.currentTarget.value = item.queue_tag ?? '';
-									// resolve() validates the route but has no hash-fragment support,
-									// so the target the lint rule wants to see isn't expressible directly.
-									// eslint-disable-next-line svelte/no-navigation-without-resolve
-									await goto(resolve('/settings') + '#collections');
+									await goto(resolve('/lists'));
 									return;
 								}
 								collectionBusy = true;
@@ -234,7 +231,7 @@
 							{#each existingCollections as collection (collection)}
 								<option value={collection}>{collection}</option>
 							{/each}
-							<option value="__manage__">Manage collections…</option>
+							<option value="__manage__">Manage lists…</option>
 						</select>
 					</div>
 				</div>
