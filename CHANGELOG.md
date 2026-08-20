@@ -35,6 +35,12 @@ The **QR code** option that invite links already had — generated on demand, sa
 
 Sharing without an account required a list first — real friction for the most natural first share, "check out my queue," which happens before anyone's bothered organizing anything. A new **"Or share your whole queue as a read-only link"** action on the Lists page generates one unfiltered snapshot of everything, same mechanism (Copy, QR code, 30-day expiry) as the per-list links, titled with the account's own queue name since no single list is selected. Deliberately no filter UI — the old standalone `/share` page's status/type/provider filters are gone on purpose; one unfiltered snapshot is a much smaller surface than that page was.
 
+Moved below the list rows, right before the divider into Shared Lists, and styled as a distinct dashed-border box rather than a thin underlined text link — both to stop it competing with Create for first attention and to put real distance between it and the nearest list row's own tap targets on mobile.
+
+### List rows breathe: two lines instead of one
+
+Each list's name, count, color swatch, and four action buttons (Share, Read-only link, Rename, Delete) were packed into a single horizontal line — the reason names were truncating to "Trilogy …" in a 375px-wide row, and exactly the kind of cramped adjacent-button spacing that causes mis-taps on mobile. Split into two lines within the same card: color + full name + count on top, actions on their own row below with `flex-wrap` so they drop to a third line rather than overflow on narrow screens. The color control itself moved from a plain decorative dot into the actual color-picker swatch — one interactive control living with the name, instead of a redundant static dot up top and a separate bigger clickable swatch buried in the actions row.
+
 ## [0.9.4] — 2026-08-20
 
 ### Bulk assign to a collection (#113)

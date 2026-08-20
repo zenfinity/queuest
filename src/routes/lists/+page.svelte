@@ -407,11 +407,25 @@
 					{@const isPromoting = promoteArmed === collection}
 					{@const isReadOnlyLink = readOnlyLinkFor === collection}
 					<div>
-						<div
-							class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60"
-						>
-							<div class="flex items-center gap-2.5 min-w-0 flex-1">
-								<span class="h-3 w-3 shrink-0 rounded-full" style="background:{color};"></span>
+						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
+							<div class="flex items-center gap-2.5 min-w-0">
+								<label class="relative shrink-0 cursor-pointer" title="Change color">
+									<span
+										class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+										style="background:{color};"
+									></span>
+									<input
+										type="color"
+										aria-label="List color"
+										value={color}
+										oninput={(e) =>
+											updateCollectionColor(
+												collection,
+												(e.currentTarget as HTMLInputElement).value
+											)}
+										class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+									/>
+								</label>
 								{#if isRenaming}
 									<!-- svelte-ignore a11y_autofocus -->
 									<input
@@ -434,7 +448,7 @@
 									<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">({count})</span>
 								{/if}
 							</div>
-							<div class="flex items-center gap-1 ml-2 shrink-0">
+							<div class="mt-2 flex flex-wrap items-center gap-1">
 								{#if isRenaming}
 									<button
 										disabled={manageBusy}
@@ -472,23 +486,6 @@
 										Cancel
 									</button>
 								{:else}
-									<label class="relative cursor-pointer" title="Change color">
-										<span
-											class="block h-6 w-6 rounded border border-gray-300 shadow-sm dark:border-gray-600"
-											style="background:{color};"
-										></span>
-										<input
-											type="color"
-											aria-label="List color"
-											value={color}
-											oninput={(e) =>
-												updateCollectionColor(
-													collection,
-													(e.currentTarget as HTMLInputElement).value
-												)}
-											class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-										/>
-									</label>
 									{#if syncEnabled}
 										<button
 											disabled={manageBusy || promoting}
@@ -635,7 +632,7 @@
 		<button
 			onclick={createWholeQueueLink}
 			disabled={items.length === 0 || wholeQueueLinkCreating}
-			class="text-xs text-gray-500 underline decoration-dotted underline-offset-2 hover:text-gray-700 disabled:no-underline disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-300"
+			class="mt-1 w-full rounded-lg border border-dashed border-gray-300 px-3 py-2.5 text-left text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300"
 		>
 			Or share your whole queue as a read-only link
 		</button>
