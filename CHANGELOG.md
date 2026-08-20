@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.4] — 2026-08-20
+
+### Features
+
+- **Gantt lanes can group by collection, not just provider** — a new "Group lanes by" control in the queue dock (Timeline view) switches the Gantt view's axis between provider (the default — what the budget feature is built around) and collection. Collection lanes take their color from the user's chosen collection color rather than a provider brand hue, via a new `hexToHue()` conversion, and render a color swatch dot in place of a provider logo in the lane header. An "Uncategorized" terminal lane, pinned last, mirrors the existing "Not Streaming" lane in provider mode. Closes out the `#59` Collections epic. (#112)
+
+### UI cleanup
+
+- **Removed the redundant per-card Collection chip from Grid and List** — every card already carries a colored left-border strip indicating its collection; the colored text chip next to the media-type icon said the same thing a second time, crowding the row. The border stays as the sole per-card indicator. (#185)
+
+---
+
 ## [0.8.3] — 2026-08-20
 
 ### Bug fixes

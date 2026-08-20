@@ -4,11 +4,11 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { laneColors, resolvedHue } from '$lib/colors';
+	import { laneColors, resolvedHue, hexToHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
 	import { remainingRuntime, hms } from '$lib/progress';
 	import { motion } from '$lib/motion.svelte';
-	import { queueControls } from '$lib/queue-controls.svelte';
+	import { queueControls, UNCATEGORIZED } from '$lib/queue-controls.svelte';
 
 	const BAR_H = 32; // px — compact chip height
 
@@ -17,6 +17,12 @@
 		label: string;
 		logo: string | null;
 		providerId: number | null;
+		// Set only in collection mode — the lane's chosen color (hex), rendered
+		// as a header dot instead of a provider logo. Kept separate from `hue`
+		// (derived from this) so the header can show the exact color the user
+		// picked rather than laneColors()'s HSL-bucketed approximation.
+		color: string | null;
+		hue: number | null;
 		items: WatchlistItem[];
 		totalMins: number;
 		overMins: number;
@@ -28,7 +34,8 @@
 		busy,
 		onToggle,
 		onRemove,
-		seasonPicker
+		seasonPicker,
+		queueColors = {}
 	}: {
 		// Pre-filtered and pre-sorted (by the shared sort control) — grouping
 		// into lanes preserves that order rather than re-sorting the items.
@@ -38,6 +45,7 @@
 		onToggle: (item: WatchlistItem, onSuccess?: () => void) => Promise<void>;
 		onRemove: (item: WatchlistItem, onSuccess?: () => void) => Promise<void>;
 		seasonPicker: Snippet<[WatchlistItem]>;
+		queueColors?: Record<string, string>;
 	} = $props();
 
 	function overLabel(mins: number): string {
@@ -50,12 +58,36 @@
 			string,
 			Omit<Lane, 'overMins' | 'totalMins'> & { totalMins: number }
 		>();
-		const noProvider: WatchlistItem[] = [];
+		const terminal: WatchlistItem[] = []; // "Not Streaming" (provider mode) / "Uncategorized" (collection mode)
+		const byCollection = queueControls.ganttGroupBy === 'collection';
 
 		for (const item of items) {
-			if (!item.providers.length) {
-				noProvider.push(item);
+			if (byCollection) {
+				if (!item.queue_tag) {
+					terminal.push(item);
+					continue;
+				}
+				if (!map.has(item.queue_tag)) {
+					const color = queueColors[item.queue_tag] ?? null;
+					map.set(item.queue_tag, {
+						key: item.queue_tag,
+						label: item.queue_tag,
+						logo: null,
+						providerId: null,
+						color,
+						hue: color ? hexToHue(color) : null,
+						items: [],
+						totalMins: 0
+					});
+				}
+				const lane = map.get(item.queue_tag)!;
+				lane.items.push(item);
+				lane.totalMins += remainingRuntime(item);
 			} else {
+				if (!item.providers.length) {
+					terminal.push(item);
+					continue;
+				}
 				const p = item.providers[0];
 				if (!map.has(p.provider_name)) {
 					map.set(p.provider_name, {
@@ -63,6 +95,8 @@
 						label: p.provider_name,
 						logo: p.logo_path,
 						providerId: p.provider_id,
+						color: null,
+						hue: resolvedHue(p.provider_id),
 						items: [],
 						totalMins: 0
 					});
@@ -86,14 +120,16 @@
 			})
 			.map((l) => ({ ...l, overMins: Math.max(0, l.totalMins - budgetMins) }));
 
-		if (noProvider.length) {
-			const totalMins = noProvider.reduce((s, i) => s + remainingRuntime(i), 0);
+		if (terminal.length) {
+			const totalMins = terminal.reduce((s, i) => s + remainingRuntime(i), 0);
 			out.push({
-				key: '__none__',
-				label: 'Not Streaming',
+				key: byCollection ? UNCATEGORIZED : '__none__',
+				label: byCollection ? 'Uncategorized' : 'Not Streaming',
 				logo: null,
 				providerId: null,
-				items: noProvider,
+				color: null,
+				hue: null,
+				items: terminal,
 				totalMins,
 				overMins: Math.max(0, totalMins - budgetMins)
 			});
@@ -144,7 +180,7 @@
 
 <div class="space-y-1.5">
 	{#each lanes as lane (lane.key)}
-		{@const colors = laneColors(resolvedHue(lane.providerId), theme.dark)}
+		{@const colors = laneColors(lane.hue, theme.dark)}
 		{@const budgetMins = budgetHours * 60}
 
 		<div
@@ -162,6 +198,10 @@
 						alt={lane.label}
 						class="h-8 w-8 rounded-lg object-cover shadow"
 					/>
+				{:else if lane.color}
+					<!-- Collection lane: swatch dot, matching Settings/Share's collection chips -->
+					<span class="h-4 w-4 shrink-0 rounded-full shadow" style="background:{lane.color};"
+					></span>
 				{:else}
 					<div
 						class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-200 text-base dark:bg-gray-800"

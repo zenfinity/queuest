@@ -3,6 +3,7 @@
 export type SortKey = 'added' | 'title' | 'runtime';
 export type ViewKey = 'grid' | 'list' | 'lanes';
 export type ServiceFilterKey = 'all' | 'subscribed' | 'not-subscribed';
+export type GanttGroupKey = 'provider' | 'collection';
 
 export const SORT_DEFAULT_DIR: Record<SortKey, 'asc' | 'desc'> = {
 	added: 'desc',
@@ -23,6 +24,11 @@ export const queueControls = $state({
 	// Grid/List section grouping — off by default, the flat list stays the
 	// default presentation. Session-only, like the filters above.
 	groupByCollection: false,
+	// Gantt lane grouping axis — provider lanes are the default (what the budget
+	// feature is built around); collection is an alternative axis, not a
+	// replacement. Distinct from groupByCollection above: Gantt is always grouped
+	// into lanes, this only picks which key groups it.
+	ganttGroupBy: 'provider' as GanttGroupKey,
 	// Mirrors the queue's current collection names so QueueDock — rendered from
 	// the layout, without direct access to queue items — can list them. Kept in
 	// sync by the queue page via an $effect.
