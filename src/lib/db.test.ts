@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as db from './db';
 import type { WatchlistItem, Provider } from './types';
+import { makeNewItem as makeItem } from './test-fixtures';
 
 // db.ts caches a single open IDBDatabase connection for the module's lifetime and
 // never closes it, so deleting/recreating the database between tests would queue
@@ -11,21 +12,6 @@ beforeEach(async () => {
 	await db.replaceAll([]);
 	await db.setServices([]);
 });
-
-function makeItem(overrides: Partial<Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'>> = {}) {
-	return {
-		tmdb_id: 100,
-		media_type: 'movie' as const,
-		title: 'Test Title',
-		poster_path: null,
-		overview: null,
-		providers: [],
-		runtime_minutes: 100,
-		seasons: [],
-		watched_seasons: [],
-		...overrides
-	};
-}
 
 describe('db: watchlist items', () => {
 	it('starts empty', async () => {
@@ -147,6 +133,61 @@ describe('db: watchlist items', () => {
 		await db.patchProviders(id, [], false, null);
 		const item = (await db.getAll())[0];
 		expect(item.updated_at).toBe(original);
+	});
+
+	it('patchProviders persists providers, rentable, release, and the optional fields', async () => {
+		await db.addItem(makeItem({ media_type: 'tv' }));
+		const [{ id }] = await db.getAll();
+		const providers: Provider[] = [
+			{ provider_id: 8, provider_name: 'Netflix', logo_path: '/n.png' }
+		];
+		const release = {
+			theatrical_date: null,
+			digital_date: '2026-06-01'
+		} as WatchlistItem['release'];
+		const seasons = [{ season_number: 1, episode_count: 8, name: 'S1', runtime_minutes: 240 }];
+
+		await db.patchProviders(
+			id,
+			providers,
+			true,
+			release,
+			seasons,
+			240,
+			['Drama'],
+			[{ name: 'Actor', character: 'Lead', profile_path: null }],
+			'Director Name',
+			'Creator Name',
+			'tt0111161'
+		);
+
+		const item = (await db.getAll())[0];
+		expect(item.providers).toEqual(providers);
+		expect(item.rentable).toBe(true);
+		expect(item.release).toEqual(release);
+		expect(item.seasons).toEqual(seasons);
+		expect(item.runtime_minutes).toBe(240);
+		expect(item.genres).toEqual(['Drama']);
+		expect(item.cast).toEqual([{ name: 'Actor', character: 'Lead', profile_path: null }]);
+		expect(item.director).toBe('Director Name');
+		expect(item.creator).toBe('Creator Name');
+		expect(item.imdb_id).toBe('tt0111161');
+	});
+
+	it('patchProviders leaves seasons/runtime untouched when not provided', async () => {
+		await db.addItem(makeItem({ media_type: 'tv', runtime_minutes: 100 }));
+		const [{ id }] = await db.getAll();
+		await db.updateShowProgress(id, []); // no-op, just to have a stable baseline
+		await db.patchProviders(id, [], false, null, [], null);
+		const item = (await db.getAll())[0];
+		expect(item.seasons).toEqual([]);
+		expect(item.runtime_minutes).toBe(100);
+	});
+
+	it('rejects patchProviders when id does not exist', async () => {
+		await expect(db.patchProviders(999, [], false, null)).rejects.toThrow(
+			'Item with id 999 not found'
+		);
 	});
 });
 

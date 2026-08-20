@@ -6,6 +6,7 @@
 	import { providerHue } from '$lib/colors';
 	import { trapFocus } from '$lib/focus-trap';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	// Structural subset shared by WatchlistItem (queue) and SearchResult (add) —
 	// both satisfy this without adapting, since Svelte/TS typing is structural.
@@ -22,6 +23,7 @@
 		creator?: string | null;
 		genres?: string[];
 		cast?: CastMember[];
+		imdb_id?: string | null;
 		providers: Provider[];
 		rentable?: boolean;
 		release?: ReleaseInfo | null;
@@ -174,6 +176,16 @@
 					>
 					{#if item.director}<span>Dir. {item.director}</span>{/if}
 					{#if item.creator}<span>Created by {item.creator}</span>{/if}
+					{#if item.imdb_id}
+						<a
+							href="https://www.imdb.com/title/{item.imdb_id}/"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-orange-500 hover:text-orange-400"
+						>
+							IMDb ↗
+						</a>
+					{/if}
 				</div>
 				{#if item.genres?.length}
 					<div class="mt-1.5 flex flex-wrap gap-1">
@@ -214,7 +226,10 @@
 								const value = e.currentTarget.value;
 								if (value === '__manage__') {
 									e.currentTarget.value = item.queue_tag ?? '';
-									await goto('/settings#collections');
+									// resolve() validates the route but has no hash-fragment support,
+									// so the target the lint rule wants to see isn't expressible directly.
+									// eslint-disable-next-line svelte/no-navigation-without-resolve
+									await goto(resolve('/settings') + '#collections');
 									return;
 								}
 								collectionBusy = true;

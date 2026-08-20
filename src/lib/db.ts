@@ -293,7 +293,8 @@ export async function patchProviders(
 	genres?: string[],
 	cast?: WatchlistItem['cast'],
 	director?: string | null,
-	creator?: string | null
+	creator?: string | null,
+	imdb_id?: string | null
 ): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
@@ -315,6 +316,7 @@ export async function patchProviders(
 			if (cast !== undefined) item.cast = cast;
 			if (director !== undefined) item.director = director;
 			if (creator !== undefined) item.creator = creator;
+			if (imdb_id !== undefined) item.imdb_id = imdb_id;
 			const put = store.put(item);
 			put.onsuccess = () => {
 				notifyMutation();

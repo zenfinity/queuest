@@ -56,7 +56,8 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 				r.genres,
 				r.cast,
 				r.director,
-				r.creator
+				r.creator,
+				r.imdb_id
 			);
 			deps.setRefreshDone(results.indexOf(r) + 1);
 		}

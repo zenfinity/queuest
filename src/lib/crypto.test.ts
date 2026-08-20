@@ -64,6 +64,14 @@ describe('encrypt / decrypt (passphrase-based)', () => {
 		const out = await decrypt(buf, 'my passphrase');
 		expect(out).toBe(plaintext);
 	});
+
+	it('rejects a truncated buffer instead of throwing a raw WebCrypto error', async () => {
+		// Shorter than SALT_LEN + IV_LEN (28 bytes) — a corrupted or truncated
+		// file, not just a wrong passphrase. Must fail the length guard before
+		// ever reaching subtle.decrypt().
+		const tooShort = new ArrayBuffer(10);
+		await expect(decrypt(tooShort, 'any passphrase')).rejects.toThrow(/Decryption failed/);
+	});
 });
 
 describe('generateShareKey / encryptWithKey / decryptWithKey', () => {
@@ -85,5 +93,11 @@ describe('generateShareKey / encryptWithKey / decryptWithKey', () => {
 	it('produces a URL-safe key with no padding characters', async () => {
 		const key = await generateShareKey();
 		expect(key).not.toMatch(/[+/=]/);
+	});
+
+	it('rejects a truncated buffer shorter than the IV', async () => {
+		const key = await generateShareKey();
+		const tooShort = new ArrayBuffer(5);
+		await expect(decryptWithKey(tooShort, key)).rejects.toThrow(/Could not decrypt/);
 	});
 });

@@ -162,6 +162,7 @@ describe('refreshProviders', () => {
 			undefined,
 			undefined,
 			undefined,
+			undefined,
 			undefined
 		);
 		expect(state.refreshDone).toBe(2);

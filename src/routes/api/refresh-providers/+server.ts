@@ -23,6 +23,7 @@ export interface RefreshResult {
 	cast: CastMember[];
 	director: string | null;
 	creator: string | null;
+	imdb_id: string | null;
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -69,7 +70,8 @@ export const POST: RequestHandler = async ({ request }) => {
 						genres,
 						cast,
 						director,
-						creator
+						creator,
+						imdb_id
 					}
 				] = await Promise.all([
 					getWatchProviders(tmdb_id, media_type, apiKey),
@@ -86,7 +88,8 @@ export const POST: RequestHandler = async ({ request }) => {
 					genres,
 					cast,
 					director,
-					creator
+					creator,
+					imdb_id
 				});
 			} catch {
 				// Omit failed items; never return empty-but-successful records that would overwrite good data

@@ -56,6 +56,7 @@ export interface WatchlistItem {
 	cast?: CastMember[];
 	director?: string | null; // movie director
 	creator?: string | null; // TV show creator(s)
+	imdb_id?: string | null; // e.g. "tt0111161" — from TMDB external_ids, for a "View on IMDb" link
 }
 
 export interface SearchResult {
@@ -74,6 +75,7 @@ export interface SearchResult {
 	cast: CastMember[];
 	director: string | null;
 	creator: string | null;
+	imdb_id: string | null;
 }
 
 export interface Suggestion {

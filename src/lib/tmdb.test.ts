@@ -12,6 +12,9 @@ const DISNEY = provider(337, 'Disney Plus');
 const PARAMOUNT_BASE = provider(531, 'Paramount+');
 const PARAMOUNT_TIER = provider(9531, 'Paramount+ with Showtime');
 const AMAZON_CHANNEL = provider(1000, 'Apple TV Amazon Channel');
+const APPLE_TV = provider(350, 'Apple TV');
+const AMAZON_PRIME = provider(9, 'Amazon Prime Video');
+const AMAZON_PRIME_WITH_ADS = provider(2100, 'Amazon Prime Video with Ads');
 
 describe('formatRuntime', () => {
 	it('formats movie runtime as Xh Ym', () => {
@@ -57,6 +60,31 @@ describe('augmentProviders — Disney+/Hulu disambiguation', () => {
 			[]
 		);
 		expect(result.map((p) => p.provider_id).sort((a, b) => a - b)).toEqual([8, 531]);
+	});
+});
+
+describe('augmentProviders — Apple TV+/Amazon Prime Video disambiguation (#179)', () => {
+	it('strips a plain "Amazon Prime Video" entry for Apple TV+ native content (e.g. Ted Lasso)', () => {
+		// Real TMDB /tv/97546 (Ted Lasso) response shape: a bare "Amazon Prime
+		// Video" entry, not named as a channel/bundle, so BUNDLE_NAME_RE alone
+		// can't catch it — network id 2552 is what disambiguates it.
+		const result = augmentProviders([AMAZON_PRIME, APPLE_TV], [2552], []);
+		expect(result.map((p) => p.provider_id)).toEqual([350]);
+	});
+
+	it('also strips Amazon tier variants (e.g. "with Ads"), not just the base id', () => {
+		const result = augmentProviders([AMAZON_PRIME, APPLE_TV, AMAZON_PRIME_WITH_ADS], [2552], []);
+		expect(result.map((p) => p.provider_id)).toEqual([350]);
+	});
+
+	it('leaves Amazon Prime Video alone when there is no Apple TV+ network signal', () => {
+		const result = augmentProviders([AMAZON_PRIME, APPLE_TV], [], []);
+		expect(result.map((p) => p.provider_id).sort((a, b) => a - b)).toEqual([9, 350]);
+	});
+
+	it('leaves Apple TV+ content alone when Amazon Prime Video is not listed at all', () => {
+		const result = augmentProviders([APPLE_TV], [2552], []);
+		expect(result.map((p) => p.provider_id)).toEqual([350]);
 	});
 });
 
@@ -156,6 +184,39 @@ describe('getRuntime — movie release info', () => {
 		);
 		const result = await getRuntime(1, 'movie', 'key');
 		expect(result.release).toBeNull();
+	});
+
+	it('surfaces imdb_id from the appended external_ids response (#142)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					runtime: 120,
+					status: 'Released',
+					release_date: '2026-01-01',
+					credits: { cast: [], crew: [] },
+					external_ids: { imdb_id: 'tt0111161' }
+				})
+			)
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.imdb_id).toBe('tt0111161');
+	});
+
+	it('returns null imdb_id when external_ids is absent from the response', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					runtime: 120,
+					status: 'Released',
+					release_date: '2026-01-01',
+					credits: { cast: [], crew: [] }
+				})
+			)
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.imdb_id).toBeNull();
 	});
 });
 
@@ -260,5 +321,25 @@ describe('getRuntime — tv release info and season summaries', () => {
 		expect(result.seasons).toEqual([
 			{ season_number: 1, episode_count: 8, name: 'Season 1', runtime_minutes: 480 }
 		]);
+	});
+
+	it('surfaces imdb_id from the appended external_ids response (#142)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					number_of_episodes: 10,
+					episode_run_time: [50],
+					seasons: [],
+					networks: [],
+					status: 'Ended',
+					genres: [],
+					credits: { cast: [] },
+					external_ids: { imdb_id: 'tt7818638' }
+				})
+			)
+		);
+		const result = await getRuntime(1, 'tv', 'key');
+		expect(result.imdb_id).toBe('tt7818638');
 	});
 });

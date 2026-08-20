@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.8.2] — 2026-08-19
+
+### Bug fixes
+
+- **Duplicate service chips on Apple TV+ titles** (e.g. Ted Lasso showing both Amazon Prime Video and Apple TV) — JustWatch/TMDB sometimes lists Apple TV+ native content under a plain, non-"Channel"-suffixed "Amazon Prime Video" entry that the existing bundle-name filter can't catch by name alone. `augmentProviders()` now strips it (and its tier variants, e.g. "with Ads") using the same network-id disambiguation already used for the Disney+/Hulu pair. Also fixed a bug in the same function where the final fallback branch used the raw, unfiltered provider list instead of the one with bundle-name filtering already applied. (#179)
+
+### Features
+
+- **IMDb link on the detail panel** — a title's TMDB `external_ids` (fetched alongside the existing per-title request, no extra API call) now surfaces a "View on IMDb ↗" link. Cast/crew person-level linking is a larger follow-up (new endpoint, lazy resolution, caching) tracked separately. (#142)
+
+### Testing & tooling
+
+- **Vitest now supports component and rune-store tests** — added `jsdom`, the Svelte plugin (via the shared Vite config), and `@vitest/coverage-v8`; widened `include` to pick up `.svelte.test.ts`; added a `test:coverage` script. `.svelte` files can now actually be imported and mounted in a test for the first time. (#128)
+- **Test-quality pass** across the suite: fixed a test whose name claimed prototype-pollution safety but never exercised it (added real `__proto__`/`constructor`/`prototype`-key tests to both `share-schema.test.ts` and `app-state.test.ts`); fixed two `toggleSeasonProgress` tests that asserted "and reloads" without checking anything reloaded; replaced a couple of wall-clock-dependent, loosely-`toContain`-asserted date tests in `progress.test.ts` with `vi.setSystemTime` and exact string matches; added missing edge-case coverage (movie theatrical/streaming-estimate branches, the `cancelCandidates` malformed-dismissed-date fail-open path, `patchProviders` persistence, truncated-buffer rejection in `crypto.ts`, share-schema clamping/validation edge cases); deduplicated three copy-pasted `makeItem` test fixtures into `src/lib/test-fixtures.ts`. (#129)
+
+### Docs
+
+- **README** — added Import, Collections (renamed from "Named queues" to match current terminology), the queue dock, cancellation alerts, and guided onboarding to the Features list; corrected the stale "importing watchlists is planned" line (import shipped in v0.5.2). **CHANGELOG** — backfilled the missing 0.4.2 entry; corrected the v0.5.3 entry's claim that the extracted `*-actions.ts` modules were wired in and tested at that point (they weren't — #92/#94 did that separately). Removed the stale `docs/screenshots/README.md` placeholder now that the real screenshots have long since been added. (#132)
+
+---
+
 ## [0.8.1] — 2026-08-19
 
 ### Bug fixes
@@ -174,7 +195,7 @@
 
 ### Testing & maintainability
 
-- **Extracted testable business logic** — refactored 5 route/component files (`settings`, `add`, `ImportPanel`, `share`, `share/[token]`) to follow the `queue-actions.ts` pattern: plain, dependency-injected async functions in `$lib/*-actions.ts` with full unit test coverage (72 tests total across 6 test files). Svelte components now stay slim, wiring their own state to the logic functions with no other changes. (#90)
+- **Extracted testable business logic** — refactored 5 route/component files (`settings`, `add`, `ImportPanel`, `share`, `share/[token]`) to follow the `queue-actions.ts` pattern: plain, dependency-injected async functions in `$lib/*-actions.ts`. At the time of this release the new modules were not yet wired into their components and the test suite predated them — that wiring landed separately in #92 and #94.
 
 ---
 
@@ -266,6 +287,14 @@
 ### Design
 
 - **Design reference** — `.design-sync/design-reference.md` added as a canonical record of the app's visual language: semantic color roles, typography scale, border radius, component class patterns, layout conventions, z-index stack, and transitions.
+
+---
+
+## [0.4.2] — 2026-05-31
+
+### Bug fixes
+
+- **Release popup clipped inside card** — the season-release date popup was cut off by its container's `overflow-hidden`. Removed it from the grid card wrapper (the poster already clips independently via its own `overflow-hidden`) and replaced it on the list container with `first:`/`last:` rounded corners per row, so the popup can escape without losing the rounded-rect visual.
 
 ---
 

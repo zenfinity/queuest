@@ -28,6 +28,19 @@ export const DISNEY_PLUS_PROVIDER: Provider = {
 	logo_path: '/97yvRBw1GzX7fXprcF80er19ot.jpg'
 };
 
+// ── Apple TV+ / Amazon Prime Video disambiguation (#179) ───────────────────
+// JustWatch sometimes lists Apple TV+ native content (e.g. Ted Lasso) under a
+// plain, non-"Channel"-suffixed "Amazon Prime Video" entry alongside the real
+// Apple TV entry — BUNDLE_NAME_RE can't catch it by name since it isn't named
+// as an add-on/channel the way "Apple TV Amazon Channel" is. Apple TV+
+// originals are reliably tagged with TMDB network id 2552 for TV; there's no
+// equivalent reliable production-company signal for Apple's films (Apple is
+// often absent from its own originals' production_companies on TMDB), so
+// this only covers TV for now.
+const APPLE_TV_NETWORK_ID = 2552;
+const APPLE_TV_PROVIDER_ID = 350;
+const AMAZON_PRIME_VIDEO_PROVIDER_ID = 9;
+
 export function formatRuntime(minutes: number, mediaType: 'movie' | 'tv'): string {
 	if (mediaType === 'movie') {
 		const h = Math.floor(minutes / 60);
@@ -71,6 +84,9 @@ interface RuntimeResult {
 	cast: import('./types').CastMember[];
 	director: string | null;
 	creator: string | null;
+	/** From TMDB's external_ids, appended to the same title request — cheap,
+	 * no extra call. Powers a "View on IMDb" link on the detail panel. (#142) */
+	imdb_id: string | null;
 }
 
 export async function getRuntime(
@@ -78,11 +94,11 @@ export async function getRuntime(
 	mediaType: 'movie' | 'tv',
 	apiKey: string
 ): Promise<RuntimeResult> {
-	// Movies: append release_dates + credits in one call; TV: just credits
+	// Movies: append release_dates + credits + external_ids in one call; TV: credits + external_ids
 	const qs =
 		mediaType === 'movie'
-			? '&append_to_response=release_dates,credits'
-			: '&append_to_response=credits';
+			? '&append_to_response=release_dates,credits,external_ids'
+			: '&append_to_response=credits,external_ids';
 	const res = await tmdbFetch(`${BASE}/${mediaType}/${id}?api_key=${apiKey}&language=en-US${qs}`);
 	if (!res.ok)
 		return {
@@ -94,7 +110,8 @@ export async function getRuntime(
 			genres: [],
 			cast: [],
 			director: null,
-			creator: null
+			creator: null,
+			imdb_id: null
 		};
 
 	if (mediaType === 'movie') {
@@ -119,6 +136,7 @@ export async function getRuntime(
 				}>;
 				crew?: Array<{ name: string; job: string }>;
 			};
+			external_ids?: { imdb_id?: string | null };
 		};
 
 		const companyIds = (data.production_companies ?? []).map((c) => c.id);
@@ -142,7 +160,8 @@ export async function getRuntime(
 			genres: (data.genres ?? []).map((g) => g.name),
 			cast,
 			director,
-			creator: null
+			creator: null,
+			imdb_id: data.external_ids?.imdb_id ?? null
 		};
 	}
 
@@ -164,6 +183,7 @@ export async function getRuntime(
 				order: number;
 			}>;
 		};
+		external_ids?: { imdb_id?: string | null };
 	};
 
 	const avgRuntime = data.episode_run_time?.length
@@ -202,7 +222,8 @@ export async function getRuntime(
 		genres: (data.genres ?? []).map((g) => g.name),
 		cast,
 		director: null,
-		creator
+		creator,
+		imdb_id: data.external_ids?.imdb_id ?? null
 	};
 }
 
@@ -338,18 +359,6 @@ function dedupTiers(providers: Provider[]): Provider[] {
 }
 
 /**
- * Clean a raw flatrate provider list from TMDB/JustWatch:
- *  1. Drop entries whose name contains bundle/add-on wording.
- *  2. Deduplicate tier variants via dedupTiers().
- *
- * Disney+/Hulu pair disambiguation is handled upstream in augmentProviders(),
- * which has network/company context to determine which service is canonical.
- */
-function filterProviders(providers: Provider[]): Provider[] {
-	return dedupTiers(providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name)));
-}
-
-/**
  * Apply network-aware provider filtering on top of raw TMDB/JustWatch flatrate data.
  *
  * When Hulu (15) and Disney+ (337) both appear it means JustWatch is surfacing
@@ -368,9 +377,25 @@ export function augmentProviders(
 	const isDisneyPlus =
 		networkIds.includes(DISNEY_PLUS_NETWORK_ID) ||
 		companyIds.some((id) => DISNEY_PLUS_COMPANY_IDS.has(id));
+	const isAppleTvPlus = networkIds.includes(APPLE_TV_NETWORK_ID);
 
 	// Strip add-on / bundle-named entries
-	const named = providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name));
+	let named = providers.filter((p) => !BUNDLE_NAME_RE.test(p.provider_name));
+
+	// Apple TV+ native content: a plain "Amazon Prime Video" entry alongside
+	// the real Apple TV one is bundle contamination that BUNDLE_NAME_RE can't
+	// catch by name — see the comment on APPLE_TV_NETWORK_ID above. Strip by
+	// name prefix, not just the base provider_id, so tier variants (e.g.
+	// "Amazon Prime Video with Ads") don't survive as an orphaned dedupTiers
+	// entry once their base tier is gone.
+	if (
+		isAppleTvPlus &&
+		named.some((p) => p.provider_id === APPLE_TV_PROVIDER_ID) &&
+		named.some((p) => p.provider_id === AMAZON_PRIME_VIDEO_PROVIDER_ID)
+	) {
+		named = named.filter((p) => !p.provider_name.startsWith('Amazon Prime Video'));
+	}
+
 	const byId = new Map(named.map((p) => [p.provider_id, p]));
 
 	// When both Hulu and Disney+ appear, exactly one is bundle contamination.
@@ -400,8 +425,9 @@ export function augmentProviders(
 		);
 	}
 
-	// No Disney+/Hulu conflict: generic name filter + tier dedup
-	return filterProviders(providers);
+	// No Disney+/Hulu conflict: tier dedup on top of `named` (already has the
+	// bundle-name filter and any Apple TV+/Amazon fix applied above).
+	return dedupTiers(named);
 }
 
 export async function getWatchProviders(

@@ -277,8 +277,15 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		...(genres ? { genres } : {}),
 		...(cast ? { cast } : {}),
 		director: typeof item.director === 'string' ? item.director.slice(0, 200) : null,
-		creator: typeof item.creator === 'string' ? item.creator.slice(0, 200) : null
+		creator: typeof item.creator === 'string' ? item.creator.slice(0, 200) : null,
+		imdb_id: validateImdbId(item.imdb_id)
 	};
+}
+
+/** TMDB's imdb_id format is always "tt" + digits (e.g. "tt0111161"). */
+function validateImdbId(val: unknown): string | null {
+	if (typeof val !== 'string' || !/^tt\d+$/.test(val)) return null;
+	return val;
 }
 
 function parsePrefs(raw: unknown): AppStatePrefs | undefined {

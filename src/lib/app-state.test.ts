@@ -326,4 +326,26 @@ describe('deserializeAppState', () => {
 		expect(() => deserializeAppState(null)).toThrow('Invalid');
 		expect(() => deserializeAppState('string')).toThrow('Invalid');
 	});
+
+	it('preserves a well-formed imdb_id and rejects a malformed one', () => {
+		const good = deserializeAppState({
+			items: [{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', imdb_id: 'tt2543164' }]
+		});
+		expect(good.items[0].imdb_id).toBe('tt2543164');
+
+		const bad = deserializeAppState({
+			items: [{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', imdb_id: 'javascript:alert(1)' }]
+		});
+		expect(bad.items[0].imdb_id).toBeNull();
+	});
+
+	it('is safe from prototype pollution — a backup item is rebuilt from an allowlist, not spread', () => {
+		const maliciousItem = JSON.parse(
+			'{"tmdb_id":1,"media_type":"movie","title":"Arrival","__proto__":{"polluted":true},"constructor":{"polluted":true},"unknownField":"dropped"}'
+		);
+		const result = deserializeAppState({ items: [maliciousItem] });
+		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+		expect((result.items[0] as unknown as Record<string, unknown>).polluted).toBeUndefined();
+		expect((result.items[0] as unknown as Record<string, unknown>).unknownField).toBeUndefined();
+	});
 });

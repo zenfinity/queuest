@@ -10,17 +10,16 @@ const getWatchProviders = vi.fn();
 const getRuntime = vi.fn();
 
 // augmentProviders is pure — use the real implementation instead of mocking it, so
-// this test actually exercises its Disney+/Hulu disambiguation and tier dedup. The
-// $lib alias isn't resolvable outside SvelteKit's own build, so pull the real
-// implementation in via the relative path instead of importOriginal().
-const { augmentProviders } = await import('../../lib/tmdb');
-
-vi.mock('$lib/tmdb', () => ({
-	searchMulti: (...args: unknown[]) => searchMulti(...args),
-	getWatchProviders: (...args: unknown[]) => getWatchProviders(...args),
-	getRuntime: (...args: unknown[]) => getRuntime(...args),
-	augmentProviders
-}));
+// this test actually exercises its Disney+/Hulu disambiguation and tier dedup.
+vi.mock('$lib/tmdb', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/tmdb')>();
+	return {
+		searchMulti: (...args: unknown[]) => searchMulti(...args),
+		getWatchProviders: (...args: unknown[]) => getWatchProviders(...args),
+		getRuntime: (...args: unknown[]) => getRuntime(...args),
+		augmentProviders: actual.augmentProviders
+	};
+});
 
 const { load } = await import('./+page.server');
 

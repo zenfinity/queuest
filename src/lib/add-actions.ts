@@ -31,7 +31,8 @@ export async function addSearchResultToQueue(
 			genres: result.genres,
 			cast: result.cast,
 			director: result.director,
-			creator: result.creator
+			creator: result.creator,
+			imdb_id: result.imdb_id
 		};
 		await addItem(item);
 		deps.setAdded(result.id, true);
