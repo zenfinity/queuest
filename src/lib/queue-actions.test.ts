@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WatchlistItem } from './types';
+import { makeItem } from './test-fixtures';
 
 const getAll = vi.fn();
 const setWatched = vi.fn();
@@ -26,24 +27,6 @@ const {
 	groupIntoCollections,
 	setItemCollection
 } = await import('./queue-actions');
-
-function makeItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
-	return {
-		id: 1,
-		tmdb_id: 100,
-		media_type: 'movie',
-		title: 'Test Title',
-		poster_path: null,
-		overview: null,
-		providers: [],
-		runtime_minutes: 100,
-		seasons: [],
-		watched_seasons: [],
-		added_at: '2026-01-01T00:00:00.000Z',
-		watched_at: null,
-		...overrides
-	};
-}
 
 // A tiny fake of the component-side state these functions write into via callbacks,
 // so assertions read naturally without a real Svelte component in the loop.
@@ -83,7 +66,7 @@ describe('reloadQueue', () => {
 
 		await reloadQueue(deps);
 
-		expect(state.items).toBe(items);
+		expect(state.items).toEqual(items);
 		expect(state.error).toBe('');
 	});
 
@@ -174,33 +157,39 @@ describe('removeQueueItem', () => {
 
 describe('toggleSeasonProgress', () => {
 	it('adds a season to watched_seasons and reloads', async () => {
-		const { deps } = makeDeps();
+		const { state, deps } = makeDeps();
 		const item = makeItem({
 			id: 2,
 			media_type: 'tv',
 			watched_seasons: [1]
 		});
+		const reloaded = [makeItem({ id: 2, media_type: 'tv', watched_seasons: [1, 2] })];
 		updateShowProgress.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([]);
+		getAll.mockResolvedValue(reloaded);
 
 		await toggleSeasonProgress(item, 2, deps);
 
 		expect(updateShowProgress).toHaveBeenCalledWith(2, [1, 2]);
+		expect(getAll).toHaveBeenCalledOnce();
+		expect(state.items).toEqual(reloaded);
 	});
 
 	it('removes an already-watched season (toggles off)', async () => {
-		const { deps } = makeDeps();
+		const { state, deps } = makeDeps();
 		const item = makeItem({
 			id: 2,
 			media_type: 'tv',
 			watched_seasons: [1, 2]
 		});
+		const reloaded = [makeItem({ id: 2, media_type: 'tv', watched_seasons: [1] })];
 		updateShowProgress.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([]);
+		getAll.mockResolvedValue(reloaded);
 
 		await toggleSeasonProgress(item, 2, deps);
 
 		expect(updateShowProgress).toHaveBeenCalledWith(2, [1]);
+		expect(getAll).toHaveBeenCalledOnce();
+		expect(state.items).toEqual(reloaded);
 	});
 
 	it('surfaces a failure as an error message', async () => {

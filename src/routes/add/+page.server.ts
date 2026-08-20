@@ -30,7 +30,8 @@ export const load: PageServerLoad = async ({ url }) => {
 						genres,
 						cast,
 						director,
-						creator
+						creator,
+						imdb_id
 					}
 				] = await Promise.all([
 					getWatchProviders(id, mediaType, apiKey),
@@ -53,7 +54,8 @@ export const load: PageServerLoad = async ({ url }) => {
 					genres,
 					cast,
 					director,
-					creator
+					creator,
+					imdb_id
 				};
 			})
 		);

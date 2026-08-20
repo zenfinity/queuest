@@ -40,14 +40,18 @@ Everything is stored locally in your browser's IndexedDB — no account, no serv
 - 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season/next-episode dates surfaced on every card; mid-season episodes distinguished from season premieres
 - 📊 **Gantt view** — lane-per-provider, bar width = remaining watch time vs. monthly budget; runtime sparklines in Grid and List too
 - 📋 **List & Grid views** with sort (A–Z, runtime, date added, watched)
+- 🧭 **Queue dock** — floating filter/view-switcher on the queue page: Card/List/Timeline mode, an inclusive Watched toggle, and a Sort-by/Services filter popover
 - 🎬 **Detail panel** — tap any title for poster lightbox, full overview, cast, genres, provider list, and per-season progress
 - ✅ **Watch tracking** — mark titles done, filter To Watch / Watched; season-level progress (with episode counts) shrinks bar widths automatically
-- 🏷️ **Named queues** — tag items into named queues and assign each a custom color; imported shared lists land in their own color-coded queue automatically
+- 🏷️ **Collections** — tag items into named collections and assign each a custom color; imported shared lists land in their own color-coded collection automatically
 - 🏆 **Suggest** — providers ranked by total remaining watch time in your queue
+- 📥 **Import** — bring in an existing watchlist from Letterboxd, Criterion, or IMDb (CSV, URL, or pasted list) from Add → Import
 - 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL; filter by provider, type, or queue before sharing; decryption key lives only in the URL fragment; links expire after 30 days
 - 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto API; restores queue, preferences, view settings, and shared queue colors completely
 - 🌙 **Dark / light mode** — persisted in preferences and backup file
 - ⏱ **Viewing budget** — configurable monthly hours (hrs/week × weeks/month) on the Budget page, used to normalise bar widths
+- 🔔 **Cancellation alerts** — a banner nudges you to consider pausing a subscription once you've nearly cleared everything queued on it
+- 🚪 **Guided onboarding** — first-time visitors are walked from the landing page through setting a budget to adding their first titles
 - 🔄 **Refresh provider data** — re-fetches streaming info for every queued title in one click (Settings)
 - 💬 **In-app feedback** — files a GitHub issue directly from Settings
 
@@ -114,7 +118,7 @@ Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API re
 
 - Provider data is US-only (JustWatch regional restriction via TMDB)
 - Bundle-only availability (e.g. Hulu + Disney+ bundle) is filtered where detected; Disney+ data is inferred rather than sourced directly — see [#5](https://github.com/zenfinity/streamq/issues/5)
-- Importing watchlists from Letterboxd, Trakt, or IMDb is planned — see [#4](https://github.com/zenfinity/streamq/issues/4)
+- Importing watchlists from other sources (Plex, additional Trakt-style feeds) is still open — see [#4](https://github.com/zenfinity/streamq/issues/4). Letterboxd, Criterion, and IMDb are already supported via **Add → Import**.
 
 ---
 

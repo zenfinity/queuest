@@ -22,6 +22,7 @@
 		creator?: string | null;
 		genres?: string[];
 		cast?: CastMember[];
+		imdb_id?: string | null;
 		providers: Provider[];
 		rentable?: boolean;
 		release?: ReleaseInfo | null;
@@ -174,6 +175,16 @@
 					>
 					{#if item.director}<span>Dir. {item.director}</span>{/if}
 					{#if item.creator}<span>Created by {item.creator}</span>{/if}
+					{#if item.imdb_id}
+						<a
+							href="https://www.imdb.com/title/{item.imdb_id}/"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-orange-500 hover:text-orange-400"
+						>
+							IMDb ↗
+						</a>
+					{/if}
 				</div>
 				{#if item.genres?.length}
 					<div class="mt-1.5 flex flex-wrap gap-1">

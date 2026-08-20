@@ -148,3 +148,7 @@ vite.config.ts.timestamp-*
 .vite/
 .wrangler/
 .env.local
+
+# Claude Code / internal tooling — not meant for the public repo
+.claude/
+.design-sync/

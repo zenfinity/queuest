@@ -1,11 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
 	releaseChip,
 	remainingRuntime,
 	cancelCandidates,
 	formatMonthsEquivalent
 } from './progress';
-import type { WatchlistItem, ReleaseInfo } from './types';
+import type { ReleaseInfo } from './types';
+import { makeItem } from './test-fixtures';
+
+// releaseChip/cancelCandidates read `Date.now()`/`new Date()` internally to decide
+// past-vs-future, so pin the clock rather than deriving fixtures from real wall-clock
+// time — makes every date-dependent assertion below exact instead of toContain/relative.
+const NOW = new Date('2026-06-15T00:00:00.000Z');
+beforeEach(() => vi.setSystemTime(NOW));
+afterEach(() => vi.useRealTimers());
 
 describe('formatMonthsEquivalent', () => {
 	it('returns empty string when there is no budget to divide by', () => {
@@ -31,24 +39,6 @@ describe('formatMonthsEquivalent', () => {
 		expect(formatMonthsEquivalent(30, 40)).toBe('<0.1 months');
 	});
 });
-
-function makeItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
-	return {
-		id: 1,
-		tmdb_id: 100,
-		media_type: 'movie',
-		title: 'Test Title',
-		poster_path: null,
-		overview: null,
-		providers: [],
-		runtime_minutes: 120,
-		seasons: [],
-		watched_seasons: [],
-		added_at: '2026-01-01T00:00:00.000Z',
-		watched_at: null,
-		...overrides
-	};
-}
 
 describe('remainingRuntime', () => {
 	it('returns full runtime for a movie', () => {
@@ -128,6 +118,14 @@ describe('cancelCandidates', () => {
 		expect(cancelCandidates([item], 40, { '8': longAgo })).toHaveLength(1);
 	});
 
+	it('treats a malformed dismissed-date as "not dismissed" (fails open, not closed)', () => {
+		// new Date('garbage').getTime() is NaN — without the isNaN guard in
+		// progress.ts, `(now - NaN) / 86400000 > 30` is false forever, which
+		// would exclude the provider permanently instead of just not-yet.
+		const item = makeItem({ providers: [provider], runtime_minutes: 60 });
+		expect(cancelCandidates([item], 40, { '8': 'not-a-date' })).toHaveLength(1);
+	});
+
 	it('sorts multiple candidates by ascending total time', () => {
 		const p2 = { provider_id: 9, provider_name: 'Hulu', logo_path: '/h.png' };
 		const items = [
@@ -155,20 +153,48 @@ describe('releaseChip', () => {
 	});
 
 	it('shows a future premiere date for an upcoming season', () => {
-		const future = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-		const r: ReleaseInfo = { next_season: 2, next_season_date: future, currently_airing: false };
-		expect(releaseChip(r)).toContain('S2 premieres');
+		const r: ReleaseInfo = {
+			next_season: 2,
+			next_season_date: '2026-07-15',
+			currently_airing: false
+		};
+		expect(releaseChip(r)).toBe('S2 premieres Jul 15, 2026');
 	});
 
 	it('shows "airing now" for a currently-airing season already released', () => {
-		const past = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
-		const r: ReleaseInfo = { next_season: 1, next_season_date: past, currently_airing: true };
+		const r: ReleaseInfo = {
+			next_season: 1,
+			next_season_date: '2026-06-10',
+			currently_airing: true
+		};
 		expect(releaseChip(r)).toBe('S1 airing now');
 	});
 
 	it('shows a future streaming date for a movie', () => {
-		const future = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
-		const r: ReleaseInfo = { digital_date: future };
-		expect(releaseChip(r)).toContain('Streaming');
+		const r: ReleaseInfo = { digital_date: '2026-06-25' };
+		expect(releaseChip(r)).toBe('Streaming Jun 25, 2026');
+	});
+
+	it('shows the theatrical date alone when there is no streaming estimate', () => {
+		const r: ReleaseInfo = { theatrical_date: '2026-07-01' };
+		expect(releaseChip(r)).toBe('Theaters Jul 1, 2026');
+	});
+
+	it('combines a future theatrical date with a streaming estimate', () => {
+		const r: ReleaseInfo = { theatrical_date: '2026-07-01', streaming_estimate: '2026-09-01' };
+		expect(releaseChip(r)).toBe('Theaters Jul 1, 2026 · Est. streaming ~Sep 2026');
+	});
+
+	it('shows only the streaming estimate once the theatrical date has passed', () => {
+		const r: ReleaseInfo = { theatrical_date: '2026-01-01', streaming_estimate: '2026-09-01' };
+		expect(releaseChip(r)).toBe('Est. streaming ~Sep 2026');
+	});
+
+	it('returns null when the theatrical date and estimate are both in the past', () => {
+		// theatrical_date isFuture()-gated out, streaming_estimate has no future
+		// check of its own — parts.join(' · ') || null is the guard that catches
+		// the resulting empty-parts case instead of returning ''.
+		const r: ReleaseInfo = { theatrical_date: '2026-01-01' };
+		expect(releaseChip(r)).toBeNull();
 	});
 });

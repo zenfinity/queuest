@@ -26,6 +26,7 @@ function makeResult(overrides: Partial<SearchResult> = {}): SearchResult {
 		cast: [],
 		director: null,
 		creator: null,
+		imdb_id: null,
 		...overrides
 	};
 }
