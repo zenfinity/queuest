@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { WatchlistItem } from '$lib/types';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
@@ -30,7 +31,9 @@
 		promoteCollection,
 		createInvite,
 		removeMemberAndRotate,
-		type SharedCollection
+		listMembers,
+		type SharedCollection,
+		type CollectionMember
 	} from '$lib/collection-actions';
 
 	import {
@@ -169,6 +172,8 @@
 	let inviteError = $state('');
 	let removingMember: { collectionId: string; userId: string } | null = $state(null);
 	let removalError = $state('');
+	let openMembers: CollectionMember[] = $state([]);
+	let loadingMembers = $state(false);
 
 	async function loadSharedCollections() {
 		sharedCollections = await listSharedCollections({
@@ -220,6 +225,13 @@
 		}
 	}
 
+	async function loadOpenMembers() {
+		if (!openCollection) return;
+		loadingMembers = true;
+		openMembers = await listMembers(openCollection.id, { setBusy: () => {}, setError: () => {} });
+		loadingMembers = false;
+	}
+
 	async function copyInviteLink() {
 		if (!inviteLink) return;
 		await navigator.clipboard.writeText(inviteLink);
@@ -238,6 +250,7 @@
 			await loadSharedCollections();
 			openCollection = sharedCollections.find((c) => c.id === openCollection!.id) || null;
 			removingMember = null;
+			await loadOpenMembers();
 		}
 	}
 
@@ -803,6 +816,12 @@
 								</p>
 							</div>
 							<div class="flex gap-1 ml-2">
+								<a
+									href={resolve('/collections/[id]', { id: coll.id })}
+									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+								>
+									Open
+								</a>
 								{#if coll.role === 'owner'}
 									<button
 										onclick={async () => {
@@ -815,7 +834,15 @@
 									</button>
 								{/if}
 								<button
-									onclick={() => (openCollection = openCollection?.id === coll.id ? null : coll)}
+									onclick={() => {
+										if (openCollection?.id === coll.id) {
+											openCollection = null;
+										} else {
+											openCollection = coll;
+											openMembers = [];
+											loadOpenMembers();
+										}
+									}}
 									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
 								>
 									{openCollection?.id === coll.id ? 'Hide' : 'Info'}
@@ -845,6 +872,30 @@
 								{#if inviteError}
 									<p class="text-red-600 dark:text-red-400">{inviteError}</p>
 								{/if}
+								{#if loadingMembers}
+									<p>Loading members…</p>
+								{:else if removingMember?.collectionId !== coll.id}
+									<ul class="space-y-1">
+										{#each openMembers as member (member.userId)}
+											<li class="flex items-center justify-between gap-2">
+												<span class="truncate"
+													>{member.email}{member.role === 'owner' ? ' (owner)' : ''}</span
+												>
+												{#if coll.role === 'owner' && member.role !== 'owner'}
+													<button
+														onclick={() => {
+															removingMember = { collectionId: coll.id, userId: member.userId };
+															removalError = '';
+														}}
+														class="shrink-0 text-red-500 hover:underline"
+													>
+														Remove
+													</button>
+												{/if}
+											</li>
+										{/each}
+									</ul>
+								{/if}
 								{#if removingMember?.collectionId === coll.id}
 									<div class="bg-red-50 dark:bg-red-900/20 rounded p-2 space-y-1">
 										<p>Remove member and rotate key?</p>
@@ -866,8 +917,6 @@
 											<p class="text-red-600 dark:text-red-400">{removalError}</p>
 										{/if}
 									</div>
-								{:else}
-									<p>Members coming soon in queue view.</p>
 								{/if}
 							</div>
 						{/if}

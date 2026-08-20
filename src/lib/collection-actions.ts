@@ -14,7 +14,7 @@ import { b64urlEncode } from './base64url';
 import { getSyncDek, getUserPrivateKey, removeItem } from './db';
 import { ensureKeypair } from './keypair';
 import { throwIfNotOk } from './http';
-import { syncCollectionItems, type CollectionItem } from './collection-sync';
+import { syncCollectionItems, fetchCollectionItems, type CollectionItem } from './collection-sync';
 import type { WatchlistItem } from './types';
 
 export interface CollectionActionDeps {
@@ -52,7 +52,7 @@ async function requirePersonalDek(): Promise<CryptoKey> {
  * key — whether minted at creation, at invite redemption, or by a rotation —
  * is RSA-wrapped under the holder's public key, so one path covers all three.
  */
-async function openCollectionKey(wrappedKey: string): Promise<string> {
+export async function openCollectionKey(wrappedKey: string): Promise<string> {
 	const priv = await getUserPrivateKey();
 	if (!priv) throw new Error('This device is missing your account key. Sign in again.');
 	return unwrapKeyForMember(wrappedKey, priv);
@@ -365,4 +365,64 @@ function toCollectionItem(item: WatchlistItem, accountId: string): CollectionIte
 		watch: watched_at ? { [accountId]: watched_at } : {},
 		added_by_account_id: accountId
 	} as CollectionItem;
+}
+
+/**
+ * Loads a shared collection's items for the queue view. Resolves the
+ * collection's DEK from its wrapped copy, then pulls and decrypts — a
+ * read-only fetch, no push, so opening a collection never risks colliding
+ * with a concurrent writer.
+ */
+export async function loadCollectionItems(
+	collection: SharedCollection,
+	deps: CollectionActionDeps
+): Promise<CollectionItem[]> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const dekB64 = await openCollectionKey(collection.wrappedKey);
+		const dek = await importDek(dekB64, false);
+		return await fetchCollectionItems(collection.id, dek);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not load this collection.');
+		return [];
+	} finally {
+		deps.setBusy(false);
+	}
+}
+
+/**
+ * Toggles this account's own watch mark on one item and pushes the change.
+ * Only this account's entry in the `watch` map is touched — see
+ * mergeCollectionWatch for why a whole-item write would risk clobbering
+ * someone else's mark on retry.
+ */
+export async function toggleCollectionWatched(
+	collection: SharedCollection,
+	current: CollectionItem[],
+	item: CollectionItem,
+	myAccountId: string,
+	watched: boolean,
+	deps: CollectionActionDeps
+): Promise<CollectionItem[] | null> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const dekB64 = await openCollectionKey(collection.wrappedKey);
+		const dek = await importDek(dekB64, false);
+		return await syncCollectionItems(collection.id, dek, current, (merged) =>
+			merged.map((i) => {
+				if (i.tmdb_id !== item.tmdb_id || i.media_type !== item.media_type) return i;
+				const watch = { ...(i.watch ?? {}) };
+				if (watched) watch[myAccountId] = new Date().toISOString();
+				else delete watch[myAccountId];
+				return { ...i, watch };
+			})
+		);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not save that. Try again.');
+		return null;
+	} finally {
+		deps.setBusy(false);
+	}
 }
