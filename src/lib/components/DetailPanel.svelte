@@ -6,6 +6,7 @@
 	import { providerHue } from '$lib/colors';
 	import { trapFocus } from '$lib/focus-trap';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	// Structural subset shared by WatchlistItem (queue) and SearchResult (add) —
 	// both satisfy this without adapting, since Svelte/TS typing is structural.
@@ -225,7 +226,10 @@
 								const value = e.currentTarget.value;
 								if (value === '__manage__') {
 									e.currentTarget.value = item.queue_tag ?? '';
-									await goto('/settings#collections');
+									// resolve() validates the route but has no hash-fragment support,
+									// so the target the lint rule wants to see isn't expressible directly.
+									// eslint-disable-next-line svelte/no-navigation-without-resolve
+									await goto(resolve('/settings') + '#collections');
 									return;
 								}
 								collectionBusy = true;

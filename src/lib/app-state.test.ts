@@ -329,16 +329,12 @@ describe('deserializeAppState', () => {
 
 	it('preserves a well-formed imdb_id and rejects a malformed one', () => {
 		const good = deserializeAppState({
-			items: [
-				{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', imdb_id: 'tt2543164' }
-			]
+			items: [{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', imdb_id: 'tt2543164' }]
 		});
 		expect(good.items[0].imdb_id).toBe('tt2543164');
 
 		const bad = deserializeAppState({
-			items: [
-				{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', imdb_id: 'javascript:alert(1)' }
-			]
+			items: [{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', imdb_id: 'javascript:alert(1)' }]
 		});
 		expect(bad.items[0].imdb_id).toBeNull();
 	});

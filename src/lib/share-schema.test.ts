@@ -178,7 +178,15 @@ describe('parseSharePayload', () => {
 		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
 		expect((result.items[0] as unknown as Record<string, unknown>).polluted).toBeUndefined();
 		expect(Object.keys(result.items[0]).sort()).toEqual(
-			['tmdb_id', 'media_type', 'title', 'poster_path', 'providers', 'runtime_minutes', 'seasons'].sort()
+			[
+				'tmdb_id',
+				'media_type',
+				'title',
+				'poster_path',
+				'providers',
+				'runtime_minutes',
+				'seasons'
+			].sort()
 		);
 	});
 

@@ -141,7 +141,10 @@ describe('db: watchlist items', () => {
 		const providers: Provider[] = [
 			{ provider_id: 8, provider_name: 'Netflix', logo_path: '/n.png' }
 		];
-		const release = { theatrical_date: null, digital_date: '2026-06-01' } as WatchlistItem['release'];
+		const release = {
+			theatrical_date: null,
+			digital_date: '2026-06-01'
+		} as WatchlistItem['release'];
 		const seasons = [{ season_number: 1, episode_count: 8, name: 'S1', runtime_minutes: 240 }];
 
 		await db.patchProviders(
