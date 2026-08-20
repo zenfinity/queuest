@@ -31,6 +31,10 @@ Both follow the same one-time, auto-dismissing, localStorage-gated pattern as th
 
 The **QR code** option that invite links already had — generated on demand, same toggle-to-show/hide button — is now available on read-only links too, right next to Copy. Same underlying `toQrSvg`, same "only load the encoder if someone actually asks for a code" behavior.
 
+### Read-only link for your whole queue
+
+Sharing without an account required a list first — real friction for the most natural first share, "check out my queue," which happens before anyone's bothered organizing anything. A new **"Or share your whole queue as a read-only link"** action on the Lists page generates one unfiltered snapshot of everything, same mechanism (Copy, QR code, 30-day expiry) as the per-list links, titled with the account's own queue name since no single list is selected. Deliberately no filter UI — the old standalone `/share` page's status/type/provider filters are gone on purpose; one unfiltered snapshot is a much smaller surface than that page was.
+
 ## [0.9.4] — 2026-08-20
 
 ### Bulk assign to a collection (#113)

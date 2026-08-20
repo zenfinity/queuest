@@ -211,6 +211,53 @@
 		}
 	}
 
+	// ── Whole-queue read-only link ───────────────────────────────────────────
+	// Same mechanism as the per-list read-only link, just unscoped — sharing
+	// requiring a list first was real friction for the most natural first
+	// share ("check out my queue") for anyone who hasn't organized into lists
+	// yet. Deliberately no filter UI (status/type/provider) like the old
+	// standalone /share page had — one unfiltered snapshot of everything is a
+	// much smaller surface than that page was, which is the point.
+	let showWholeQueueLink = $state(false);
+	let wholeQueueLinkCreating = $state(false);
+	let wholeQueueLinkUrl = $state('');
+	let wholeQueueLinkCopied = $state(false);
+	let wholeQueueLinkError = $state('');
+	let wholeQueueLinkQr = $state('');
+	let showWholeQueueLinkQr = $state(false);
+
+	async function createWholeQueueLink() {
+		showWholeQueueLink = true;
+		wholeQueueLinkUrl = '';
+		wholeQueueLinkCopied = false;
+		wholeQueueLinkError = '';
+		wholeQueueLinkQr = '';
+		showWholeQueueLinkQr = false;
+		// Empty selectedQueueNames means activeQueues.length is never 1 inside
+		// createShareLink, so it falls back to the account's own queue name
+		// (Settings → Export) rather than picking one list's name arbitrarily.
+		await createShareLink(items, new Set(), [], {
+			setShareCreating: (v) => (wholeQueueLinkCreating = v),
+			setShareUrl: (v) => (wholeQueueLinkUrl = v),
+			setShareError: (v) => (wholeQueueLinkError = v)
+		});
+	}
+
+	async function copyWholeQueueLink() {
+		if (!wholeQueueLinkUrl) return;
+		await navigator.clipboard.writeText(wholeQueueLinkUrl);
+		wholeQueueLinkCopied = true;
+		setTimeout(() => (wholeQueueLinkCopied = false), 2000);
+	}
+
+	async function toggleWholeQueueLinkQr() {
+		showWholeQueueLinkQr = !showWholeQueueLinkQr;
+		if (showWholeQueueLinkQr && !wholeQueueLinkQr && wholeQueueLinkUrl) {
+			const { toQrSvg } = await import('$lib/qrcode');
+			wholeQueueLinkQr = await toQrSvg(wholeQueueLinkUrl);
+		}
+	}
+
 	function updateCollectionColor(tag: string, color: string) {
 		setQueueColor(tag, color);
 		queueColors = { ...queueColors, [tag]: color };
@@ -326,6 +373,67 @@
 			Organize your queue into lists, then assign items to them from the detail panel. Accepting a
 			read-only link automatically creates one.
 		</p>
+		<button
+			onclick={createWholeQueueLink}
+			disabled={items.length === 0 || wholeQueueLinkCreating}
+			class="text-xs text-gray-500 underline decoration-dotted underline-offset-2 hover:text-gray-700 disabled:no-underline disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-300"
+		>
+			Or share your whole queue as a read-only link
+		</button>
+		{#if showWholeQueueLink}
+			<div
+				class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs dark:border-gray-700 dark:bg-gray-800/60"
+			>
+				<p class="text-gray-700 dark:text-gray-300">
+					Anyone with this link can view your whole queue — no account needed. It's a snapshot:
+					their view won't update when you change your queue, and the link stops working after 30
+					days.
+				</p>
+				{#if wholeQueueLinkCreating}
+					<p class="mt-1.5 text-gray-500 dark:text-gray-400">Creating link…</p>
+				{:else if wholeQueueLinkUrl}
+					<div class="mt-2 flex gap-1">
+						<input
+							type="text"
+							readonly
+							value={wholeQueueLinkUrl}
+							class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
+						/>
+						<button
+							onclick={copyWholeQueueLink}
+							class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+						>
+							{wholeQueueLinkCopied ? '✓' : 'Copy'}
+						</button>
+						<button
+							onclick={toggleWholeQueueLinkQr}
+							class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+						>
+							{showWholeQueueLinkQr ? 'Hide QR' : 'QR code'}
+						</button>
+					</div>
+					{#if showWholeQueueLinkQr}
+						<div class="mt-2 flex justify-center rounded bg-white p-2">
+							{#if wholeQueueLinkQr}
+								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+								{@html wholeQueueLinkQr}
+							{:else}
+								<p class="py-8 text-gray-500">Generating…</p>
+							{/if}
+						</div>
+					{/if}
+				{/if}
+				{#if wholeQueueLinkError}
+					<p class="mt-1.5 text-red-600 dark:text-red-400">{wholeQueueLinkError}</p>
+				{/if}
+				<button
+					onclick={() => (showWholeQueueLink = false)}
+					class="mt-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+				>
+					Close
+				</button>
+			</div>
+		{/if}
 		<form
 			class="flex gap-2"
 			onsubmit={(e) => {
