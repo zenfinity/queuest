@@ -323,8 +323,8 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Lists</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Organize your queue into lists, then assign items to them from the detail panel. Importing a
-			shared list automatically creates one.
+			Organize your queue into lists, then assign items to them from the detail panel. Accepting a
+			read-only link automatically creates one.
 		</p>
 		<form
 			class="flex gap-2"

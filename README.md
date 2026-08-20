@@ -56,7 +56,7 @@ If you want the same queue on more than one device, **Settings → Sync** adds a
 
 ### Organising the queue
 
-- 🏷️ **Lists** — group titles into named, colour-coded lists (date night, with the kids, horror October). Each shows its own runtime total. Imported shared lists land in their own list automatically. Select multiple titles at once from the queue to assign, clear, mark watched, or remove them in bulk.
+- 🏷️ **Lists** — group titles into named, colour-coded lists (date night, with the kids, horror October). Each shows its own runtime total. Accepting a read-only link automatically creates a list from it. Select multiple titles at once from the queue to assign, clear, mark watched, or remove them in bulk.
 - 📋 **Grid, List, and Gantt views** with sort (A–Z, runtime, date added, watched) and optional grouping by list.
 - 🧭 **Queue dock** — the main filter surface: view switcher, inclusive Watched toggle, and sort/service/list filters.
 - ✅ **Watch tracking** — mark titles done; season-level progress (with episode counts) shrinks bar widths automatically. On a shared list, each collaborator's own watch mark is tracked independently.
