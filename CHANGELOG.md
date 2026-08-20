@@ -28,6 +28,10 @@ Scoped down from the original #131 after establishing that `.design-sync/design-
 - **The two file inputs in the import panel share one class string** instead of a 274-character string copied verbatim in two places. (#131)
 - **The Budget page's number inputs match the ones in the queue's budget callout** — the two were near-copies differing in three utilities, giving the same control two looks. The queue page's geometry wins (`w-14`, `px-2 py-1.5`, `bg-white`); the Budget page keeps its neutral resting ring, since the orange ring belongs to the callout's theming rather than to the control. This one is a deliberate visual change. (#131)
 
+### UI cleanup
+
+- **Removed the redundant "About Queuest" button from Settings** — clicking the logo already takes you to the landing page, making the About button unnecessary. GitHub link and feedback button remain.
+
 ### Bug fixes
 
 - **The landing page returned 500 in local development.** `adapter-cloudflare` installs a throwing getter on every `platform.env` key for prerenderable routes, and `/` is prerendered — so *reading* `SHARE_KV` threw rather than returning undefined. The existing guard covered the build's static-generation pass (`building`) but not `vite dev`, where `building` is false and the same getters are installed. Production was unaffected, which is why it went unnoticed. Found while trying to view the landing page work above.

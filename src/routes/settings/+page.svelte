@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { WatchlistItem } from '$lib/types';
 	import { onMount } from 'svelte';
-	import { resolve } from '$app/paths';
 	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { trapFocus } from '$lib/focus-trap';
@@ -1108,13 +1107,6 @@
 		</div>
 
 		<div class="flex flex-wrap gap-2">
-			<a
-				href={resolve('/?preview')}
-				class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-			>
-				About Queuest
-			</a>
-
 			<a
 				href={GITHUB_REPO}
 				target="_blank"
