@@ -230,7 +230,7 @@
 
 	onMount(async () => {
 		await loadSharedCollections();
-	})
+	});
 
 	// ── Cancel alerts opt-in ─────────────────────────────────────────────────
 	let cancelAlertsEnabled = $state(false);
@@ -713,11 +713,13 @@
 	<!-- Shared Collections -->
 	{#if syncEnabled}
 		<section id="shared-collections" class="space-y-3 scroll-mt-4">
-			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared Collections</h2>
+			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
+				Shared Collections
+			</h2>
 			<p class="text-sm text-gray-600 dark:text-gray-400">
 				Create or join collections to watch titles together.
 			</p>
-			
+
 			<form
 				class="flex gap-2"
 				onsubmit={(e) => {
@@ -750,10 +752,14 @@
 			{:else}
 				<div class="space-y-2">
 					{#each sharedCollections as coll (coll.id)}
-						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60 flex items-center justify-between">
+						<div
+							class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60 flex items-center justify-between"
+						>
 							<div class="min-w-0 flex-1">
 								<p class="text-sm font-medium text-gray-800 dark:text-gray-200">{coll.name}</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">{coll.role === 'owner' ? 'You own this' : 'Member'}</p>
+								<p class="text-xs text-gray-500 dark:text-gray-400">
+									{coll.role === 'owner' ? 'You own this' : 'Member'}
+								</p>
 							</div>
 							<div class="flex gap-1 ml-2">
 								{#if coll.role === 'owner'}
@@ -776,7 +782,9 @@
 							</div>
 						</div>
 						{#if openCollection?.id === coll.id}
-							<div class="ml-3 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2 text-xs text-gray-600 dark:text-gray-400">
+							<div
+								class="ml-3 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2 text-xs text-gray-600 dark:text-gray-400"
+							>
 								{#if inviteLink && openCollection.id === coll.id}
 									<div class="flex gap-1">
 										<input
