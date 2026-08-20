@@ -47,7 +47,7 @@
 	}}
 />
 
-{#snippet rowContent(item: WatchlistItem, tagColor: string | null)}
+{#snippet rowContent(item: WatchlistItem)}
 	{@const rt = remainingRuntime(item)}
 	{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
 	{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null)}
@@ -107,22 +107,13 @@
 		</div>
 	</div>
 
-	<!-- Row 2: type chip · collection chip · provider icons · sparkline · runtime -->
+	<!-- Row 2: type chip · provider icons · sparkline · runtime -->
 	<div class="ml-11 mt-1.5 flex items-center gap-2">
 		<span
 			class="shrink-0 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400"
 		>
 			{item.media_type === 'movie' ? '🎬' : '📺'}
 		</span>
-		{#if tagColor}
-			<span
-				class="shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold text-white"
-				style="background-color: {tagColor};"
-				title={item.queue_tag}
-			>
-				{item.queue_tag}
-			</span>
-		{/if}
 		{#if item.providers.length > 0}
 			<div class="flex shrink-0 gap-0.5">
 				{#each item.providers.slice(0, 3) as p (p.provider_id)}
@@ -251,7 +242,7 @@
 								onOpenDetail(item);
 							}}
 						>
-							{@render rowContent(item, tagColor)}
+							{@render rowContent(item)}
 						</div>
 					{/each}
 				</div>
@@ -274,7 +265,7 @@
 					onOpenDetail(item);
 				}}
 			>
-				{@render rowContent(item, tagColor)}
+				{@render rowContent(item)}
 			</div>
 		{/each}
 	</div>

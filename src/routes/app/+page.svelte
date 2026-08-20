@@ -497,6 +497,7 @@
 			onToggle={toggle}
 			onRemove={remove}
 			{seasonPicker}
+			{queueColors}
 		/>
 	{/if}
 </div>

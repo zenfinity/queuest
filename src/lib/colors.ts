@@ -29,6 +29,38 @@ export function resolvedHue(providerId: number | null): number | null {
 	return providerId !== null ? providerHue(providerId) : null;
 }
 
+// ── Hue extraction from a user-chosen collection color (hex, e.g. "#ef4444") ──
+// Deliberately a separate path from providerHue/resolvedHue above, not a
+// shared lookup: provider lanes are branded hues from a curated table,
+// collection lanes are whatever hex the user picked (palette or custom via
+// the Settings color input) — conflating them would make e.g. an orange
+// collection look like it's on a provider. Only the HSL-based rendering in
+// laneColors() is shared between the two.
+export function hexToHue(hex: string): number | null {
+	const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+	if (!m) return null;
+	const r = parseInt(m[1].slice(0, 2), 16) / 255;
+	const g = parseInt(m[1].slice(2, 4), 16) / 255;
+	const b = parseInt(m[1].slice(4, 6), 16) / 255;
+	const max = Math.max(r, g, b);
+	const min = Math.min(r, g, b);
+	const d = max - min;
+	if (d === 0) return 0; // achromatic (gray) — hue is meaningless but must return a number
+	let h: number;
+	switch (max) {
+		case r:
+			h = ((g - b) / d) % 6;
+			break;
+		case g:
+			h = (b - r) / d + 2;
+			break;
+		default:
+			h = (r - g) / d + 4;
+	}
+	h *= 60;
+	return h < 0 ? h + 360 : h;
+}
+
 // ── Lane colour palette from a known hue ─────────────────────────────────
 export function laneColors(
 	hue: number | null,
