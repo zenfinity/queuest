@@ -349,3 +349,106 @@ describe('deserializeAppState', () => {
 		expect((result.items[0] as unknown as Record<string, unknown>).unknownField).toBeUndefined();
 	});
 });
+
+describe('watch / added_by_account_id (#188 — collection blob fields)', () => {
+	function backupWith(itemOverrides: Record<string, unknown>) {
+		return {
+			version: 2,
+			items: [
+				{
+					tmdb_id: 1,
+					media_type: 'movie',
+					title: 'T',
+					poster_path: null,
+					overview: null,
+					providers: [],
+					runtime_minutes: 90,
+					seasons: [],
+					watched_seasons: [],
+					added_at: '2026-01-01T00:00:00Z',
+					watched_at: null,
+					...itemOverrides
+				}
+			],
+			prefs: {}
+		};
+	}
+
+	it('round-trips a valid watch map and added_by_account_id', () => {
+		const result = deserializeAppState(
+			backupWith({
+				watch: { 'account-1': '2026-08-01T00:00:00.000Z' },
+				added_by_account_id: 'account-1'
+			})
+		);
+		expect(result.items[0].watch).toEqual({ 'account-1': '2026-08-01T00:00:00.000Z' });
+		expect(result.items[0].added_by_account_id).toBe('account-1');
+	});
+
+	it('accepts a null added_by_account_id', () => {
+		const result = deserializeAppState(backupWith({ added_by_account_id: null }));
+		expect(result.items[0].added_by_account_id).toBeNull();
+	});
+
+	it('drops watch entries with a malformed value', () => {
+		const result = deserializeAppState(
+			backupWith({ watch: { 'account-1': 'not-a-date', 'account-2': '2026-08-01T00:00:00.000Z' } })
+		);
+		expect(result.items[0].watch).toEqual({ 'account-2': '2026-08-01T00:00:00.000Z' });
+	});
+
+	it('drops watch entries whose key is not account-id shaped', () => {
+		const result = deserializeAppState(
+			backupWith({
+				watch: {
+					'valid-id': '2026-08-01T00:00:00.000Z',
+					'has spaces': '2026-08-01T00:00:00.000Z',
+					'': '2026-08-01T00:00:00.000Z'
+				}
+			})
+		);
+		expect(result.items[0].watch).toEqual({ 'valid-id': '2026-08-01T00:00:00.000Z' });
+	});
+
+	// The prototype-pollution defense this module is built around — a
+	// null-prototype output object plus explicit rejection of the dangerous
+	// key names, so an untrusted collection blob cannot touch Object.prototype
+	// through a crafted "watch" map.
+	it('rejects __proto__/constructor/prototype as watch keys without polluting Object.prototype', () => {
+		const before = ({} as Record<string, unknown>).polluted;
+		const result = deserializeAppState(
+			backupWith({
+				watch: {
+					__proto__: '2026-08-01T00:00:00.000Z',
+					constructor: '2026-08-01T00:00:00.000Z',
+					prototype: '2026-08-01T00:00:00.000Z',
+					legit: '2026-08-01T00:00:00.000Z'
+				}
+			})
+		);
+		expect(result.items[0].watch).toEqual({ legit: '2026-08-01T00:00:00.000Z' });
+		expect(({} as Record<string, unknown>).polluted).toBe(before);
+	});
+
+	it('caps the watch map at 50 entries', () => {
+		const watch: Record<string, string> = {};
+		for (let i = 0; i < 80; i++) watch[`account-${i}`] = '2026-08-01T00:00:00.000Z';
+		const result = deserializeAppState(backupWith({ watch }));
+		expect(Object.keys(result.items[0].watch ?? {})).toHaveLength(50);
+	});
+
+	it('omits watch entirely when the map has no valid entries', () => {
+		const result = deserializeAppState(backupWith({ watch: { 'bad key!': 'x' } }));
+		expect(result.items[0].watch).toBeUndefined();
+	});
+
+	it('ignores a non-object watch value rather than throwing', () => {
+		const result = deserializeAppState(backupWith({ watch: 'not-an-object' }));
+		expect(result.items[0].watch).toBeUndefined();
+	});
+
+	it('rejects a malformed added_by_account_id rather than passing it through', () => {
+		const result = deserializeAppState(backupWith({ added_by_account_id: 'has spaces!' }));
+		expect(result.items[0].added_by_account_id).toBeUndefined();
+	});
+});

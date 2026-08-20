@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0] — 2026-08-20
+
+### Shared Collections: complete Settings UI (#189)
+
+The full settings management for end-to-end encrypted collaborative collections:
+- **Create collections:** New form in Settings, server generates collection ID
+- **Generate invite links:** Secure design with DEK in URL fragment, never in request body
+- **Invite members:** Single-use tokens with preview (unauthenticated), expiry, and revocation
+- **List members:** Shows role (owner/member) and public keys (required for key rotation)
+- **Remove members:** Atomic rotation on removal — new DEK generation, blob re-encryption, per-member key wrapping, invite revocation in one batch
+- **Role-based access:** Reads ungated (read-only fallback), creates gated on entitlement
+
+All operations backed by server-side authorization (membership-based, indistinguishable 404 for non-members), collection blob versioning with jittered exponential backoff on conflicts, and per-account watch merge to prevent one member's mark from clobbering another's.
+
+Verified end-to-end: create → invite → join → remove/rotate flow works locally. All 488 tests passing.
 ## [0.8.5] — 2026-08-20
 
 ### Corrected inaccurate privacy claims

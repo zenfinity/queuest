@@ -158,3 +158,77 @@ export async function decryptWithKey(buffer: ArrayBuffer, keyB64url: string): Pr
 	}
 	return new TextDecoder().decode(plain);
 }
+
+// ── Per-user keypairs (#189) ───────────────────────────────────────────────
+// Collaborative Collections need one member to encrypt a key *for* another —
+// re-wrapping a rotated Collection DEK for everyone who remains after a
+// removal. Symmetric primitives cannot express that: a member's personal DEK
+// is non-extractable and never leaves their browser, so no other member can
+// wrap anything they could open.
+//
+// RSA-OAEP rather than ECDH deliberately. ECDH is faster and smaller, but
+// "encrypt to a public key" via ECDH needs an ephemeral keypair, a KDF, and
+// a symmetric layer — four primitives, each with a way to be subtly wrong.
+// RSA-OAEP is a single call with well-understood padding, and the only thing
+// ever encrypted under it is one 32-byte DEK (2048-bit OAEP/SHA-256 tops out
+// near 190 bytes, so there is no chunking to get wrong either). Keygen is
+// slower, but happens once per account alongside PBKDF2, which already
+// dominates that moment.
+
+const RSA_PARAMS: RsaHashedKeyGenParams = {
+	name: 'RSA-OAEP',
+	modulusLength: 2048,
+	publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+	hash: 'SHA-256'
+};
+
+export const KEYPAIR_ALGORITHM = 'RSA-OAEP-2048-SHA256';
+
+export interface GeneratedKeypair {
+	/** SPKI, b64url — published to fellow collection members. */
+	publicKey: string;
+	/** PKCS8, b64url — the caller wraps this before it leaves the device. */
+	privateKeyPkcs8: Uint8Array<ArrayBuffer>;
+}
+
+export async function generateKeypair(): Promise<GeneratedKeypair> {
+	const pair = await crypto.subtle.generateKey(RSA_PARAMS, true, ['encrypt', 'decrypt']);
+	const spki = await crypto.subtle.exportKey('spki', pair.publicKey);
+	const pkcs8 = await crypto.subtle.exportKey('pkcs8', pair.privateKey);
+	return {
+		publicKey: b64urlEncode(new Uint8Array(spki) as Uint8Array<ArrayBuffer>),
+		privateKeyPkcs8: new Uint8Array(pkcs8) as Uint8Array<ArrayBuffer>
+	};
+}
+
+export async function importPublicKey(spkiB64url: string): Promise<CryptoKey> {
+	return crypto.subtle.importKey('spki', b64urlDecode(spkiB64url), RSA_PARAMS, false, ['encrypt']);
+}
+
+export async function importPrivateKey(pkcs8: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+	return crypto.subtle.importKey('pkcs8', pkcs8, RSA_PARAMS, false, ['decrypt']);
+}
+
+/**
+ * Wraps a Collection DEK (as its b64url string) under a member's public key.
+ * This is what lets a rotation re-key everyone who remains without any of
+ * their private material being present on the rotating device.
+ */
+export async function wrapKeyForMember(dekB64url: string, publicKeySpki: string): Promise<string> {
+	const key = await importPublicKey(publicKeySpki);
+	const ciphertext = await crypto.subtle.encrypt(
+		{ name: 'RSA-OAEP' },
+		key,
+		new TextEncoder().encode(dekB64url)
+	);
+	return b64urlEncode(new Uint8Array(ciphertext) as Uint8Array<ArrayBuffer>);
+}
+
+export async function unwrapKeyForMember(wrapped: string, privateKey: CryptoKey): Promise<string> {
+	const plain = await crypto.subtle.decrypt(
+		{ name: 'RSA-OAEP' },
+		privateKey,
+		b64urlDecode(wrapped)
+	);
+	return new TextDecoder().decode(plain);
+}

@@ -213,6 +213,16 @@ function parseProvider(raw: unknown): Provider | null {
 	return { provider_id, provider_name, logo_path };
 }
 
+/**
+ * Exported as the untrusted-item validator for collection blobs (#188) —
+ * a collection blob is written by other members' devices, which makes it at
+ * least as untrusted as a backup file someone hands you, so it goes through
+ * exactly the same allowlist rather than a separate, easier-to-drift copy.
+ */
+export function parseBackupItemPublic(raw: unknown): BackupItem | null {
+	return parseBackupItem(raw);
+}
+
 function parseBackupItem(raw: unknown): BackupItem | null {
 	if (!raw || typeof raw !== 'object') return null;
 	const item = raw as Record<string, unknown>;
@@ -278,8 +288,47 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		...(cast ? { cast } : {}),
 		director: typeof item.director === 'string' ? item.director.slice(0, 200) : null,
 		creator: typeof item.creator === 'string' ? item.creator.slice(0, 200) : null,
-		imdb_id: validateImdbId(item.imdb_id)
+		imdb_id: validateImdbId(item.imdb_id),
+		...(parseWatch(item.watch) ? { watch: parseWatch(item.watch) } : {}),
+		...(typeof item.added_by_account_id === 'string' && ACCOUNT_ID_RE.test(item.added_by_account_id)
+			? { added_by_account_id: item.added_by_account_id }
+			: item.added_by_account_id === null
+				? { added_by_account_id: null }
+				: {})
 	};
+}
+
+/**
+ * Validates a per-account watch map: account id -> ISO date they marked this
+ * watched. Built on Object.create(null) rather than `{}` — the keys are
+ * attacker-controlled (this parses untrusted sync payloads), and a
+ * null-prototype object means an incoming "__proto__" key becomes an inert
+ * own property instead of reassigning the object's prototype. "constructor"
+ * and "prototype" are rejected outright as a second layer, since a
+ * null-prototype object still has neither of those as meaningful own keys
+ * but there is no reason to accept them.
+ *
+ * Capped at 50 entries — a shared collection with more concurrent watchers
+ * than that is not a case this app is built for, and an unbounded map is an
+ * unbounded payload from an untrusted source.
+ */
+const MAX_WATCH_ENTRIES = 50;
+const ACCOUNT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function parseWatch(raw: unknown): Record<string, string> | undefined {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+	const out: Record<string, string> = Object.create(null);
+	let count = 0;
+	for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+		if (count >= MAX_WATCH_ENTRIES) break;
+		if (DANGEROUS_KEYS.has(key) || !ACCOUNT_ID_RE.test(key)) continue;
+		const iso = validateIsoDate(value);
+		if (!iso) continue;
+		out[key] = iso;
+		count++;
+	}
+	return count > 0 ? out : undefined;
 }
 
 /** TMDB's imdb_id format is always "tt" + digits (e.g. "tt0111161"). */

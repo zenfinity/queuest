@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { encrypt, decrypt, generateShareKey, encryptWithKey, decryptWithKey } from './crypto';
+import {
+	encrypt,
+	decrypt,
+	generateShareKey,
+	encryptWithKey,
+	decryptWithKey,
+	generateKeypair,
+	importPrivateKey,
+	wrapKeyForMember,
+	unwrapKeyForMember
+} from './crypto';
 
 const SALT_LEN = 16;
 const IV_LEN = 12;
@@ -99,5 +109,53 @@ describe('generateShareKey / encryptWithKey / decryptWithKey', () => {
 		const key = await generateShareKey();
 		const tooShort = new ArrayBuffer(5);
 		await expect(decryptWithKey(tooShort, key)).rejects.toThrow(/Could not decrypt/);
+	});
+});
+
+describe('per-user keypairs (#189)', () => {
+	it('round-trips a DEK wrapped for a member', async () => {
+		const { publicKey, privateKeyPkcs8 } = await generateKeypair();
+		const dek = await generateShareKey();
+
+		const wrapped = await wrapKeyForMember(dek, publicKey);
+		expect(wrapped).not.toContain(dek);
+
+		const priv = await importPrivateKey(privateKeyPkcs8);
+		expect(await unwrapKeyForMember(wrapped, priv)).toBe(dek);
+	});
+
+	// The property the whole rotation design rests on: Alice can wrap a key for
+	// Carol holding only Carol's public key, with none of Carol's secrets.
+	it('lets one member wrap for another using only their public key', async () => {
+		const carol = await generateKeypair();
+		const dek = await generateShareKey();
+
+		const wrappedByAlice = await wrapKeyForMember(dek, carol.publicKey);
+
+		const carolPriv = await importPrivateKey(carol.privateKeyPkcs8);
+		expect(await unwrapKeyForMember(wrappedByAlice, carolPriv)).toBe(dek);
+	});
+
+	it('cannot be opened with a different member’s private key', async () => {
+		const carol = await generateKeypair();
+		const mallory = await generateKeypair();
+		const dek = await generateShareKey();
+
+		const forCarol = await wrapKeyForMember(dek, carol.publicKey);
+		const malloryPriv = await importPrivateKey(mallory.privateKeyPkcs8);
+
+		await expect(unwrapKeyForMember(forCarol, malloryPriv)).rejects.toThrow();
+	});
+
+	it('produces distinct keypairs and non-deterministic ciphertext', async () => {
+		const a = await generateKeypair();
+		const b = await generateKeypair();
+		expect(a.publicKey).not.toBe(b.publicKey);
+
+		const dek = await generateShareKey();
+		// OAEP is randomised, so the same DEK under the same key differs each time.
+		expect(await wrapKeyForMember(dek, a.publicKey)).not.toBe(
+			await wrapKeyForMember(dek, a.publicKey)
+		);
 	});
 });

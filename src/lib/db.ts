@@ -493,6 +493,49 @@ export async function clearSyncDek(): Promise<void> {
 	});
 }
 
+const USER_PRIVATE_KEY = 'user_private_key';
+
+/**
+ * The account's unwrapped RSA private key (#189), held the same way as the
+ * sync DEK: a non-extractable CryptoKey, structured-cloned into IndexedDB so
+ * it survives reload without the raw PKCS8 bytes ever sitting in JS. Used to
+ * unwrap Collection DEKs that other members wrapped under the matching public
+ * key.
+ */
+export async function getUserPrivateKey(): Promise<CryptoKey | undefined> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db.transaction(META_STORE).objectStore(META_STORE).get(USER_PRIVATE_KEY);
+		req.onsuccess = () =>
+			resolve((req.result as { key: string; value: CryptoKey } | undefined)?.value);
+		req.onerror = () => reject(req.error);
+	});
+}
+
+export async function setUserPrivateKey(key: CryptoKey): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db
+			.transaction(META_STORE, 'readwrite')
+			.objectStore(META_STORE)
+			.put({ key: USER_PRIVATE_KEY, value: key });
+		req.onsuccess = () => resolve();
+		req.onerror = () => reject(req.error);
+	});
+}
+
+export async function clearUserPrivateKey(): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db
+			.transaction(META_STORE, 'readwrite')
+			.objectStore(META_STORE)
+			.delete(USER_PRIVATE_KEY);
+		req.onsuccess = () => resolve();
+		req.onerror = () => reject(req.error);
+	});
+}
+
 export async function getMeta(key: string): Promise<string | undefined> {
 	const db = await open();
 	return new Promise((resolve, reject) => {

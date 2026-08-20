@@ -10,6 +10,7 @@ import {
 	getSyncDek,
 	setSyncDek,
 	clearSyncDek,
+	clearUserPrivateKey,
 	getMeta,
 	setMeta,
 	setClockOffsetMs,
@@ -22,6 +23,7 @@ import {
 	type AppStatePrefs,
 	type BackupItem
 } from './app-state';
+import { ensureKeypair } from './keypair';
 import { importDek, encryptBytesWithDek, decryptBytesWithDek } from './crypto';
 import { gzip, gunzip } from './gzip';
 
@@ -78,6 +80,21 @@ export async function enableSyncWithDek(dekB64url: string, email: string): Promi
 	const dek = await importDek(dekB64url, false);
 	await setSyncDek(dek);
 	await setMeta(SYNC_EMAIL_KEY, email);
+
+	// Every path that unlocks the DEK — signup, signin, recovery — funnels
+	// through here, which makes it the one place the collaboration keypair
+	// (#189) can be established or restored for this device.
+	//
+	// Best-effort: a keypair failure must not fail sign-in. Personal sync does
+	// not need it, and the collections UI calls ensureKeypair() again before it
+	// needs one, so the cost of failing here is a retry later rather than an
+	// account the user cannot get into.
+	try {
+		await ensureKeypair(dek);
+	} catch {
+		// Swallowed deliberately — see above.
+	}
+
 	updateStatus({ email, status: 'idle', error: '' });
 }
 
@@ -87,6 +104,9 @@ export async function isSyncEnabled(): Promise<boolean> {
 
 export async function disableSync(): Promise<void> {
 	await clearSyncDek();
+	// The private key is account material, not queue data — leaving it behind
+	// on a signed-out device would outlive the session that justified it.
+	await clearUserPrivateKey();
 	updateStatus({ email: null, status: 'idle', error: '', lastSyncedAt: null });
 }
 
