@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { b64urlEncode } from '$lib/base64url';
 
 /**
  * Server-side authorisation and shared types for collaborative Collections
@@ -105,4 +106,98 @@ export async function isEntitled(db: D1Database, userId: string): Promise<boolea
 		.bind(userId)
 		.first<{ id: string }>();
 	return !!row;
+}
+
+// ── Invites ────────────────────────────────────────────────────────────────
+
+/**
+ * An invite link is a *bearer credential that carries key material* — the
+ * Collection DEK travels in the URL fragment, so whoever holds the link holds
+ * the key itself, not merely permission to ask for it. That is a higher bar
+ * than a plain bearer token, and it is why invites are single-use, revocable,
+ * and expiring rather than any one of the three.
+ *
+ * 24 bytes (192 bits) of CSPRNG output, b64url — same construction as session
+ * and share tokens.
+ */
+const INVITE_TOKEN_BYTES = 24;
+
+/** Rejects obviously malformed tokens before they reach the database. */
+export const MAX_INVITE_TOKEN_LEN = 64;
+
+export function makeInviteToken(): string {
+	return b64urlEncode(crypto.getRandomValues(new Uint8Array(INVITE_TOKEN_BYTES)));
+}
+
+/**
+ * Only the hash is stored, so a leaked database snapshot yields no working
+ * invite links — the same reasoning as storing auth key hashes rather than
+ * auth keys. It also means the raw token can be shown exactly once, at
+ * creation, and never recovered afterwards.
+ */
+export async function hashInviteToken(token: string): Promise<string> {
+	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+	return b64urlEncode(new Uint8Array(digest) as Uint8Array<ArrayBuffer>);
+}
+
+export type InviteRejection = 'not_found' | 'expired' | 'claimed' | 'revoked';
+
+export interface InviteRow {
+	token_hash: string;
+	collection_id: string;
+	created_by: string;
+	expires_at: string;
+	claimed_at: string | null;
+	revoked_at: string | null;
+	collection_name: string;
+	inviter_email: string;
+	dek_version: number;
+}
+
+/**
+ * Resolves an invite token to its collection, or a reason it cannot be used.
+ *
+ * Unlike collection ids, the distinct rejection reasons here are deliberately
+ * surfaced to the caller: someone holding an invite token was given it, and
+ * "this link already got used — ask for a new one" is a materially better
+ * outcome than an undifferentiated 404. The token itself is the credential,
+ * and a wrong guess is infeasible at 192 bits, so distinguishing states leaks
+ * nothing an attacker could act on.
+ */
+export async function resolveInvite(
+	db: D1Database,
+	token: string
+): Promise<{ invite: InviteRow } | { rejected: InviteRejection }> {
+	if (typeof token !== 'string' || !token || token.length > MAX_INVITE_TOKEN_LEN) {
+		return { rejected: 'not_found' };
+	}
+
+	const tokenHash = await hashInviteToken(token);
+	const row = await db
+		.prepare(
+			`SELECT i.token_hash    AS token_hash,
+			        i.collection_id AS collection_id,
+			        i.created_by    AS created_by,
+			        i.expires_at    AS expires_at,
+			        i.claimed_at    AS claimed_at,
+			        i.revoked_at    AS revoked_at,
+			        c.name          AS collection_name,
+			        c.dek_version   AS dek_version,
+			        u.email         AS inviter_email
+			   FROM collection_invites i
+			   JOIN collections c ON c.id = i.collection_id
+			   JOIN users u       ON u.id = i.created_by
+			  WHERE i.token_hash = ?`
+		)
+		.bind(tokenHash)
+		.first<InviteRow>();
+
+	if (!row) return { rejected: 'not_found' };
+	// Revoked before claimed: an owner who revokes a link the recipient has
+	// already used should be told it was used, not that they revoked it.
+	if (row.claimed_at) return { rejected: 'claimed' };
+	if (row.revoked_at) return { rejected: 'revoked' };
+	if (new Date(row.expires_at).getTime() <= Date.now()) return { rejected: 'expired' };
+
+	return { invite: row };
 }

@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
-import { requireMembership, isValidCollectionId, isEntitled } from './collections';
+import {
+	requireMembership,
+	isValidCollectionId,
+	isEntitled,
+	makeInviteToken,
+	hashInviteToken,
+	resolveInvite
+} from './collections';
 
 const COLL_A = '11111111-1111-4111-8111-111111111111';
 const COLL_B = '22222222-2222-4222-9222-222222222222';
@@ -185,5 +192,100 @@ describe('isEntitled', () => {
 		const { db } = makeFakeDb(COLLECTIONS, MEMBERS);
 		expect(await isEntitled(db, ALICE)).toBe(true);
 		expect(await isEntitled(db, BOB)).toBe(false);
+	});
+});
+
+describe('invite tokens', () => {
+	it('mints high-entropy, non-repeating tokens', async () => {
+		const seen = new Set<string>();
+		for (let i = 0; i < 200; i++) seen.add(makeInviteToken());
+		expect(seen.size).toBe(200);
+		// 24 bytes b64url, unpadded
+		expect([...seen][0]).toMatch(/^[A-Za-z0-9_-]{32}$/);
+	});
+
+	it('hashes deterministically and does not return the token', async () => {
+		const token = makeInviteToken();
+		const a = await hashInviteToken(token);
+		const b = await hashInviteToken(token);
+		expect(a).toBe(b);
+		expect(a).not.toBe(token);
+		expect(a).not.toContain(token);
+	});
+});
+
+describe('resolveInvite', () => {
+	const TOKEN = 'test-token-value';
+	const future = () => new Date(Date.now() + 86400_000).toISOString();
+	const past = () => new Date(Date.now() - 86400_000).toISOString();
+
+	function makeInviteFakeDb(row: Record<string, unknown> | null) {
+		return {
+			prepare() {
+				return {
+					bind() {
+						return {
+							async first<T>() {
+								return (row as T) ?? null;
+							}
+						};
+					}
+				};
+			}
+		} as unknown as D1Database;
+	}
+
+	const base = {
+		token_hash: 'hash',
+		collection_id: COLL_A,
+		created_by: ALICE,
+		expires_at: future(),
+		claimed_at: null,
+		revoked_at: null,
+		collection_name: 'Date night',
+		inviter_email: 'alice@example.com',
+		dek_version: 1
+	};
+
+	it('resolves a live invite', async () => {
+		const r = await resolveInvite(makeInviteFakeDb(base), TOKEN);
+		expect('invite' in r && r.invite.collection_id).toBe(COLL_A);
+	});
+
+	it('rejects an unknown token', async () => {
+		const r = await resolveInvite(makeInviteFakeDb(null), TOKEN);
+		expect(r).toEqual({ rejected: 'not_found' });
+	});
+
+	it('rejects an expired invite', async () => {
+		const r = await resolveInvite(makeInviteFakeDb({ ...base, expires_at: past() }), TOKEN);
+		expect(r).toEqual({ rejected: 'expired' });
+	});
+
+	it('rejects a revoked invite', async () => {
+		const r = await resolveInvite(makeInviteFakeDb({ ...base, revoked_at: '2026-01-01' }), TOKEN);
+		expect(r).toEqual({ rejected: 'revoked' });
+	});
+
+	it('rejects a claimed invite', async () => {
+		const r = await resolveInvite(makeInviteFakeDb({ ...base, claimed_at: '2026-01-01' }), TOKEN);
+		expect(r).toEqual({ rejected: 'claimed' });
+	});
+
+	// An owner revoking a link the recipient already used should be told it was
+	// used, not that they revoked it — claimed is the more informative truth.
+	it('reports claimed ahead of revoked when both are set', async () => {
+		const r = await resolveInvite(
+			makeInviteFakeDb({ ...base, claimed_at: '2026-01-01', revoked_at: '2026-01-02' }),
+			TOKEN
+		);
+		expect(r).toEqual({ rejected: 'claimed' });
+	});
+
+	it('rejects malformed tokens without querying', async () => {
+		for (const bad of ['', 'x'.repeat(65), null, undefined, 42]) {
+			const r = await resolveInvite(makeInviteFakeDb(base), bad as string);
+			expect(r).toEqual({ rejected: 'not_found' });
+		}
 	});
 });
