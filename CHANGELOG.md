@@ -27,6 +27,10 @@ Now that the landing page is reachable again, a welcomed visitor saw "Start your
 
 Both follow the same one-time, auto-dismissing, localStorage-gated pattern as the existing nav-switching hint, and their dismiss keys are registered in `app-state.ts`'s synced/local key partition (now 17 keys, guarded by an existing test that scans the source tree for any `sq:` key not accounted for).
 
+### QR code for read-only links
+
+The **QR code** option that invite links already had — generated on demand, same toggle-to-show/hide button — is now available on read-only links too, right next to Copy. Same underlying `toQrSvg`, same "only load the encoder if someone actually asks for a code" behavior.
+
 ## [0.9.4] — 2026-08-20
 
 ### Bulk assign to a collection (#113)

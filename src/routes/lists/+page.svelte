@@ -176,12 +176,16 @@
 	let readOnlyLinkUrl = $state('');
 	let readOnlyLinkCopied = $state(false);
 	let readOnlyLinkError = $state('');
+	let readOnlyLinkQr = $state('');
+	let showReadOnlyLinkQr = $state(false);
 
 	async function createReadOnlyLink(name: string) {
 		readOnlyLinkFor = name;
 		readOnlyLinkUrl = '';
 		readOnlyLinkCopied = false;
 		readOnlyLinkError = '';
+		readOnlyLinkQr = '';
+		showReadOnlyLinkQr = false;
 		const tagged = items.filter((i) => i.queue_tag === name);
 		await createShareLink(tagged, new Set([name]), [name], {
 			setShareCreating: (v) => (readOnlyLinkCreating = v),
@@ -195,6 +199,16 @@
 		await navigator.clipboard.writeText(readOnlyLinkUrl);
 		readOnlyLinkCopied = true;
 		setTimeout(() => (readOnlyLinkCopied = false), 2000);
+	}
+
+	// Same on-demand generation as the invite QR above — most people just copy
+	// the link, so the encoder only loads for the ones who ask for a code.
+	async function toggleReadOnlyLinkQr() {
+		showReadOnlyLinkQr = !showReadOnlyLinkQr;
+		if (showReadOnlyLinkQr && !readOnlyLinkQr && readOnlyLinkUrl) {
+			const { toQrSvg } = await import('$lib/qrcode');
+			readOnlyLinkQr = await toQrSvg(readOnlyLinkUrl);
+		}
 	}
 
 	function updateCollectionColor(tag: string, color: string) {
@@ -537,7 +551,23 @@
 										>
 											{readOnlyLinkCopied ? '✓' : 'Copy'}
 										</button>
+										<button
+											onclick={toggleReadOnlyLinkQr}
+											class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+										>
+											{showReadOnlyLinkQr ? 'Hide QR' : 'QR code'}
+										</button>
 									</div>
+									{#if showReadOnlyLinkQr}
+										<div class="mt-2 flex justify-center rounded bg-white p-2">
+											{#if readOnlyLinkQr}
+												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+												{@html readOnlyLinkQr}
+											{:else}
+												<p class="py-8 text-gray-500">Generating…</p>
+											{/if}
+										</div>
+									{/if}
 								{/if}
 								{#if readOnlyLinkError}
 									<p class="mt-1.5 text-red-600 dark:text-red-400">{readOnlyLinkError}</p>
