@@ -24,7 +24,7 @@ describe('shouldRedirectToApp', () => {
 		expect(shouldRedirectToApp('enter', false, false)).toBe(false);
 	});
 
-	it('does not redirect when ?preview is present, even for a welcomed cold load', () => {
+	it('does not redirect when ?landing is present, even for a welcomed cold load', () => {
 		expect(shouldRedirectToApp('enter', true, true)).toBe(false);
 	});
 });

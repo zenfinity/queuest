@@ -10,6 +10,23 @@ The one-time "Alt+←→ / swipe to switch tabs" nudge showed on the Queue page 
 
 Hadn't caught up with anything from #145 onward — the entire collaborative Lists feature (shared lists, per-member wrapped keys, invite links, QR codes, activity badges, key rotation on member removal) was undocumented, "Collections" was renamed to "Lists" nowhere in the doc, and the "Encrypted share links" feature description was for the old filtered-multi-provider `/share` page that no longer exists. Rewrote the relevant sections: a new "Watch something together" step in How It Works, corrected Features bullets (Shared lists, Read-only links, bulk-assign, list colors throughout), a Known Limitations note that shared lists need accounts on both sides, and the Crypto stack row now mentions RSA-OAEP alongside AES-GCM/PBKDF2. Screenshots weren't regenerated — `docs/screenshots/landing-hero.png` still shows the old "Collections" copy.
 
+### Logo click reaches the landing page again (#196)
+
+The landing page redirected to `/app` whenever a `sq:welcomed` flag was set — correct for a typed URL or bookmark, but the logo link shares that same `/` target and inherited the redirect, so clicking it just bounced straight back out. Fixed with SvelteKit's `afterNavigate`, which reports *how* a navigation happened: `'enter'` is a genuine cold load, an in-app link click is `'link'`. Only a cold load redirects now. The redirect condition itself moved into a small tested function (`lib/landing.ts`) — the bug was exactly the kind that's easy to reintroduce silently in a `.svelte` lifecycle hook, and this repo has no component-testing harness to catch that at the markup layer otherwise.
+
+The old `?preview` escape hatch is renamed **`?landing`** — clearer about what it does now that it has a real purpose again (previewing the page while welcomed) rather than being the only way in at all.
+
+### Landing-page CTAs adapt to returning visitors
+
+Now that the landing page is reachable again, a welcomed visitor saw "Start your queue" / "Get started" everywhere — onboarding language aimed at someone with no queue yet. All three CTAs (hero, bottom section, footer) now swap to **"Back to Queue"**, linking straight to `/app`, when the same welcomed flag is set.
+
+### Two more onboarding nudges
+
+- **Group into a list** — once someone has a handful of titles queued and hasn't made a list yet, a one-time tip on the Queue page points at Select-to-assign or the Lists page. Deliberately not shown alongside the nav-switching hint above — two unrelated tips stacked on the same moment defeats the point of either.
+- **Read-only vs. Share** — the first time someone has a personal list with sync on, a tip on the Lists page spells out the distinction the two adjacently-labeled buttons don't make obvious on their own: *"Read-only sends the list as-is — Share lets others collaborate on it with you."* Only shown with sync on, since Share isn't an available option without it.
+
+Both follow the same one-time, auto-dismissing, localStorage-gated pattern as the existing nav-switching hint, and their dismiss keys are registered in `app-state.ts`'s synced/local key partition (now 17 keys, guarded by an existing test that scans the source tree for any `sq:` key not accounted for).
+
 ## [0.9.4] — 2026-08-20
 
 ### Bulk assign to a collection (#113)

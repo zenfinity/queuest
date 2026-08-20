@@ -119,10 +119,10 @@
 	// pulled out as a plain function.
 	afterNavigate((navigation) => {
 		try {
-			const isPreview = new URLSearchParams(window.location.search).has('preview');
+			const isLanding = new URLSearchParams(window.location.search).has('landing');
 			const isWelcomed = localStorage.getItem('sq:welcomed') === '1';
 			welcomed = isWelcomed;
-			if (shouldRedirectToApp(navigation.type, isWelcomed, isPreview)) {
+			if (shouldRedirectToApp(navigation.type, isWelcomed, isLanding)) {
 				goto(resolve('/app'), { replaceState: true });
 			}
 		} catch {

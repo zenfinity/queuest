@@ -32,6 +32,7 @@
 		deleteCollectionColor
 	} from '$lib/queue-colors';
 	import { listCollections } from '$lib/queue-actions';
+	import ShareHint from '$lib/components/ShareHint.svelte';
 
 	let syncEnabled = $state(false);
 
@@ -298,6 +299,8 @@
 </script>
 
 <svelte:head><title>Queuest — Lists</title></svelte:head>
+
+<ShareHint show={syncEnabled && collections.length > 0} />
 
 <h1 class="sr-only">Lists</h1>
 

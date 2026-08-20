@@ -33,6 +33,7 @@
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
+	import ListHint from '$lib/components/ListHint.svelte';
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	function loadPref<T extends string>(key: string, fallback: T): T {
@@ -379,6 +380,8 @@
 		</div>
 	{/if}
 {/snippet}
+
+<ListHint show={loaded && items.length >= 3 && existingCollections.length === 0} />
 
 <h1 class="sr-only">My Queue</h1>
 

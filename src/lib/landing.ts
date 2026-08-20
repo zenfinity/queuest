@@ -15,7 +15,7 @@ export type LandingNavigationType = 'enter' | 'form' | 'leave' | 'link' | 'goto'
 export function shouldRedirectToApp(
 	type: LandingNavigationType,
 	welcomed: boolean,
-	isPreview: boolean
+	isLanding: boolean
 ): boolean {
-	return type === 'enter' && welcomed && !isPreview;
+	return type === 'enter' && welcomed && !isLanding;
 }
