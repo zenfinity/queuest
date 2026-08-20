@@ -21,6 +21,7 @@
 	} from '$lib/collection-actions';
 	import type { CollectionItem } from '$lib/collection-sync';
 	import { getSyncStatus } from '$lib/sync';
+	import { getLastViewed, markViewed, hasNewActivity } from '$lib/collection-activity';
 
 	const id = page.params.id ?? '';
 
@@ -31,6 +32,11 @@
 	let items: CollectionItem[] = $state([]);
 	let myUserId = $state('');
 	let togglingKey = $state('');
+	// The watermark from *before* this visit — captured once, up front, so an
+	// item stays flagged "new" for the whole time you're looking at this page
+	// even though markViewed() below immediately moves the stored watermark
+	// forward to now.
+	let lastViewed: string | undefined = $state(undefined);
 
 	const noop = { setBusy: () => {}, setError: (e: string) => (loadError = e) };
 
@@ -56,7 +62,7 @@
 		const all = await listCollections(noop);
 		collection = all.find((c) => c.id === id) ?? null;
 		if (!collection) {
-			loadError = "You don't have access to this collection, or it doesn't exist.";
+			loadError = "You don't have access to this list, or it doesn't exist.";
 			loading = false;
 			return;
 		}
@@ -66,8 +72,10 @@
 			members.find((m) => m.email === status.email)?.userId ??
 			(collection.role === 'owner' ? collection.ownerUserId : '');
 
+		lastViewed = await getLastViewed(id);
 		items = await loadCollectionItems(collection, noop);
 		loading = false;
+		await markViewed(id);
 	});
 
 	async function toggle(item: CollectionItem) {
@@ -88,15 +96,15 @@
 	}
 </script>
 
-<svelte:head><title>Queuest — {collection?.name ?? 'Shared collection'}</title></svelte:head>
+<svelte:head><title>Queuest — {collection?.name ?? 'Shared list'}</title></svelte:head>
 
 <main class="mx-auto max-w-2xl px-4 py-8 space-y-6">
 	<div class="flex items-center justify-between">
 		<a
-			href={resolve('/settings')}
+			href={resolve('/lists')}
 			class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
 		>
-			← Settings
+			← Lists
 		</a>
 	</div>
 
@@ -121,8 +129,8 @@
 
 		{#if items.length === 0}
 			<p class="text-sm text-gray-400 dark:text-gray-600">
-				Nothing here yet. Titles show up here once someone shares a personal collection into this
-				one, or adds to it directly.
+				Nothing here yet. Titles show up here once someone shares a personal list into this one, or
+				adds to it directly.
 			</p>
 		{:else}
 			<div class="space-y-2">
@@ -130,7 +138,12 @@
 					{@const key = itemKey(item)}
 					{@const myWatch = myUserId ? item.watch?.[myUserId] : undefined}
 					{@const watchers = Object.keys(item.watch ?? {})}
-					<div class="flex gap-3 rounded-lg bg-gray-50 p-2.5 dark:bg-gray-800/60">
+					{@const isNew = hasNewActivity(item, lastViewed)}
+					<div
+						class="flex gap-3 rounded-lg bg-gray-50 p-2.5 dark:bg-gray-800/60 {isNew
+							? 'ring-1 ring-orange-400/60'
+							: ''}"
+					>
 						{#if item.poster_path}
 							<img
 								src={`${TMDB_IMG}${item.poster_path}`}
@@ -141,8 +154,17 @@
 							<div class="h-20 w-14 shrink-0 rounded bg-gray-200 dark:bg-gray-700"></div>
 						{/if}
 						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+							<p
+								class="truncate text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-1.5"
+							>
 								{item.title}
+								{#if isNew}
+									<span
+										class="shrink-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+									>
+										New
+									</span>
+								{/if}
 							</p>
 							<p class="text-xs text-gray-500 dark:text-gray-400">
 								{item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '—'} ·

@@ -10,6 +10,9 @@
 		toggleSeasonProgress,
 		listCollections,
 		setItemCollection,
+		bulkSetCollection,
+		bulkSetWatched,
+		bulkRemove,
 		type QueueActionDeps
 	} from '$lib/queue-actions';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
@@ -45,6 +48,83 @@
 	let loaded = $state(false);
 	let queueColors = $state<Record<string, string>>({});
 	let busy = new SvelteSet<number>();
+
+	// ── Bulk selection (#113) ────────────────────────────────────────────────
+	let selectMode = $state(false);
+	let selectedIds = new SvelteSet<number>();
+	let bulkTargetTag = $state('');
+	let bulkNewTag = $state('');
+	let bulkRemoveArmed = $state(false);
+	let bulkBusy = $state(false);
+
+	function exitSelectMode() {
+		selectMode = false;
+		selectedIds.clear();
+		bulkTargetTag = '';
+		bulkNewTag = '';
+		bulkRemoveArmed = false;
+	}
+
+	function toggleSelected(item: WatchlistItem) {
+		if (selectedIds.has(item.id)) selectedIds.delete(item.id);
+		else selectedIds.add(item.id);
+		bulkRemoveArmed = false;
+	}
+
+	function selectedItems(): WatchlistItem[] {
+		return items.filter((i) => selectedIds.has(i.id));
+	}
+
+	async function bulkAssign() {
+		const tag = bulkNewTag.trim() || bulkTargetTag || null;
+		bulkBusy = true;
+		try {
+			await bulkSetCollection(selectedItems(), tag, actionDeps);
+		} finally {
+			bulkBusy = false;
+		}
+		exitSelectMode();
+	}
+
+	async function bulkClearCollection() {
+		bulkBusy = true;
+		try {
+			await bulkSetCollection(selectedItems(), null, actionDeps);
+		} finally {
+			bulkBusy = false;
+		}
+		exitSelectMode();
+	}
+
+	async function bulkMarkWatched(watched: boolean) {
+		bulkBusy = true;
+		try {
+			await bulkSetWatched(selectedItems(), watched, actionDeps);
+		} finally {
+			bulkBusy = false;
+		}
+		exitSelectMode();
+	}
+
+	async function bulkRemoveSelected() {
+		if (!bulkRemoveArmed) {
+			bulkRemoveArmed = true;
+			return;
+		}
+		bulkBusy = true;
+		try {
+			await bulkRemove(selectedItems(), actionDeps);
+		} finally {
+			bulkBusy = false;
+		}
+		exitSelectMode();
+	}
+
+	// Leaving Grid/List (the only views selection is wired into) drops selection
+	// rather than leaving it silently active somewhere it can't be seen or acted on.
+	$effect(() => {
+		if (queueControls.viewMode === 'lanes' && selectMode) exitSelectMode();
+	});
 
 	let releasePopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
@@ -425,11 +505,91 @@
 				? 'Uncategorized'
 				: queueControls.collectionFilter}
 		{@const collectionPrefix = collectionLabel ? `${collectionLabel} · ` : ''}
-		<p class="text-xs text-gray-500 dark:text-gray-500">
-			{collectionPrefix}{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(
-				visibleItems.reduce((s, i) => s + remainingRuntime(i), 0)
-			)} remaining{queueControls.watchedOn ? ' · showing watched' : ''}
-		</p>
+		<div class="flex items-center justify-between gap-2">
+			<p class="text-xs text-gray-500 dark:text-gray-500">
+				{collectionPrefix}{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(
+					visibleItems.reduce((s, i) => s + remainingRuntime(i), 0)
+				)} remaining{queueControls.watchedOn ? ' · showing watched' : ''}
+			</p>
+			{#if queueControls.viewMode !== 'lanes'}
+				<button
+					onclick={() => (selectMode ? exitSelectMode() : (selectMode = true))}
+					class="shrink-0 text-xs font-medium {selectMode
+						? 'text-orange-500'
+						: 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
+				>
+					{selectMode ? 'Cancel' : 'Select'}
+				</button>
+			{/if}
+		</div>
+	{/if}
+
+	<!-- Bulk action bar (#113) -->
+	{#if selectMode}
+		<div
+			class="flex flex-wrap items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-sm dark:border-orange-700/40 dark:bg-orange-950/20"
+		>
+			<span class="font-medium text-orange-800 dark:text-orange-300">
+				{selectedIds.size} selected
+			</span>
+			<div class="ml-auto flex flex-wrap items-center gap-1.5">
+				<select
+					bind:value={bulkTargetTag}
+					disabled={bulkBusy || selectedIds.size === 0}
+					aria-label="Assign to list"
+					class="min-w-0 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
+				>
+					<option value="">Assign to…</option>
+					{#each existingCollections as collection (collection)}
+						<option value={collection}>{collection}</option>
+					{/each}
+				</select>
+				<input
+					type="text"
+					placeholder="or new name…"
+					bind:value={bulkNewTag}
+					disabled={bulkBusy || selectedIds.size === 0}
+					class="w-24 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
+				/>
+				<button
+					disabled={bulkBusy || selectedIds.size === 0 || (!bulkTargetTag && !bulkNewTag.trim())}
+					onclick={bulkAssign}
+					class="rounded bg-orange-500 px-2 py-1 text-xs font-medium text-white hover:bg-orange-400 disabled:opacity-40"
+				>
+					Assign
+				</button>
+				<button
+					disabled={bulkBusy || selectedIds.size === 0}
+					onclick={bulkClearCollection}
+					class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+				>
+					Clear list
+				</button>
+				<button
+					disabled={bulkBusy || selectedIds.size === 0}
+					onclick={() => bulkMarkWatched(true)}
+					class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+				>
+					Mark watched
+				</button>
+				<button
+					disabled={bulkBusy || selectedIds.size === 0}
+					onclick={() => bulkMarkWatched(false)}
+					class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+				>
+					Mark unwatched
+				</button>
+				<button
+					disabled={bulkBusy || selectedIds.size === 0}
+					onclick={bulkRemoveSelected}
+					class="rounded px-2 py-1 text-xs font-medium disabled:opacity-40 {bulkRemoveArmed
+						? 'bg-red-600 text-white hover:bg-red-700'
+						: 'bg-gray-100 text-red-500 hover:bg-red-100 dark:bg-gray-800 dark:hover:bg-red-900/30'}"
+				>
+					{bulkRemoveArmed ? 'Confirm remove' : 'Remove'}
+				</button>
+			</div>
+		</div>
 	{/if}
 
 	<!-- Loading -->
@@ -469,9 +629,12 @@
 			{busy}
 			{queueColors}
 			groupByCollection={queueControls.groupByCollection}
+			{selectMode}
+			selected={selectedIds}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
+			onToggleSelect={toggleSelected}
 			{seasonPicker}
 		/>
 
@@ -483,9 +646,12 @@
 			{busy}
 			{queueColors}
 			groupByCollection={queueControls.groupByCollection}
+			{selectMode}
+			selected={selectedIds}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
+			onToggleSelect={toggleSelected}
 			{seasonPicker}
 		/>
 

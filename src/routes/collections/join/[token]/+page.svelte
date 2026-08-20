@@ -62,10 +62,10 @@
 	}
 </script>
 
-<svelte:head><title>Queuest — Join a collection</title></svelte:head>
+<svelte:head><title>Queuest — Join a list</title></svelte:head>
 
 <div class="mx-auto max-w-md space-y-6 py-10">
-	<h1 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared collection</h1>
+	<h1 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared list</h1>
 
 	{#if loading}
 		<div class="space-y-3">
@@ -97,8 +97,8 @@
 			</div>
 
 			<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-				You'll both be able to add titles and track what you've watched. Everything in the
-				collection is encrypted — we can't read it.
+				You'll both be able to add titles and track what you've watched. Everything in the list is
+				encrypted — we can't read it.
 			</p>
 
 			{#if needsSync}
@@ -109,7 +109,7 @@
 				>
 					<p class="font-medium">You'll need sync turned on first</p>
 					<p class="mt-1 leading-relaxed">
-						Shared collections need an account so your copy of the key can be stored securely.
+						Shared lists need an account so your copy of the key can be stored securely.
 					</p>
 					<a
 						href={resolve('/settings#sync')}

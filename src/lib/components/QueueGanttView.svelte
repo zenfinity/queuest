@@ -199,7 +199,7 @@
 						class="h-8 w-8 rounded-lg object-cover shadow"
 					/>
 				{:else if lane.color}
-					<!-- Collection lane: swatch dot, matching Settings/Share's collection chips -->
+					<!-- List lane: swatch dot, matching Lists' color chips -->
 					<span class="h-4 w-4 shrink-0 rounded-full shadow" style="background:{lane.color};"
 					></span>
 				{:else}

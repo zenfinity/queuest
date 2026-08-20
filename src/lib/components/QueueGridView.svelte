@@ -15,9 +15,12 @@
 		busy,
 		queueColors,
 		groupByCollection = false,
+		selectMode = false,
+		selected = new Set<number>(),
 		onToggle,
 		onRemove,
 		onOpenDetail,
+		onToggleSelect,
 		seasonPicker
 	}: {
 		items: WatchlistItem[];
@@ -25,9 +28,12 @@
 		busy: Set<number>;
 		queueColors: Record<string, string>;
 		groupByCollection?: boolean;
+		selectMode?: boolean;
+		selected?: Set<number>;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
 		onOpenDetail: (item: WatchlistItem) => void;
+		onToggleSelect?: (item: WatchlistItem) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -56,11 +62,18 @@
 	{@const cardPct = Math.min(100, (remainingRuntime(item) / (budgetHours * 60)) * 100)}
 	{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 	{@const cardDot = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
+	{@const isSelected = selected.has(item.id)}
 	<button
 		class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
-		onclick={() => onOpenDetail(item)}
+		onclick={(e) => {
+			e.stopPropagation();
+			if (selectMode) onToggleSelect?.(item);
+			else onOpenDetail(item);
+		}}
 		data-detail-trigger
-		aria-label="View details for {item.title}"
+		aria-label={selectMode
+			? `${isSelected ? 'Deselect' : 'Select'} ${item.title}`
+			: `View details for ${item.title}`}
 	>
 		{#if item.poster_path}
 			<img
@@ -74,6 +87,15 @@
 			>
 				🎬
 			</div>
+		{/if}
+		{#if selectMode}
+			<span
+				class="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs font-bold {isSelected
+					? 'border-orange-500 bg-orange-500 text-white'
+					: 'border-white bg-black/40 text-transparent'}"
+			>
+				✓
+			</span>
 		{/if}
 		{#if queueControls.watchedOn && item.watched_at}
 			<span
@@ -166,27 +188,29 @@
 				{releaseChip(item.release)}
 			</p>
 		{/if}
-		<div class="mt-auto flex gap-1.5 pt-1">
-			<button
-				class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
-				disabled={busy.has(item.id)}
-				onclick={(e) => {
-					e.stopPropagation();
-					onToggle(item);
-				}}
-			>
-				{item.watched_at ? 'Unwatch' : '✓ Watched'}
-			</button>
-			<button
-				class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-				disabled={busy.has(item.id)}
-				onclick={(e) => {
-					e.stopPropagation();
-					onRemove(item);
-				}}
-				aria-label="Remove">✕</button
-			>
-		</div>
+		{#if !selectMode}
+			<div class="mt-auto flex gap-1.5 pt-1">
+				<button
+					class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
+					disabled={busy.has(item.id)}
+					onclick={(e) => {
+						e.stopPropagation();
+						onToggle(item);
+					}}
+				>
+					{item.watched_at ? 'Unwatch' : '✓ Watched'}
+				</button>
+				<button
+					class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
+					disabled={busy.has(item.id)}
+					onclick={(e) => {
+						e.stopPropagation();
+						onRemove(item);
+					}}
+					aria-label="Remove">✕</button
+				>
+			</div>
+		{/if}
 	</div>
 {/snippet}
 
@@ -216,11 +240,15 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer"
+					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
+					selected.has(item.id)
+						? '!ring-2 !ring-orange-500'
+						: ''}"
 					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
 					onclick={(e) => {
 						e.stopPropagation();
-						onOpenDetail(item);
+						if (selectMode) onToggleSelect?.(item);
+						else onOpenDetail(item);
 					}}
 				>
 					{@render cardContent(item)}
@@ -235,11 +263,15 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-				class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer"
+				class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
+				selected.has(item.id)
+					? '!ring-2 !ring-orange-500'
+					: ''}"
 				style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
 				onclick={(e) => {
 					e.stopPropagation();
-					onOpenDetail(item);
+					if (selectMode) onToggleSelect?.(item);
+					else onOpenDetail(item);
 				}}
 			>
 				{@render cardContent(item)}

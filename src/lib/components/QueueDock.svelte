@@ -217,7 +217,7 @@
 						>
 							Group lanes by
 						</p>
-						{#each [['provider', 'Provider'], ['collection', 'Collection']] as const as [key, label] (key)}
+						{#each [['provider', 'Provider'], ['collection', 'List']] as const as [key, label] (key)}
 							<button
 								onclick={() => (queueControls.ganttGroupBy = key)}
 								aria-pressed={queueControls.ganttGroupBy === key}
@@ -239,7 +239,7 @@
 						<div class="flex items-center justify-between px-2 py-1">
 							<span
 								class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-								>Collection</span
+								>List</span
 							>
 							<button
 								onclick={() => (queueControls.groupByCollection = !queueControls.groupByCollection)}

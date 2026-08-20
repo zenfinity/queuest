@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.9.4] — 2026-08-20
+
+### Bulk assign to a collection (#113)
+
+Selection mode for the queue: a **Select** toggle in Grid and List views turns each card/row into a checkbox, and a bulk action bar appears with Assign to collection, Clear collection, Mark watched/unwatched, and Remove (with the same confirm-before-destructive pattern as other delete actions in the app). Filing fifty titles into a collection one at a time was real friction — this is that gone. Not wired into the Gantt/timeline view, which doesn't have an obvious multi-select affordance; switching to it exits selection mode.
+
+### QR code for invite links (#147)
+
+Collection invite links in Settings now have a **QR code** option alongside Copy — generated entirely client-side from the same URL, DEK-in-fragment included, so scanning lands on the identical confirm-before-joining screen as the copied link. Useful for the "we're both here right now" case. First runtime dependency the app has ever taken on (`qrcode`, MIT, zero transitive deps of its own).
+
+### "What's new" activity badges on shared collections (#148)
+
+Reopening Settings now shows a small **"N new"** badge on any shared collection with activity since you last opened it — titles added or watch marks flipped by other members. Opening the collection shows the same signal per-item, then clears the badge for next time. Purely client-side: a per-account, per-device "last viewed" watermark compared against timestamps the sync engine already carries, no server changes.
+
+### Read-only links replace the standalone Share page
+
+The old **`/share`** page — a full nav-level route with its own filter UI (status, type, per-collection, per-provider) — was easy to mistake for the new collaborative Collections "Share" action, and disproportionately large for what it does: mint a disposable, no-account-needed snapshot link. It's now a **"Read-only link"** action on each personal list, right next to "Share": one click, no filters (the list is the filter), with copy text explicit about the difference — *"no account needed... their view won't update... for an ongoing, two-way list instead, use Share."* The recipient-facing `/share/[token]` page, the underlying `/api/share` endpoint, and the encrypted-snapshot mechanism are all unchanged — only the creation surface moved.
+
+### Collections move out of Settings, and become Lists
+
+Decided mid-sprint, after the above landed and it became clear Settings had quietly grown into two different things: account/app preferences, and the app's most interactive surface (create/rename/color/share/invite/QR/remove-member, two live decrypt-and-diff badges) buried three sections down. Personal collections and Shared Collections both move to a new **`/lists`** route, with its own **Lists** nav item — same interactive footing as Queue, not a Settings subsection. Also renamed **Collections → Lists** everywhere it's user-visible (headings, buttons, tooltips, the detail panel's list picker, the Gantt grouping toggle, the landing page card) to stop it colliding with the "Share" language Collections itself uses. This is presentation-only — `collection` stays the name for the underlying data model, API routes, and types (`CollectionItem`, `/api/collections/*`, the D1 schema); renaming those would touch the crypto/sync layer for no user-facing benefit. Nav is now Budget · Add · Queue · Lists · Settings.
+
+### "My Queue" name moves into Export Watchlist
+
+Its only remaining real use was the exported backup file's embedded queue name — the other use, naming a multi-list share bundle, went away when read-only links became single-list-scoped above, and nothing else in the app ever displayed it. Rather than keep a whole Settings section open for one field with a now-inaccurate description ("appears when you share your list with others" — it doesn't, sharing is per-list now), the name field moved into Export Watchlist, editable right before Download. That section's copy also now says plainly that shared lists aren't included in the export — they live only in the cloud, via sync, and never touch local IndexedDB.
+
 ## [0.9.3] — 2026-08-20
 
 ### Shared collections are viewable and usable (#145)

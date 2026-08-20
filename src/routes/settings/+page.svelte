@@ -1,8 +1,5 @@
 <script lang="ts">
-	import type { WatchlistItem } from '$lib/types';
-	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
-	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { trapFocus } from '$lib/focus-trap';
 	import {
@@ -26,25 +23,7 @@
 		signOut,
 		deleteAccount
 	} from '$lib/sync-account-actions';
-	import {
-		listCollections as listSharedCollections,
-		promoteCollection,
-		createInvite,
-		removeMemberAndRotate,
-		listMembers,
-		type SharedCollection,
-		type CollectionMember
-	} from '$lib/collection-actions';
-
-	import {
-		getQueueName,
-		setQueueName,
-		getQueueColors,
-		setQueueColor,
-		renameCollectionColor,
-		deleteCollectionColor
-	} from '$lib/queue-colors';
-	import { listCollections } from '$lib/queue-actions';
+	import { getQueueName, setQueueName } from '$lib/queue-colors';
 	import pkg from '../../../package.json';
 
 	const VERSION = pkg.version;
@@ -161,103 +140,6 @@
 		}
 	}
 
-	// ── Shared Collections ────────────────────────────────────────────────────
-	let sharedCollections: SharedCollection[] = $state([]);
-	let promoteArmed: string | null = $state(null);
-	let promoting = $state(false);
-	let promoteError = $state('');
-	let openCollection: SharedCollection | null = $state(null);
-	let inviteLink = $state('');
-	let inviteCopied = $state(false);
-	let inviteError = $state('');
-	let removingMember: { collectionId: string; userId: string } | null = $state(null);
-	let removalError = $state('');
-	let openMembers: CollectionMember[] = $state([]);
-	let loadingMembers = $state(false);
-
-	async function loadSharedCollections() {
-		sharedCollections = await listSharedCollections({
-			setBusy: () => {},
-			setError: () => {}
-		});
-	}
-
-	// Promotion is the only way a shared collection is born (#145) — there is no
-	// create-from-scratch form, so the two Settings sections can't drift into two
-	// unrelated things both called "Collections".
-	async function doPromoteCollection(name: string) {
-		promoting = true;
-		promoteError = '';
-		try {
-			const created = await promoteCollection(name, items, {
-				setBusy: () => {},
-				setError: (e) => (promoteError = e)
-			});
-			if (created) {
-				sharedCollections = [...sharedCollections, created];
-				promoteArmed = null;
-				// Drop the personal collection's color entry too. A name with no
-				// items still "exists" as a palette key (see listCollections's
-				// extraNames), so without this the promoted name keeps showing up
-				// in both sections — the exact duplication promotion exists to end.
-				deleteCollectionColor(name);
-				queueColors = getQueueColors();
-				items = await getAll();
-				collections = listCollections(items, Object.keys(queueColors));
-				updateCounts();
-			}
-		} finally {
-			promoting = false;
-		}
-	}
-
-	async function generateInviteLink() {
-		if (!openCollection) return;
-		inviteLink = '';
-		inviteCopied = false;
-		inviteError = '';
-		const link = await createInvite(openCollection, window.location.origin, {
-			setBusy: () => {},
-			setError: (e) => (inviteError = e)
-		});
-		if (link) {
-			inviteLink = link;
-		}
-	}
-
-	async function loadOpenMembers() {
-		if (!openCollection) return;
-		loadingMembers = true;
-		openMembers = await listMembers(openCollection.id, { setBusy: () => {}, setError: () => {} });
-		loadingMembers = false;
-	}
-
-	async function copyInviteLink() {
-		if (!inviteLink) return;
-		await navigator.clipboard.writeText(inviteLink);
-		inviteCopied = true;
-		setTimeout(() => (inviteCopied = false), 2000);
-	}
-
-	async function doRemoveMember() {
-		if (!removingMember || !openCollection) return;
-		const result = await removeMemberAndRotate(openCollection, removingMember.userId, {
-			setBusy: () => {},
-			setError: (e) => (removalError = e)
-		});
-		if (result) {
-			// Reload the collection
-			await loadSharedCollections();
-			openCollection = sharedCollections.find((c) => c.id === openCollection!.id) || null;
-			removingMember = null;
-			await loadOpenMembers();
-		}
-	}
-
-	onMount(async () => {
-		await loadSharedCollections();
-	});
-
 	// ── Cancel alerts opt-in ─────────────────────────────────────────────────
 	let cancelAlertsEnabled = $state(false);
 
@@ -272,112 +154,9 @@
 
 	// ── Queue identity ────────────────────────────────────────────────────────
 	let myQueueName = $state('My Queue');
-	let queueColors = $state<Record<string, string>>({});
-	let collections = $state<string[]>([]);
-	let collectionCounts = $state<Record<string, number>>({});
-	let items = $state<WatchlistItem[]>([]);
-	let renamingCollection = $state<string | null>(null);
-	let renameInput = $state('');
-	let deleteArmed = $state<string | null>(null);
-	let manageBusy = $state(false);
-	let newCollectionInput = $state('');
 
 	function saveQueueName() {
 		setQueueName(myQueueName);
-	}
-
-	function updateCollectionColor(tag: string, color: string) {
-		setQueueColor(tag, color);
-		queueColors = { ...queueColors, [tag]: color };
-	}
-
-	// Collections aren't a stored entity of their own — a name only "exists"
-	// via items tagged with it, or (for one created here with nothing tagged
-	// yet) via a color-palette entry. Assigning a palette color is therefore
-	// enough to create an empty collection; see listCollections's extraNames.
-	function createCollection() {
-		const name = newCollectionInput.trim();
-		if (!name || collections.includes(name)) {
-			newCollectionInput = '';
-			return;
-		}
-		updateCollectionColor(name, queueColors[name] ?? '#888888');
-		collections = listCollections(items, Object.keys(queueColors));
-		updateCounts();
-		newCollectionInput = '';
-	}
-
-	async function renameCollection(oldName: string, newName: string) {
-		if (!newName.trim() || newName === oldName) {
-			renamingCollection = null;
-			renameInput = '';
-			return;
-		}
-
-		manageBusy = true;
-		try {
-			// NOTE: Rename is a bulk write, and with last-write-wins sync (#101), this can race with
-			// per-item edits on another device. If a rename on device A races with an edit on device B
-			// for the same item, the result is unpredictable — the rename may land on some items but not
-			// others. This is acceptable for v1 given how rare it is; long-term fix is to version the
-			// collection itself rather than denormalizing the name.
-			//
-			// Persist via a targeted cursor update, not getAll()+replaceAll() — replaceAll clears the
-			// whole store, and getAll() (rightly) excludes soft-deleted tombstones, so replaceAll(items)
-			// would silently drop them from the store instead of leaving them for GC.
-			await renameCollectionTag(oldName, newName);
-			for (const item of items) {
-				if (item.queue_tag === oldName) {
-					item.queue_tag = newName;
-				}
-			}
-			// Move the color entry
-			renameCollectionColor(oldName, newName);
-			// Update local state
-			queueColors = { ...queueColors };
-			collections = listCollections(items, Object.keys(queueColors));
-			updateCounts();
-			renamingCollection = null;
-			renameInput = '';
-		} finally {
-			manageBusy = false;
-		}
-	}
-
-	async function deleteCollection(name: string) {
-		if (!deleteArmed) {
-			deleteArmed = name;
-			return;
-		}
-
-		manageBusy = true;
-		try {
-			// Items are never deleted, only uncategorized. Targeted cursor update — see the
-			// comment in renameCollection for why this isn't getAll()+replaceAll().
-			await clearCollectionTag(name);
-			for (const item of items) {
-				if (item.queue_tag === name) {
-					item.queue_tag = undefined;
-				}
-			}
-			// Remove the color entry to avoid orphaned palette entries
-			deleteCollectionColor(name);
-			// Update local state
-			queueColors = { ...queueColors };
-			collections = listCollections(items, Object.keys(queueColors));
-			updateCounts();
-			deleteArmed = null;
-		} finally {
-			manageBusy = false;
-		}
-	}
-
-	function updateCounts() {
-		const counts: Record<string, number> = {};
-		for (const collection of collections) {
-			counts[collection] = items.filter((i) => i.queue_tag === collection).length;
-		}
-		collectionCounts = counts;
 	}
 
 	// ── Sync (#102, #103) ────────────────────────────────────────────────────
@@ -533,17 +312,9 @@
 	onMount(async () => {
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
 		myQueueName = getQueueName();
-		queueColors = getQueueColors();
 
 		syncEnabled = await isSyncEnabled();
-		if (syncEnabled) {
-			syncView = 'status';
-			await loadSharedCollections();
-		}
-
-		items = await getAll();
-		collections = listCollections(items, Object.keys(queueColors));
-		updateCounts();
+		if (syncEnabled) syncView = 'status';
 	});
 </script>
 
@@ -565,366 +336,6 @@
 			</button>
 		</div>
 	</section>
-
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
-
-	<!-- My Queue -->
-	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">My Queue</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
-			This name appears when you share your list with others.
-		</p>
-		<input
-			type="text"
-			aria-label="Queue name"
-			placeholder="My Queue"
-			bind:value={myQueueName}
-			oninput={saveQueueName}
-			maxlength="40"
-			class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
-		/>
-	</section>
-
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
-
-	<!-- Collections -->
-	<section id="collections" class="space-y-3 scroll-mt-4">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Collections</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Organize your queue into collections, then assign items to them from the detail panel.
-			Importing a shared list automatically creates a collection.
-		</p>
-		<form
-			class="flex gap-2"
-			onsubmit={(e) => {
-				e.preventDefault();
-				createCollection();
-			}}
-		>
-			<input
-				type="text"
-				maxlength="40"
-				placeholder="New collection…"
-				bind:value={newCollectionInput}
-				class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-			/>
-			<button
-				type="submit"
-				disabled={!newCollectionInput.trim()}
-				class="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-400 disabled:opacity-50"
-			>
-				Create
-			</button>
-		</form>
-		{#if collections.length === 0}
-			<p class="text-sm text-gray-400 dark:text-gray-600">No collections yet.</p>
-		{:else}
-			<div class="space-y-2">
-				{#each collections as collection (collection)}
-					{@const color = queueColors[collection] ?? '#888888'}
-					{@const count = collectionCounts[collection] ?? 0}
-					{@const isRenaming = renamingCollection === collection}
-					{@const isDeleting = deleteArmed === collection}
-					{@const isPromoting = promoteArmed === collection}
-					<div>
-						<div
-							class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60"
-						>
-							<div class="flex items-center gap-2.5 min-w-0 flex-1">
-								<span class="h-3 w-3 shrink-0 rounded-full" style="background:{color};"></span>
-								{#if isRenaming}
-									<!-- svelte-ignore a11y_autofocus -->
-									<input
-										type="text"
-										aria-label="New collection name"
-										maxlength="40"
-										value={renameInput}
-										oninput={(e) => (renameInput = e.currentTarget.value)}
-										onkeydown={(e) => {
-											if (e.key === 'Enter') renameCollection(collection, renameInput);
-											if (e.key === 'Escape') renamingCollection = null;
-										}}
-										autofocus
-										class="flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-									/>
-								{:else}
-									<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200"
-										>{collection}</span
-									>
-									<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">({count})</span>
-								{/if}
-							</div>
-							<div class="flex items-center gap-1 ml-2 shrink-0">
-								{#if isRenaming}
-									<button
-										disabled={manageBusy}
-										onclick={() => renameCollection(collection, renameInput)}
-										class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-									>
-										Save
-									</button>
-									<button
-										disabled={manageBusy}
-										onclick={() => {
-											renamingCollection = null;
-											renameInput = '';
-										}}
-										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-									>
-										Cancel
-									</button>
-								{:else if isDeleting}
-									<div class="text-xs text-gray-600 dark:text-gray-400 mr-2">
-										Delete collection? Items stay.
-									</div>
-									<button
-										disabled={manageBusy}
-										onclick={() => deleteCollection(collection)}
-										class="text-xs px-2 py-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
-									>
-										Confirm
-									</button>
-									<button
-										disabled={manageBusy}
-										onclick={() => (deleteArmed = null)}
-										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-									>
-										Cancel
-									</button>
-								{:else}
-									<label class="relative cursor-pointer" title="Change color">
-										<span
-											class="block h-6 w-6 rounded border border-gray-300 shadow-sm dark:border-gray-600"
-											style="background:{color};"
-										></span>
-										<input
-											type="color"
-											aria-label="Collection color"
-											value={color}
-											oninput={(e) =>
-												updateCollectionColor(
-													collection,
-													(e.currentTarget as HTMLInputElement).value
-												)}
-											class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-										/>
-									</label>
-									{#if syncEnabled}
-										<button
-											disabled={manageBusy || promoting}
-											onclick={() => {
-												promoteArmed = collection;
-												promoteError = '';
-											}}
-											class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-											title="Share this collection with other people"
-										>
-											Share
-										</button>
-									{/if}
-									<button
-										disabled={manageBusy}
-										onclick={() => {
-											renamingCollection = collection;
-											renameInput = collection;
-										}}
-										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-										title="Rename collection"
-									>
-										Rename
-									</button>
-									<button
-										disabled={manageBusy}
-										onclick={() => deleteCollection(collection)}
-										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
-										title="Delete collection"
-									>
-										Delete
-									</button>
-								{/if}
-							</div>
-						</div>
-						{#if isPromoting}
-							<div
-								class="mt-1 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2.5 text-xs dark:border-orange-900/60 dark:bg-orange-950/30"
-							>
-								<p class="font-medium text-gray-900 dark:text-gray-100">
-									Share “{collection}” with other people?
-								</p>
-								<p class="mt-1 text-gray-700 dark:text-gray-300">
-									Its {collectionCounts[collection] ?? 0} title{(collectionCounts[collection] ??
-										0) === 1
-										? ''
-										: 's'} move into a shared collection and leave this queue. From then on they live
-									online, reachable only through this account —
-									<span class="font-medium"
-										>if you lose both your passphrase and your recovery code, they're gone for good.</span
-									>
-								</p>
-								{#if promoteError}
-									<p class="mt-1.5 text-red-600 dark:text-red-400">{promoteError}</p>
-								{/if}
-								<div class="mt-2 flex items-center gap-1">
-									<button
-										disabled={promoting}
-										onclick={() => doPromoteCollection(collection)}
-										class="rounded px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
-									>
-										{promoting ? 'Sharing…' : 'Share it'}
-									</button>
-									<button
-										disabled={promoting}
-										onclick={() => (promoteArmed = null)}
-										class="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-700"
-									>
-										Cancel
-									</button>
-								</div>
-							</div>
-						{/if}
-					</div>
-				{/each}
-			</div>
-		{/if}
-	</section>
-
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
-
-	<!-- Shared Collections -->
-	{#if syncEnabled}
-		<section id="shared-collections" class="space-y-3 scroll-mt-4">
-			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
-				Shared Collections
-			</h2>
-			<p class="text-sm text-gray-600 dark:text-gray-400">
-				Collections you're watching through with other people. To start one, use
-				<span class="font-medium">Share</span> on a collection above.
-			</p>
-
-			{#if sharedCollections.length === 0}
-				<p class="text-sm text-gray-400 dark:text-gray-600">No shared collections yet.</p>
-			{:else}
-				<div class="space-y-2">
-					{#each sharedCollections as coll (coll.id)}
-						<div
-							class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60 flex items-center justify-between"
-						>
-							<div class="min-w-0 flex-1">
-								<p class="text-sm font-medium text-gray-800 dark:text-gray-200">{coll.name}</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">
-									{coll.role === 'owner' ? 'You own this' : 'Member'}
-								</p>
-							</div>
-							<div class="flex gap-1 ml-2">
-								<a
-									href={resolve('/collections/[id]', { id: coll.id })}
-									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-								>
-									Open
-								</a>
-								{#if coll.role === 'owner'}
-									<button
-										onclick={async () => {
-											openCollection = coll;
-											await generateInviteLink();
-										}}
-										class="text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
-									>
-										Invite
-									</button>
-								{/if}
-								<button
-									onclick={() => {
-										if (openCollection?.id === coll.id) {
-											openCollection = null;
-										} else {
-											openCollection = coll;
-											openMembers = [];
-											loadOpenMembers();
-										}
-									}}
-									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-								>
-									{openCollection?.id === coll.id ? 'Hide' : 'Info'}
-								</button>
-							</div>
-						</div>
-						{#if openCollection?.id === coll.id}
-							<div
-								class="ml-3 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2 text-xs text-gray-600 dark:text-gray-400"
-							>
-								{#if inviteLink && openCollection.id === coll.id}
-									<div class="flex gap-1">
-										<input
-											type="text"
-											readonly
-											value={inviteLink}
-											class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
-										/>
-										<button
-											onclick={copyInviteLink}
-											class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
-										>
-											{inviteCopied ? '✓' : 'Copy'}
-										</button>
-									</div>
-								{/if}
-								{#if inviteError}
-									<p class="text-red-600 dark:text-red-400">{inviteError}</p>
-								{/if}
-								{#if loadingMembers}
-									<p>Loading members…</p>
-								{:else if removingMember?.collectionId !== coll.id}
-									<ul class="space-y-1">
-										{#each openMembers as member (member.userId)}
-											<li class="flex items-center justify-between gap-2">
-												<span class="truncate"
-													>{member.email}{member.role === 'owner' ? ' (owner)' : ''}</span
-												>
-												{#if coll.role === 'owner' && member.role !== 'owner'}
-													<button
-														onclick={() => {
-															removingMember = { collectionId: coll.id, userId: member.userId };
-															removalError = '';
-														}}
-														class="shrink-0 text-red-500 hover:underline"
-													>
-														Remove
-													</button>
-												{/if}
-											</li>
-										{/each}
-									</ul>
-								{/if}
-								{#if removingMember?.collectionId === coll.id}
-									<div class="bg-red-50 dark:bg-red-900/20 rounded p-2 space-y-1">
-										<p>Remove member and rotate key?</p>
-										<div class="flex gap-1">
-											<button
-												onclick={doRemoveMember}
-												class="px-2 py-1 rounded text-white text-xs bg-red-600 hover:bg-red-700"
-											>
-												Confirm
-											</button>
-											<button
-												onclick={() => (removingMember = null)}
-												class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-											>
-												Cancel
-											</button>
-										</div>
-										{#if removalError}
-											<p class="text-red-600 dark:text-red-400">{removalError}</p>
-										{/if}
-									</div>
-								{/if}
-							</div>
-						{/if}
-					{/each}
-				</div>
-			{/if}
-		</section>
-	{/if}
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
@@ -1239,10 +650,28 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Export Watchlist</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Downloads your queue and preferences as an encrypted <code class="text-orange-500"
+			Downloads your personal queue and preferences as an encrypted <code class="text-orange-500"
 				>.queuest</code
-			> file. The passphrase is required to import — keep it somewhere safe.
+			> file. The passphrase is required to import — keep it somewhere safe. Shared lists aren't included
+			— they live only in the cloud, via sync.
 		</p>
+		<div>
+			<label
+				for="export-queue-name"
+				class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500"
+			>
+				Queue name
+			</label>
+			<input
+				id="export-queue-name"
+				type="text"
+				placeholder="My Queue"
+				bind:value={myQueueName}
+				oninput={saveQueueName}
+				maxlength="40"
+				class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+			/>
+		</div>
 		<div class="flex gap-2">
 			<input
 				type="password"

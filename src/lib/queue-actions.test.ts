@@ -25,7 +25,10 @@ const {
 	toggleSeasonProgress,
 	listCollections,
 	groupIntoCollections,
-	setItemCollection
+	setItemCollection,
+	bulkSetCollection,
+	bulkSetWatched,
+	bulkRemove
 } = await import('./queue-actions');
 
 // A tiny fake of the component-side state these functions write into via callbacks,
@@ -312,5 +315,102 @@ describe('setItemCollection', () => {
 
 		expect(state.error).toBe('storage full');
 		expect(state.busy.has(10)).toBe(false);
+	});
+});
+
+describe('bulkSetCollection', () => {
+	it('tags every selected item and reloads once', async () => {
+		const { state, deps } = makeDeps();
+		const items = [makeItem({ id: 1 }), makeItem({ id: 2 }), makeItem({ id: 3 })];
+		setQueueTag.mockResolvedValue(undefined);
+		getAll.mockResolvedValue(items.map((i) => ({ ...i, queue_tag: 'Movie Night' })));
+
+		await bulkSetCollection(items, 'Movie Night', deps);
+
+		expect(setQueueTag).toHaveBeenCalledTimes(3);
+		expect(setQueueTag).toHaveBeenCalledWith(1, 'Movie Night');
+		expect(setQueueTag).toHaveBeenCalledWith(2, 'Movie Night');
+		expect(setQueueTag).toHaveBeenCalledWith(3, 'Movie Night');
+		expect(getAll).toHaveBeenCalledTimes(1);
+		expect(state.items).toHaveLength(3);
+	});
+
+	it('clears busy for every item, even the ones that ran before a failure', async () => {
+		const { state, deps } = makeDeps();
+		const items = [makeItem({ id: 1 }), makeItem({ id: 2 })];
+		setQueueTag.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('write failed'));
+
+		await bulkSetCollection(items, 'Drama', deps);
+
+		expect(state.error).toBe('write failed');
+		expect(state.busy.has(1)).toBe(false);
+		expect(state.busy.has(2)).toBe(false);
+	});
+
+	it('clears a collection from every selected item with null', async () => {
+		const { deps } = makeDeps();
+		const items = [
+			makeItem({ id: 1, queue_tag: 'Drama' }),
+			makeItem({ id: 2, queue_tag: 'Drama' })
+		];
+		setQueueTag.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([]);
+
+		await bulkSetCollection(items, null, deps);
+
+		expect(setQueueTag).toHaveBeenCalledWith(1, null);
+		expect(setQueueTag).toHaveBeenCalledWith(2, null);
+	});
+});
+
+describe('bulkSetWatched', () => {
+	it('marks every selected item watched and reloads once', async () => {
+		const { deps } = makeDeps();
+		const items = [makeItem({ id: 1 }), makeItem({ id: 2 })];
+		setWatched.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([]);
+
+		await bulkSetWatched(items, true, deps);
+
+		expect(setWatched).toHaveBeenCalledWith(1, true);
+		expect(setWatched).toHaveBeenCalledWith(2, true);
+		expect(getAll).toHaveBeenCalledTimes(1);
+	});
+
+	it('surfaces an error and still clears busy state', async () => {
+		const { state, deps } = makeDeps();
+		const items = [makeItem({ id: 5 })];
+		setWatched.mockRejectedValue(new Error('locked'));
+
+		await bulkSetWatched(items, false, deps);
+
+		expect(state.error).toBe('locked');
+		expect(state.busy.has(5)).toBe(false);
+	});
+});
+
+describe('bulkRemove', () => {
+	it('removes every selected item and reloads once', async () => {
+		const { deps } = makeDeps();
+		const items = [makeItem({ id: 1 }), makeItem({ id: 2 }), makeItem({ id: 3 })];
+		removeItem.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([]);
+
+		await bulkRemove(items, deps);
+
+		expect(removeItem).toHaveBeenCalledTimes(3);
+		expect(getAll).toHaveBeenCalledTimes(1);
+	});
+
+	it('surfaces an error and still clears busy state for all items', async () => {
+		const { state, deps } = makeDeps();
+		const items = [makeItem({ id: 1 }), makeItem({ id: 2 })];
+		removeItem.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('gone'));
+
+		await bulkRemove(items, deps);
+
+		expect(state.error).toBe('gone');
+		expect(state.busy.has(1)).toBe(false);
+		expect(state.busy.has(2)).toBe(false);
 	});
 });

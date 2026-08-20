@@ -538,11 +538,10 @@
 						<span class="h-2.5 w-2.5 rounded-[3px] bg-orange-500 opacity-25"></span>
 					</div>
 				</div>
-				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Group it into Collections</h3>
+				<h3 class="mb-2 text-lg font-bold tracking-[-0.3px]">Group it into Lists</h3>
 				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
 					Date night, with the kids, horror October — organise your queue the way you actually think
-					about it. Each collection carries its own runtime total, so you know what you're signing
-					up for.
+					about it. Each list carries its own runtime total, so you know what you're signing up for.
 				</p>
 			</div>
 
