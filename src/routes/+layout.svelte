@@ -16,8 +16,7 @@
 	const navLinks = [
 		{ href: '/budget', label: 'Budget', exact: false },
 		{ href: '/add', label: 'Add', exact: false },
-		{ href: '/app', label: 'Queue', exact: true },
-		{ href: '/share', label: 'Share', exact: true }
+		{ href: '/app', label: 'Queue', exact: true }
 	] as const;
 
 	const settingsLink = { href: '/settings', label: 'Settings', exact: false } as const;

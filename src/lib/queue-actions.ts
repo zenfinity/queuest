@@ -157,3 +157,61 @@ export async function setItemCollection(
 		deps.setBusy(item.id, false);
 	}
 }
+
+/**
+ * Bulk versions of setItemCollection/toggleWatched/removeItem (#113) — same
+ * shape, applied to many items at once from the queue's selection mode.
+ * Each writes sequentially (no cross-item atomicity requirement: a failure
+ * partway through still leaves every item that succeeded in its new state,
+ * which is what "3 of 5 assigned, one had an error" should look like), then
+ * reloads once at the end rather than once per item.
+ */
+export async function bulkSetCollection(
+	items: WatchlistItem[],
+	tag: string | null,
+	deps: QueueActionDeps
+): Promise<void> {
+	try {
+		for (const item of items) {
+			deps.setBusy(item.id, true);
+			await setQueueTag(item.id, tag);
+		}
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not update collection.');
+	} finally {
+		for (const item of items) deps.setBusy(item.id, false);
+	}
+}
+
+export async function bulkSetWatched(
+	items: WatchlistItem[],
+	watched: boolean,
+	deps: QueueActionDeps
+): Promise<void> {
+	try {
+		for (const item of items) {
+			deps.setBusy(item.id, true);
+			await setWatched(item.id, watched);
+		}
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not update watched status.');
+	} finally {
+		for (const item of items) deps.setBusy(item.id, false);
+	}
+}
+
+export async function bulkRemove(items: WatchlistItem[], deps: QueueActionDeps): Promise<void> {
+	try {
+		for (const item of items) {
+			deps.setBusy(item.id, true);
+			await removeItem(item.id);
+		}
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not remove items.');
+	} finally {
+		for (const item of items) deps.setBusy(item.id, false);
+	}
+}

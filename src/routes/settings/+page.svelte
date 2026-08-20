@@ -32,9 +32,12 @@
 		createInvite,
 		removeMemberAndRotate,
 		listMembers,
+		loadCollectionItems,
 		type SharedCollection,
 		type CollectionMember
 	} from '$lib/collection-actions';
+	import { getLastViewed, countNewActivity } from '$lib/collection-activity';
+	import { createShareLink } from '$lib/share-create-actions';
 
 	import {
 		getQueueName,
@@ -169,17 +172,32 @@
 	let openCollection: SharedCollection | null = $state(null);
 	let inviteLink = $state('');
 	let inviteCopied = $state(false);
+	let inviteQr = $state('');
+	let showInviteQr = $state(false);
 	let inviteError = $state('');
 	let removingMember: { collectionId: string; userId: string } | null = $state(null);
 	let removalError = $state('');
 	let openMembers: CollectionMember[] = $state([]);
 	let loadingMembers = $state(false);
+	let newActivityCounts: Record<string, number> = $state({});
 
 	async function loadSharedCollections() {
 		sharedCollections = await listSharedCollections({
 			setBusy: () => {},
 			setError: () => {}
 		});
+		// Fire off per-collection "what's new" checks in the background — each is
+		// a decrypt, so this shouldn't block the list itself from rendering.
+		for (const coll of sharedCollections) {
+			loadActivityCount(coll);
+		}
+	}
+
+	async function loadActivityCount(coll: SharedCollection) {
+		const watermark = await getLastViewed(coll.id);
+		if (!watermark) return;
+		const items = await loadCollectionItems(coll, { setBusy: () => {}, setError: () => {} });
+		newActivityCounts = { ...newActivityCounts, [coll.id]: countNewActivity(items, watermark) };
 	}
 
 	// Promotion is the only way a shared collection is born (#145) — there is no
@@ -215,6 +233,8 @@
 		if (!openCollection) return;
 		inviteLink = '';
 		inviteCopied = false;
+		inviteQr = '';
+		showInviteQr = false;
 		inviteError = '';
 		const link = await createInvite(openCollection, window.location.origin, {
 			setBusy: () => {},
@@ -222,6 +242,17 @@
 		});
 		if (link) {
 			inviteLink = link;
+		}
+	}
+
+	// The QR code is only rendered on demand — most people just copy the link,
+	// and generating it up front would mean pulling in the encoder for every
+	// visitor to this panel rather than the ones who ask for it.
+	async function toggleInviteQr() {
+		showInviteQr = !showInviteQr;
+		if (showInviteQr && !inviteQr && inviteLink) {
+			const { toQrSvg } = await import('$lib/qrcode');
+			inviteQr = await toQrSvg(inviteLink);
 		}
 	}
 
@@ -281,6 +312,38 @@
 	let deleteArmed = $state<string | null>(null);
 	let manageBusy = $state(false);
 	let newCollectionInput = $state('');
+
+	// ── Read-only link ───────────────────────────────────────────────────────
+	// The account-free counterpart to Share/promote: a disposable, one-way
+	// snapshot link — no sign-in for the creator or the recipient, nothing to
+	// keep in sync. Folded in here as a per-collection action rather than the
+	// standalone filterable page it used to be, so there's exactly one place
+	// per collection that reads "make this available to someone else."
+	let readOnlyLinkFor = $state<string | null>(null);
+	let readOnlyLinkCreating = $state(false);
+	let readOnlyLinkUrl = $state('');
+	let readOnlyLinkCopied = $state(false);
+	let readOnlyLinkError = $state('');
+
+	async function createReadOnlyLink(name: string) {
+		readOnlyLinkFor = name;
+		readOnlyLinkUrl = '';
+		readOnlyLinkCopied = false;
+		readOnlyLinkError = '';
+		const tagged = items.filter((i) => i.queue_tag === name);
+		await createShareLink(tagged, new Set([name]), [name], {
+			setShareCreating: (v) => (readOnlyLinkCreating = v),
+			setShareUrl: (v) => (readOnlyLinkUrl = v),
+			setShareError: (v) => (readOnlyLinkError = v)
+		});
+	}
+
+	async function copyReadOnlyLink() {
+		if (!readOnlyLinkUrl) return;
+		await navigator.clipboard.writeText(readOnlyLinkUrl);
+		readOnlyLinkCopied = true;
+		setTimeout(() => (readOnlyLinkCopied = false), 2000);
+	}
 
 	function saveQueueName() {
 		setQueueName(myQueueName);
@@ -626,6 +689,7 @@
 					{@const isRenaming = renamingCollection === collection}
 					{@const isDeleting = deleteArmed === collection}
 					{@const isPromoting = promoteArmed === collection}
+					{@const isReadOnlyLink = readOnlyLinkFor === collection}
 					<div>
 						<div
 							class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60"
@@ -717,11 +781,21 @@
 												promoteError = '';
 											}}
 											class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-											title="Share this collection with other people"
+											title="Share this collection with other people — everyone gets an account and stays in sync"
 										>
 											Share
 										</button>
 									{/if}
+									<button
+										disabled={manageBusy || readOnlyLinkCreating || count === 0}
+										onclick={() => createReadOnlyLink(collection)}
+										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+										title={count === 0
+											? 'Add a title to this collection first'
+											: "Get a link anyone can open to view this collection — no account needed, and it won't update after they open it"}
+									>
+										Read-only link
+									</button>
 									<button
 										disabled={manageBusy}
 										onclick={() => {
@@ -782,6 +856,45 @@
 								</div>
 							</div>
 						{/if}
+						{#if isReadOnlyLink}
+							<div
+								class="mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs dark:border-gray-700 dark:bg-gray-800/60"
+							>
+								<p class="text-gray-700 dark:text-gray-300">
+									Anyone with this link can view “{collection}” — no account needed. It's a
+									snapshot: their view won't update when you change the collection, and the link
+									stops working after 30 days. For an ongoing, two-way collection instead, use
+									<span class="font-medium">Share</span> above.
+								</p>
+								{#if readOnlyLinkCreating}
+									<p class="mt-1.5 text-gray-500 dark:text-gray-400">Creating link…</p>
+								{:else if readOnlyLinkUrl}
+									<div class="mt-2 flex gap-1">
+										<input
+											type="text"
+											readonly
+											value={readOnlyLinkUrl}
+											class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
+										/>
+										<button
+											onclick={copyReadOnlyLink}
+											class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+										>
+											{readOnlyLinkCopied ? '✓' : 'Copy'}
+										</button>
+									</div>
+								{/if}
+								{#if readOnlyLinkError}
+									<p class="mt-1.5 text-red-600 dark:text-red-400">{readOnlyLinkError}</p>
+								{/if}
+								<button
+									onclick={() => (readOnlyLinkFor = null)}
+									class="mt-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+								>
+									Close
+								</button>
+							</div>
+						{/if}
 					</div>
 				{/each}
 			</div>
@@ -810,7 +923,18 @@
 							class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60 flex items-center justify-between"
 						>
 							<div class="min-w-0 flex-1">
-								<p class="text-sm font-medium text-gray-800 dark:text-gray-200">{coll.name}</p>
+								<p
+									class="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5"
+								>
+									{coll.name}
+									{#if newActivityCounts[coll.id]}
+										<span
+											class="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+										>
+											{newActivityCounts[coll.id]} new
+										</span>
+									{/if}
+								</p>
 								<p class="text-xs text-gray-500 dark:text-gray-400">
 									{coll.role === 'owner' ? 'You own this' : 'Member'}
 								</p>
@@ -867,7 +991,23 @@
 										>
 											{inviteCopied ? '✓' : 'Copy'}
 										</button>
+										<button
+											onclick={toggleInviteQr}
+											class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+										>
+											{showInviteQr ? 'Hide QR' : 'QR code'}
+										</button>
 									</div>
+									{#if showInviteQr}
+										<div class="flex justify-center rounded bg-white p-2">
+											{#if inviteQr}
+												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+												{@html inviteQr}
+											{:else}
+												<p class="py-8 text-gray-500">Generating…</p>
+											{/if}
+										</div>
+									{/if}
 								{/if}
 								{#if inviteError}
 									<p class="text-red-600 dark:text-red-400">{inviteError}</p>

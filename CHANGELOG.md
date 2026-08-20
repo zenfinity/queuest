@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.4] — 2026-08-20
+
+### Bulk assign to a collection (#113)
+
+Selection mode for the queue: a **Select** toggle in Grid and List views turns each card/row into a checkbox, and a bulk action bar appears with Assign to collection, Clear collection, Mark watched/unwatched, and Remove (with the same confirm-before-destructive pattern as other delete actions in the app). Filing fifty titles into a collection one at a time was real friction — this is that gone. Not wired into the Gantt/timeline view, which doesn't have an obvious multi-select affordance; switching to it exits selection mode.
+
+### QR code for invite links (#147)
+
+Collection invite links in Settings now have a **QR code** option alongside Copy — generated entirely client-side from the same URL, DEK-in-fragment included, so scanning lands on the identical confirm-before-joining screen as the copied link. Useful for the "we're both here right now" case. First runtime dependency the app has ever taken on (`qrcode`, MIT, zero transitive deps of its own).
+
+### "What's new" activity badges on shared collections (#148)
+
+Reopening Settings now shows a small **"N new"** badge on any shared collection with activity since you last opened it — titles added or watch marks flipped by other members. Opening the collection shows the same signal per-item, then clears the badge for next time. Purely client-side: a per-account, per-device "last viewed" watermark compared against timestamps the sync engine already carries, no server changes.
+
+### Read-only links replace the standalone Share page
+
+The old **`/share`** page — a full nav-level route with its own filter UI (status, type, per-collection, per-provider) — was easy to mistake for the new collaborative Collections "Share" action, and disproportionately large for what it does: mint a disposable, no-account-needed snapshot link. It's now a **"Read-only link"** action on each personal collection in Settings, right next to "Share": one click, no filters (the collection is the filter), with copy text explicit about the difference — *"no account needed... their view won't update... for an ongoing, two-way collection instead, use Share."* The recipient-facing `/share/[token]` page, the underlying `/api/share` endpoint, and the encrypted-snapshot mechanism are all unchanged — only the creation surface moved. The **Share** top-nav item is gone; nav is now Budget · Add · Queue · Settings.
+
 ## [0.9.3] — 2026-08-20
 
 ### Shared collections are viewable and usable (#145)

@@ -15,9 +15,12 @@
 		busy,
 		queueColors,
 		groupByCollection = false,
+		selectMode = false,
+		selected = new Set<number>(),
 		onToggle,
 		onRemove,
 		onOpenDetail,
+		onToggleSelect,
 		seasonPicker
 	}: {
 		items: WatchlistItem[];
@@ -25,9 +28,12 @@
 		busy: Set<number>;
 		queueColors: Record<string, string>;
 		groupByCollection?: boolean;
+		selectMode?: boolean;
+		selected?: Set<number>;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
 		onOpenDetail: (item: WatchlistItem) => void;
+		onToggleSelect?: (item: WatchlistItem) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -54,7 +60,17 @@
 	{@const lineColor = hue !== null ? `hsl(${hue} 60% 52%)` : '#9ca3af'}
 	{@const dotColor = hue !== null ? `hsl(${hue} 70% 62%)` : '#6b7280'}
 	<!-- Row 1: poster · title · actions -->
+	{@const isSelected = selected.has(item.id)}
 	<div class="flex items-center gap-3">
+		{#if selectMode}
+			<span
+				class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold {isSelected
+					? 'border-orange-500 bg-orange-500 text-white'
+					: 'border-gray-300 text-transparent dark:border-gray-600'}"
+			>
+				✓
+			</span>
+		{/if}
 		<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
 			{#if item.poster_path}
 				<img
@@ -74,7 +90,8 @@
 			class="min-w-0 flex-1 text-left text-sm font-medium leading-tight hover:text-orange-500 transition-colors"
 			onclick={(e) => {
 				e.stopPropagation();
-				onOpenDetail(item);
+				if (selectMode) onToggleSelect?.(item);
+				else onOpenDetail(item);
 			}}
 			data-detail-trigger>{item.title}</button
 		>
@@ -84,27 +101,29 @@
 				>✓</span
 			>
 		{/if}
-		<div class="flex shrink-0 gap-1">
-			<button
-				class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-				disabled={busy.has(item.id)}
-				onclick={(e) => {
-					e.stopPropagation();
-					onToggle(item);
-				}}
-			>
-				{item.watched_at ? 'Unwatch' : '✓'}
-			</button>
-			<button
-				class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-				disabled={busy.has(item.id)}
-				onclick={(e) => {
-					e.stopPropagation();
-					onRemove(item);
-				}}
-				aria-label="Remove">✕</button
-			>
-		</div>
+		{#if !selectMode}
+			<div class="flex shrink-0 gap-1">
+				<button
+					class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+					disabled={busy.has(item.id)}
+					onclick={(e) => {
+						e.stopPropagation();
+						onToggle(item);
+					}}
+				>
+					{item.watched_at ? 'Unwatch' : '✓'}
+				</button>
+				<button
+					class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-red-900/50 dark:hover:text-red-400"
+					disabled={busy.has(item.id)}
+					onclick={(e) => {
+						e.stopPropagation();
+						onRemove(item);
+					}}
+					aria-label="Remove">✕</button
+				>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Row 2: type chip · provider icons · sparkline · runtime -->
@@ -235,11 +254,15 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-							class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer"
+							class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer {selectMode &&
+							selected.has(item.id)
+								? '!bg-orange-50 dark:!bg-orange-950/30'
+								: ''}"
 							style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
 							onclick={(e) => {
 								e.stopPropagation();
-								onOpenDetail(item);
+								if (selectMode) onToggleSelect?.(item);
+								else onOpenDetail(item);
 							}}
 						>
 							{@render rowContent(item)}
@@ -258,11 +281,15 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-				class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer"
+				class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer {selectMode &&
+				selected.has(item.id)
+					? '!bg-orange-50 dark:!bg-orange-950/30'
+					: ''}"
 				style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
 				onclick={(e) => {
 					e.stopPropagation();
-					onOpenDetail(item);
+					if (selectMode) onToggleSelect?.(item);
+					else onOpenDetail(item);
 				}}
 			>
 				{@render rowContent(item)}
