@@ -109,6 +109,10 @@
 		promoting = true;
 		promoteError = '';
 		try {
+			// Captured before deleteCollectionColor below removes it — carried
+			// over to the shared side so promoting doesn't hand the list a
+			// random new color it never had before.
+			const oldColor = queueColors[name];
 			const created = await promoteCollection(name, items, {
 				setBusy: () => {},
 				setError: (e) => (promoteError = e)
@@ -116,6 +120,7 @@
 			if (created) {
 				sharedCollections = [...sharedCollections, created];
 				promoteArmed = null;
+				if (oldColor) updateSharedListColor(created.id, oldColor);
 				// Drop the personal list's color entry too. A name with no items
 				// still "exists" as a palette key (see listCollections's
 				// extraNames), so without this the promoted name keeps showing up
@@ -358,7 +363,7 @@
 				}
 			}
 			renameCollectionColor(oldName, newName);
-			queueColors = { ...queueColors };
+			queueColors = getQueueColors();
 			collections = listCollections(items, Object.keys(queueColors));
 			updateCounts();
 			renamingCollection = null;
@@ -385,7 +390,7 @@
 				}
 			}
 			deleteCollectionColor(name);
-			queueColors = { ...queueColors };
+			queueColors = getQueueColors();
 			collections = listCollections(items, Object.keys(queueColors));
 			updateCounts();
 			deleteArmed = null;
