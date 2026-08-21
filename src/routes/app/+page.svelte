@@ -34,7 +34,12 @@
 	import { isSyncEnabled } from '$lib/sync';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 	import SharedListSection from '$lib/components/SharedListSection.svelte';
-	import { queueControls, SORT_DEFAULT_DIR, UNCATEGORIZED } from '$lib/queue-controls.svelte';
+	import {
+		queueControls,
+		SORT_DEFAULT_DIR,
+		UNCATEGORIZED,
+		sharedFilterId
+	} from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import { readNumber, readRecord } from '$lib/storage';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
@@ -58,6 +63,7 @@
 	let busy = new SvelteSet<number>();
 	let sharedCollections = $state<SharedCollection[]>([]);
 	let sharedListColors = $state<Record<string, string>>({});
+	let sharedFilterStats: { count: number; remainingMins: number } | null = $state(null);
 
 	// ── Bulk selection (#113) ────────────────────────────────────────────────
 	let selectMode = $state(false);
@@ -201,6 +207,16 @@
 	// have no items tagged yet so listCollections(items) alone would miss them.
 	let existingCollections = $derived(listCollections(items, Object.keys(queueColors)));
 
+	// A `shared:<id>` collectionFilter fills the main view with that one list
+	// instead of a personal-queue tag (#205) — same picker, same convention.
+	let activeSharedId = $derived(sharedFilterId(queueControls.collectionFilter));
+	let activeSharedCollection = $derived(
+		sharedCollections.find((c) => c.id === activeSharedId) ?? null
+	);
+	// The below-queue "Shared Lists" browse section excludes whichever list is
+	// already filling the main view — otherwise it'd appear twice on screen.
+	let otherSharedCollections = $derived(sharedCollections.filter((c) => c.id !== activeSharedId));
+
 	// Watched toggle is inclusive: off shows only unwatched titles, on mixes in watched titles too.
 	let baseItems = $derived(queueControls.watchedOn ? items : queued);
 
@@ -332,14 +348,39 @@
 		queueControls.collectionNames = existingCollections;
 	});
 
+	// Same mirroring for shared lists, so QueueDock can offer them as filter
+	// options too (#205).
+	$effect(() => {
+		queueControls.sharedListOptions = sharedCollections.map((c) => ({
+			id: c.id,
+			name: c.name,
+			color: sharedListColors[c.id] ?? '#9ca3af'
+		}));
+	});
+
 	// Clears a collection filter that no longer matches anything (the collection
 	// was renamed/deleted, or its last item was removed/recategorized) — same
 	// "never silently filter forever" convention as the subscribed-filter reset above.
+	// Shared filters are exempt: `sharedCollections` loads asynchronously after
+	// mount, so checking membership here would clear a just-restored `shared:`
+	// filter before the list has had a chance to load.
 	$effect(() => {
 		const f = queueControls.collectionFilter;
-		if (f !== null && f !== UNCATEGORIZED && !existingCollections.includes(f)) {
+		if (
+			f !== null &&
+			f !== UNCATEGORIZED &&
+			sharedFilterId(f) === null &&
+			!existingCollections.includes(f)
+		) {
 			queueControls.collectionFilter = null;
 		}
+	});
+
+	// A shared filter has no select-mode analog (bulk actions operate on
+	// personal WatchlistItems by local id) — leaving it active would show a
+	// Select button with nothing for it to do.
+	$effect(() => {
+		if (activeSharedCollection && selectMode) exitSelectMode();
 	});
 
 	// Lets the nav know whether the dock has anything to show, for the lg+ inline placement.
@@ -425,7 +466,11 @@
 
 <h1 class="sr-only">My Queue</h1>
 
-<div class="space-y-4 xs:space-y-6 {loaded && items.length > 0 ? 'pb-24 lg:pb-0' : ''}">
+<div
+	class="space-y-4 xs:space-y-6 {(loaded && items.length > 0) || activeSharedCollection
+		? 'pb-24 lg:pb-0'
+		: ''}"
+>
 	<!-- Storage error -->
 	{#if dbError}
 		<div
@@ -539,7 +584,18 @@
 	{/if}
 
 	<!-- Summary line -->
-	{#if loaded && items.length > 0}
+	{#if activeSharedCollection}
+		<div class="flex items-center justify-between gap-2">
+			<p class="text-xs text-gray-500 dark:text-gray-500">
+				{activeSharedCollection.name} · {sharedFilterStats?.count ?? 0} title{(sharedFilterStats?.count ??
+					0) === 1
+					? ''
+					: 's'} · ~{hms(sharedFilterStats?.remainingMins ?? 0)} remaining{queueControls.watchedOn
+					? ' · showing watched'
+					: ''}
+			</p>
+		</div>
+	{:else if loaded && items.length > 0}
 		{@const collectionLabel =
 			queueControls.collectionFilter === UNCATEGORIZED
 				? 'Uncategorized'
@@ -565,7 +621,7 @@
 	{/if}
 
 	<!-- Bulk action bar (#113) -->
-	{#if selectMode}
+	{#if selectMode && !activeSharedCollection}
 		<div
 			class="flex flex-wrap items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-sm dark:border-orange-700/40 dark:bg-orange-950/20"
 		>
@@ -639,8 +695,24 @@
 		</div>
 	{/if}
 
-	<!-- Loading -->
-	{#if !loaded}
+	<!-- A shared-list filter fills this whole area, same slot the personal
+	     queue would otherwise occupy — not another section to scroll to. -->
+	{#if activeSharedCollection}
+		<!-- Keyed so switching between two shared filters remounts the section —
+		     otherwise it'd keep its already-`loaded` state from the previous
+		     list and never fetch the newly selected one. -->
+		{#key activeSharedCollection.id}
+			<SharedListSection
+				inline
+				collection={activeSharedCollection}
+				color={sharedListColors[activeSharedCollection.id] ?? '#9ca3af'}
+				{budgetHours}
+				onStats={(s) => (sharedFilterStats = s)}
+			/>
+		{/key}
+
+		<!-- Loading -->
+	{:else if !loaded}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each { length: 5 } as _, i (i)}<div
 					class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"
@@ -716,12 +788,12 @@
 	{/if}
 </div>
 
-{#if sharedCollections.length > 0}
+{#if otherSharedCollections.length > 0}
 	<div class="mt-6 space-y-2 xs:mt-8">
 		<h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
 			Shared Lists
 		</h2>
-		{#each sharedCollections as coll (coll.id)}
+		{#each otherSharedCollections as coll (coll.id)}
 			<SharedListSection
 				collection={coll}
 				color={sharedListColors[coll.id] ?? '#9ca3af'}

@@ -31,8 +31,22 @@
 	let {
 		collection,
 		color,
-		budgetHours
-	}: { collection: SharedCollection; color: string; budgetHours: number } = $props();
+		budgetHours,
+		inline = false,
+		onStats
+	}: {
+		collection: SharedCollection;
+		color: string;
+		budgetHours: number;
+		// Renders without the collapsible header/border — used when a Queue
+		// filter picks this one list to fill the main view (#205), as opposed
+		// to its usual collapsed-by-default spot below the personal queue.
+		inline?: boolean;
+		// Called for `inline` whenever the visible count/remaining time
+		// changes, so the caller's own summary line can report this list's
+		// stats instead of duplicating one.
+		onStats?: (stats: { count: number; remainingMins: number }) => void;
+	} = $props();
 
 	let expanded = $state(false);
 	let loading = $state(false);
@@ -132,6 +146,19 @@
 			if (queueControls.sortBy === 'runtime') return (rt(a) - rt(b)) * mul;
 			return a.added_at.localeCompare(b.added_at) * mul;
 		});
+	});
+
+	$effect(() => {
+		if (inline) load();
+	});
+
+	$effect(() => {
+		if (inline) {
+			onStats?.({
+				count: visibleItems.length,
+				remainingMins: visibleItems.reduce((s, i) => s + rt(i), 0)
+			});
+		}
 	});
 </script>
 
@@ -399,59 +426,67 @@
 	</div>
 {/snippet}
 
-<div class="rounded-xl border border-gray-200 dark:border-gray-800">
-	<button
-		onclick={toggleOpen}
-		class="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-		aria-expanded={expanded}
-	>
-		<span
-			class="text-gray-400 transition-transform dark:text-gray-500 {expanded ? 'rotate-90' : ''}"
-			>▸</span
-		>
-		<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{color}"></span>
-		<span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
-			{collection.name}
-		</span>
-		{#if loaded}
-			<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-				{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'}
-			</span>
-		{/if}
-	</button>
-
-	{#if expanded}
-		<div class="border-t border-gray-100 p-3 dark:border-gray-800/60">
-			{#if loading}
-				<p class="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
-			{:else if error}
-				<p class="text-sm text-red-600 dark:text-red-400">{error}</p>
-			{:else if visibleItems.length === 0}
-				<p class="text-sm text-gray-400 dark:text-gray-600">
-					{items.length === 0 ? 'Nothing here yet.' : 'Nothing matches these filters.'}
-				</p>
-			{:else if queueControls.viewMode === 'grid'}
-				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5">
-					{#each visibleItems as item (itemKey(item))}
-						{@render gridCard(item)}
-					{/each}
-				</div>
-			{:else if queueControls.viewMode === 'list'}
-				<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
-					{#each visibleItems as item (itemKey(item))}
-						{@render listRow(item)}
-					{/each}
-				</div>
-			{:else}
-				<div class="space-y-2">
-					{#each visibleItems as item (itemKey(item))}
-						{@render compactCard(item)}
-					{/each}
-				</div>
-			{/if}
+{#snippet content()}
+	{#if loading}
+		<p class="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+	{:else if error}
+		<p class="text-sm text-red-600 dark:text-red-400">{error}</p>
+	{:else if visibleItems.length === 0}
+		<p class="text-sm text-gray-400 dark:text-gray-600">
+			{items.length === 0 ? 'Nothing here yet.' : 'Nothing matches these filters.'}
+		</p>
+	{:else if queueControls.viewMode === 'grid'}
+		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5">
+			{#each visibleItems as item (itemKey(item))}
+				{@render gridCard(item)}
+			{/each}
+		</div>
+	{:else if queueControls.viewMode === 'list'}
+		<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
+			{#each visibleItems as item (itemKey(item))}
+				{@render listRow(item)}
+			{/each}
+		</div>
+	{:else}
+		<div class="space-y-2">
+			{#each visibleItems as item (itemKey(item))}
+				{@render compactCard(item)}
+			{/each}
 		</div>
 	{/if}
-</div>
+{/snippet}
+
+{#if inline}
+	{@render content()}
+{:else}
+	<div class="rounded-xl border border-gray-200 dark:border-gray-800">
+		<button
+			onclick={toggleOpen}
+			class="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+			aria-expanded={expanded}
+		>
+			<span
+				class="text-gray-400 transition-transform dark:text-gray-500 {expanded ? 'rotate-90' : ''}"
+				>▸</span
+			>
+			<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{color}"></span>
+			<span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+				{collection.name}
+			</span>
+			{#if loaded}
+				<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+					{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'}
+				</span>
+			{/if}
+		</button>
+
+		{#if expanded}
+			<div class="border-t border-gray-100 p-3 dark:border-gray-800/60">
+				{@render content()}
+			</div>
+		{/if}
+	</div>
+{/if}
 
 {#if detailItem}
 	{@const di = detailItem}
