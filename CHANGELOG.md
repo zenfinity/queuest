@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.6] — 2026-08-20
+
+### Shared lists get grid/list view parity with the personal queue
+
+A shared list's section in Queue always rendered as its own compact-card style, regardless of whether the personal queue was in Grid or List mode — a visibly different UI bolted onto the side of the real one. Grid mode now renders shared items as poster cards and List mode as rows, mirroring `QueueGridView`/`QueueListView`'s markup directly (duplicated rather than reused: those components key busy-state, selection, and flip animation off `WatchlistItem`'s numeric local `id`, and a `CollectionItem`'s identity is `tmdb_id`+`media_type` — retrofitting a second identity scheme into them was the riskier path). Clicking a shared item now opens the same detail panel personal items use, given a synthetic negative id (never persisted) so the panel's internal id-keyed state can't collide with real queue items. Season-level toggling and select-mode still aren't offered for shared items — neither is wired up yet. Lanes/Gantt view, which has no shared-list analog, keeps the original compact-card fallback.
+
+### Shared lists reachable from the filter picker (#205)
+
+Shared lists lived only in a collapsed section below the *entire* personal queue — reaching one meant scrolling past everything you own first, with no way to say "just show me this shared list" the way you already could for a personal one. The filter picker's List section now lists shared lists as peers of personal ones (`shared:<id>` form, the same convention the detail panel and bulk-assign pickers already use). Picking one fills the main view — the same slot the personal queue occupies — with its own title-count/remaining-time summary, instead of appearing as a section you have to visit separately. The below-queue browse section is unchanged for the "All" state and now quietly excludes whichever list is already filling the main view, so it doesn't show up twice on screen.
+
+Three non-obvious pieces this needed: the stale-filter-clearing effect only ever validated a filter against personal collection names, so a `shared:` filter would have been wiped the instant it was set — it now skips shared filters entirely rather than trying to validate them against a list that loads asynchronously after mount. Select mode has no shared-list analog (bulk actions operate on personal `WatchlistItem`s by local id), so it force-exits and the Select button hides under a shared filter. And switching between two different shared filters reuses the same component instance unless keyed, which would otherwise keep silently serving the previous list's already-loaded items — wrapped in `{#key}` to force a remount per collection id.
+
+### "+ Add to Queue" gets a direct-to-list caret
+
+Adding a title to a specific list meant adding it untagged first, then opening the detail panel or bulk-select just to assign it — an extra round trip for something the list-assignment picker already made a one-step action everywhere else. A small caret next to "+ Add to Queue" opens a popover — Queue, then personal Lists, then Shared — so a search result can land directly in a list without the detour, while the single-tap default stays exactly as fast as it was. Landing an item in a shared list from here does the local add, then immediately hands it to the same shared-collection push `promoteCollection` and the Queue picker use, so a failure partway through leaves the title sitting in the personal queue rather than losing it.
+
+The split button and its popover are their own component (`AddToListButton.svelte`, self-contained — owns its open/closed state and document-click dismissal) so the same interaction could be dropped into the Import panel's three flows too, not just single-item search adds, without quadruplicating the markup.
+
+### Import panel: instructions paired with the input that handles them
+
+The Letterboxd and IMDb instructions lived in their own section, separated by a divider from a generic "Upload CSV" section below that actually handled both — reading how to export and finding the matching input meant scrolling past unrelated content. File upload now sits directly under the Letterboxd instructions and link-paste directly under IMDb's, each with its own "Found N titles" readout and its own Add button (two buttons where there used to be one shared button, deliberately — each import source is a self-contained flow now, not two entry points feeding one shared result). All three import flows (Letterboxd, IMDb, paste-a-list) get the same "Add To" caret as search results, including bulk pushes to a shared list: every newly-added row from an import is collected and pushed to the shared collection in one call at the end, not one round trip per title. The heading changed from "Import from Letterboxd, IMDb, or a backup" to **"Import from list or Queuest Backup"**, and the paste-a-list copy now says plainly that Markdown/Obsidian syntax (bullets, numbers, checkboxes, wiki-links) is stripped automatically — the parser already did this, the copy just never said so.
+
 ## [0.9.5] — 2026-08-20
 
 ### Nav-switching hint moved to the Add page
