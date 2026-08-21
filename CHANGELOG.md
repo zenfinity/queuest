@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.7] — 2026-08-20
+
+### Renaming or deleting a list no longer leaves a phantom behind (#207)
+
+Both actions wrote the color change to localStorage, then refreshed component state by re-spreading the *already-stale* in-memory copy instead of re-reading it — so the old name lingered as an empty phantom list until a reload forced a fresh read. Fixed to read back from `getQueueColors()` after the write, same as everywhere else in the file already does.
+
+### Promoting a list to shared keeps its color (#209)
+
+Promotion deletes the personal color entry (needed so the old name doesn't linger the same way #207 did), but never carried the color to the shared side — the new shared list always got a fresh color hashed from its id. Now captured before deletion and seeded into the shared list's color instead.
+
+### Shared-list links say "lists", not "collections" (#208)
+
+The Collections → Lists rename (v0.9.4) skipped API routes and internal types on purpose — nobody sees those. It should have caught invite links, which people actually paste and send to each other: `/collections/join/[token]` is now `/lists/join/[token]`, and `/collections/[id]` is `/lists/[id]`. Old links still work — both are 301 redirects, not deletions, so anything already shared keeps resolving.
+
 ## [0.9.6] — 2026-08-20
 
 ### Shared lists get grid/list view parity with the personal queue
