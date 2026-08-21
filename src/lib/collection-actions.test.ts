@@ -70,7 +70,7 @@ describe('createInvite', () => {
 
 		const link = await createInvite(collection(), 'https://queuest.app', noop);
 
-		expect(link).toBe(`https://queuest.app/collections/join/tok123#${collectionDek}`);
+		expect(link).toBe(`https://queuest.app/lists/join/tok123#${collectionDek}`);
 
 		// The key must appear only after the '#'. Anything before it would be
 		// sent to the server on the next navigation.

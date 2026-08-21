@@ -127,7 +127,7 @@ export async function createInvite(
 		await throwIfNotOk(res);
 		const { token } = (await res.json()) as { token: string };
 
-		return `${origin}/collections/join/${token}#${dek}`;
+		return `${origin}/lists/join/${token}#${dek}`;
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not create an invite link.');
 		return null;
