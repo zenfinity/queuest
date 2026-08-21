@@ -9,11 +9,16 @@ const deserializeAppState = vi.fn();
 const setQueueName = vi.fn();
 const setQueueColor = vi.fn();
 const parseImportCSV = vi.fn();
+const addItemsToSharedCollection = vi.fn();
 
 vi.mock('./db', () => ({
 	addItem: (...args: unknown[]) => addItem(...args),
 	replaceAll: (...args: unknown[]) => replaceAll(...args),
 	setServices: (...args: unknown[]) => setServices(...args)
+}));
+
+vi.mock('./collection-actions', () => ({
+	addItemsToSharedCollection: (...args: unknown[]) => addItemsToSharedCollection(...args)
 }));
 
 vi.mock('./crypto', () => ({
@@ -100,6 +105,7 @@ beforeEach(() => {
 	setQueueName.mockReset();
 	setQueueColor.mockReset();
 	parseImportCSV.mockReset();
+	addItemsToSharedCollection.mockReset();
 	fetchMock.mockReset();
 	vi.stubGlobal('fetch', fetchMock);
 	vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
@@ -179,6 +185,72 @@ describe('importRows', () => {
 
 		expect(state.importError).toBe('boom');
 		expect(state.importing).toBe(false);
+	});
+
+	it('pre-tags every matched row for a personal-list target, without touching shared collections', async () => {
+		const { state, deps } = makeImportDeps();
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => [{ title: 'Arrival', result: makeItem({ title: 'Arrival' }) }]
+		});
+		addItem.mockResolvedValue({ id: 1 });
+
+		await importRows([{ title: 'Arrival', year: null, mediaTypeHint: 'auto' }], deps, {
+			tag: 'Date Night'
+		});
+
+		expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ queue_tag: 'Date Night' }));
+		expect(addItemsToSharedCollection).not.toHaveBeenCalled();
+		expect(state.importAdded).toBe(1);
+	});
+
+	it('collects every matched row and pushes them to a shared collection in one call', async () => {
+		const { state, deps } = makeImportDeps();
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => [
+				{ title: 'Arrival', result: makeItem({ tmdb_id: 1, title: 'Arrival' }) },
+				{ title: 'Contact', result: makeItem({ tmdb_id: 2, title: 'Contact' }) }
+			]
+		});
+		const created1 = { id: 1, title: 'Arrival' };
+		const created2 = { id: 2, title: 'Contact' };
+		addItem.mockResolvedValueOnce(created1).mockResolvedValueOnce(created2);
+		addItemsToSharedCollection.mockResolvedValue(true);
+		const collection = { id: 'coll-1', name: 'Movie Night' };
+
+		await importRows(
+			[
+				{ title: 'Arrival', year: null, mediaTypeHint: 'auto' },
+				{ title: 'Contact', year: null, mediaTypeHint: 'auto' }
+			],
+			deps,
+			{ collection: collection as never }
+		);
+
+		expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ queue_tag: undefined }));
+		expect(addItemsToSharedCollection).toHaveBeenCalledTimes(1);
+		expect(addItemsToSharedCollection).toHaveBeenCalledWith(
+			collection,
+			[created1, created2],
+			expect.anything()
+		);
+		expect(state.importAdded).toBe(2);
+	});
+
+	it('does not push to the shared collection when nothing new was added (all duplicates)', async () => {
+		const { deps } = makeImportDeps();
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => [{ title: 'Arrival', result: makeItem() }]
+		});
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+
+		await importRows([{ title: 'Arrival', year: null, mediaTypeHint: 'auto' }], deps, {
+			collection: { id: 'coll-1' } as never
+		});
+
+		expect(addItemsToSharedCollection).not.toHaveBeenCalled();
 	});
 });
 
