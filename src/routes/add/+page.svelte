@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$lib/types';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
@@ -6,10 +7,19 @@
 	import { releaseChip, DEFAULT_BUDGET_HOURS } from '$lib/progress';
 	import { page, navigating } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
+	import { getAll } from '$lib/db';
+	import { listCollections } from '$lib/queue-actions';
+	import { getQueueColors, getOrAssignSharedListColor } from '$lib/queue-colors';
+	import {
+		listCollections as listSharedCollections,
+		type SharedCollection
+	} from '$lib/collection-actions';
+	import { isSyncEnabled } from '$lib/sync';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import NavHint from '$lib/components/NavHint.svelte';
-	import { addSearchResultToQueue } from '$lib/add-actions';
+	import AddToListButton from '$lib/components/AddToListButton.svelte';
+	import { addSearchResultToQueue, addSearchResultToList } from '$lib/add-actions';
 
 	let isOnboarding = $derived(page.url.searchParams.has('onboarding'));
 
@@ -34,8 +44,31 @@
 		// Best-effort localStorage read; app uses default budget if read fails
 	}
 
-	async function addToQueue(result: SearchResult) {
-		await addSearchResultToQueue(result, {
+	// Populates the "Add To" popover's Lists/Shared sections — loaded once on
+	// mount rather than per-card, since every card offers the same targets.
+	let existingCollections: string[] = $state([]);
+	let queueColors: Record<string, string> = $state({});
+	let sharedCollections: SharedCollection[] = $state([]);
+	let sharedListColors: Record<string, string> = $state({});
+
+	onMount(() => {
+		queueColors = getQueueColors();
+		getAll().then((items) => {
+			existingCollections = listCollections(items, Object.keys(queueColors));
+		});
+		isSyncEnabled().then((enabled) => {
+			if (!enabled) return;
+			listSharedCollections({ setBusy: () => {}, setError: () => {} }).then((colls) => {
+				sharedCollections = colls;
+				const colors: Record<string, string> = {};
+				for (const c of colls) colors[c.id] = getOrAssignSharedListColor(c.id);
+				sharedListColors = colors;
+			});
+		});
+	});
+
+	function addDeps(): Parameters<typeof addSearchResultToQueue>[1] {
+		return {
 			setAdding: (id, isAdding) => {
 				if (isAdding) adding.add(id);
 				else adding.delete(id);
@@ -48,7 +81,18 @@
 				if (message) errors.set(id, message);
 				else errors.delete(id);
 			}
-		});
+		};
+	}
+
+	async function addToQueue(result: SearchResult) {
+		await addSearchResultToQueue(result, addDeps());
+	}
+
+	async function addToList(
+		result: SearchResult,
+		target: Parameters<typeof addSearchResultToList>[1]
+	) {
+		await addSearchResultToList(result, target, addDeps());
 	}
 </script>
 
@@ -113,11 +157,11 @@
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
 			{#each data.results as result (result.id)}
 				<div
-					class="flex flex-col overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
 				>
 					<!-- Poster (clickable) -->
 					<button
-						class="relative aspect-[2/3] overflow-hidden bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
+						class="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800"
 						onclick={() => (detailItem = result)}
 						data-detail-trigger
 						aria-label="View details for {result.title}"
@@ -187,22 +231,21 @@
 							</p>
 						{/if}
 
-						<button
-							class="mt-auto w-full rounded-md py-1.5 text-xs font-medium transition-colors disabled:opacity-50
-								{added.has(result.id)
-								? 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-400'
-								: 'bg-orange-500 text-white hover:bg-orange-400'}"
-							disabled={adding.has(result.id) || added.has(result.id)}
-							onclick={() => addToQueue(result)}
-						>
-							{#if adding.has(result.id)}
-								Adding…
-							{:else if added.has(result.id)}
-								✓ Added
-							{:else}
-								+ Add to Queue
-							{/if}
-						</button>
+						<div class="mt-auto">
+							<AddToListButton
+								busy={adding.has(result.id)}
+								done={added.has(result.id)}
+								{existingCollections}
+								{queueColors}
+								{sharedCollections}
+								{sharedListColors}
+								onAddToQueue={() => addToQueue(result)}
+								onAddToList={(target) => addToList(result, target)}
+							/>
+						</div>
+						{#if errors.has(result.id)}
+							<p class="text-[10px] text-red-500">{errors.get(result.id)}</p>
+						{/if}
 					</div>
 				</div>
 			{/each}
@@ -247,7 +290,7 @@
 						clip-rule="evenodd"
 					/>
 				</svg>
-				Import from Letterboxd, IMDb, or a backup
+				Import from list or Queuest Backup
 			</span>
 			<svg
 				class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180"
@@ -263,7 +306,7 @@
 			</svg>
 		</summary>
 		<div class="border-t border-gray-200 px-4 py-4 dark:border-gray-800">
-			<ImportPanel />
+			<ImportPanel {existingCollections} {queueColors} {sharedCollections} {sharedListColors} />
 		</div>
 	</details>
 </div>

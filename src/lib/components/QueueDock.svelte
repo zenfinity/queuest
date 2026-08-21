@@ -232,7 +232,7 @@
 						{/each}
 					{/if}
 
-					{#if queueControls.collectionNames.length > 0}
+					{#if queueControls.collectionNames.length > 0 || queueControls.sharedListOptions.length > 0}
 						{@const queueColors = getQueueColors()}
 						<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
 
@@ -241,17 +241,34 @@
 								class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
 								>List</span
 							>
-							<button
-								onclick={() => (queueControls.groupByCollection = !queueControls.groupByCollection)}
-								aria-pressed={queueControls.groupByCollection}
-								class="text-[10px] font-medium transition-colors {queueControls.groupByCollection
-									? 'text-orange-500 hover:text-orange-400'
-									: 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}"
-							>
-								{queueControls.groupByCollection ? '✓ Grouped' : 'Group'}
-							</button>
+							{#if queueControls.collectionNames.length > 0}
+								<button
+									onclick={() =>
+										(queueControls.groupByCollection = !queueControls.groupByCollection)}
+									aria-pressed={queueControls.groupByCollection}
+									class="text-[10px] font-medium transition-colors {queueControls.groupByCollection
+										? 'text-orange-500 hover:text-orange-400'
+										: 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}"
+								>
+									{queueControls.groupByCollection ? '✓ Grouped' : 'Group'}
+								</button>
+							{/if}
 						</div>
-						{#each [[null, 'All'], ...queueControls.collectionNames.map( (c) => [c, c] ), [UNCATEGORIZED, 'Uncategorized']] as [key, label] (key ?? '__all__')}
+
+						<button
+							onclick={() => (queueControls.collectionFilter = null)}
+							aria-pressed={queueControls.collectionFilter === null}
+							class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
+								{queueControls.collectionFilter === null
+								? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
+								: 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
+						>
+							<span>All</span>
+							{#if queueControls.collectionFilter === null}<span class="text-orange-500">✓</span
+								>{/if}
+						</button>
+
+						{#each [...queueControls.collectionNames.map( (c) => [c, c] ), [UNCATEGORIZED, 'Uncategorized']] as [key, label] (key)}
 							<button
 								onclick={() => (queueControls.collectionFilter = key)}
 								aria-pressed={queueControls.collectionFilter === key}
@@ -261,7 +278,7 @@
 									: 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
 							>
 								<span class="flex min-w-0 items-center gap-1.5">
-									{#if key && key !== UNCATEGORIZED}
+									{#if key !== UNCATEGORIZED}
 										<span
 											class="h-2 w-2 shrink-0 rounded-full"
 											style="background:{queueColors[key] ?? '#9ca3af'}"
@@ -274,6 +291,34 @@
 									>{/if}
 							</button>
 						{/each}
+
+						{#if queueControls.sharedListOptions.length > 0}
+							<p
+								class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+							>
+								Shared
+							</p>
+							{#each queueControls.sharedListOptions as opt (opt.id)}
+								{@const filterValue = `shared:${opt.id}`}
+								<button
+									onclick={() => (queueControls.collectionFilter = filterValue)}
+									aria-pressed={queueControls.collectionFilter === filterValue}
+									class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors
+										{queueControls.collectionFilter === filterValue
+										? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
+										: 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50'}"
+								>
+									<span class="flex min-w-0 items-center gap-1.5">
+										<span class="h-2 w-2 shrink-0 rounded-full" style="background:{opt.color}"
+										></span>
+										<span class="truncate">{opt.name}</span>
+									</span>
+									{#if queueControls.collectionFilter === filterValue}<span
+											class="shrink-0 text-orange-500">✓</span
+										>{/if}
+								</button>
+							{/each}
+						{/if}
 					{/if}
 				</div>
 			{/if}

@@ -3,18 +3,37 @@
 	import { resolve } from '$app/paths';
 	import { parseImportCSV, parseTextList } from '$lib/import';
 	import { theme } from '$lib/theme.svelte';
+	import type { SharedCollection } from '$lib/collection-actions';
+	import AddToListButton from '$lib/components/AddToListButton.svelte';
 	import {
 		importRows,
 		restoreBackup,
 		fetchCsvFromUrl,
 		type RestoreDeps,
-		type ImportActionDeps
+		type ImportActionDeps,
+		type ImportTarget
 	} from '$lib/import-actions';
 	import type { ImportRow } from '$lib/import';
 
-	// ── CSV import (Letterboxd / IMDb) ────────────────────────────────────────
-	let csvRows = $state<ImportRow[]>([]);
-	let csvFormat = $state('');
+	let {
+		existingCollections,
+		queueColors,
+		sharedCollections,
+		sharedListColors
+	}: {
+		existingCollections: string[];
+		queueColors: Record<string, string>;
+		sharedCollections: SharedCollection[];
+		sharedListColors: Record<string, string>;
+	} = $props();
+
+	// ── CSV file upload (paired with the Letterboxd instructions) ─────────────
+	let fileRows = $state<ImportRow[]>([]);
+	let fileFormat = $state('');
+
+	// ── CSV link fetch (paired with the IMDb instructions) ────────────────────
+	let urlRows = $state<ImportRow[]>([]);
+	let urlFormat = $state('');
 	let csvUrl = $state('');
 	let csvUrlLoading = $state(false);
 
@@ -49,7 +68,7 @@
 	});
 
 	let importing = $state(false);
-	let importSource = $state<'csv' | 'text' | null>(null);
+	let importSource = $state<'file' | 'url' | 'text' | null>(null);
 	let importTotal = $state(0);
 	let importDone = $state(0);
 	let importAdded = $state(0);
@@ -66,21 +85,10 @@
 		}
 	}
 
-	function applyCsvText(text: string) {
-		const { rows, format } = parseImportCSV(text);
-		if (format === 'unknown') {
-			importError = 'Unrecognised format. Expected a Letterboxd or IMDb watchlist CSV.';
-			return;
-		}
-		csvRows = rows;
-		csvFormat = format === 'letterboxd' ? 'Letterboxd' : 'IMDb';
-	}
-
 	function onCsvFileChange(e: Event) {
-		csvRows = [];
-		csvFormat = '';
+		fileRows = [];
+		fileFormat = '';
 		importError = '';
-		textInput = '';
 		const file = (e.currentTarget as HTMLInputElement).files?.[0];
 		if (!file) return;
 		if (file.size > MAX_PASTE_SIZE) {
@@ -88,16 +96,23 @@
 			return;
 		}
 		const reader = new FileReader();
-		reader.onload = () => applyCsvText(reader.result as string);
+		reader.onload = () => {
+			const { rows, format } = parseImportCSV(reader.result as string);
+			if (format === 'unknown') {
+				importError = 'Unrecognised format. Expected a Letterboxd or IMDb watchlist CSV.';
+				return;
+			}
+			fileRows = rows;
+			fileFormat = format === 'letterboxd' ? 'Letterboxd' : 'IMDb';
+		};
 		reader.readAsText(file);
 	}
 
 	async function fetchCsvUrl() {
 		if (!csvUrl.trim() || csvUrlLoading) return;
-		csvRows = [];
-		csvFormat = '';
+		urlRows = [];
+		urlFormat = '';
 		importError = '';
-		textInput = '';
 		csvUrlLoading = true;
 		try {
 			const { rows, format } = await fetchCsvFromUrl(csvUrl);
@@ -105,8 +120,8 @@
 				importError = 'Unrecognised format. Expected a Letterboxd or IMDb watchlist CSV.';
 				return;
 			}
-			csvRows = rows;
-			csvFormat = format === 'letterboxd' ? 'Letterboxd' : 'IMDb';
+			urlRows = rows;
+			urlFormat = format === 'letterboxd' ? 'Letterboxd' : 'IMDb';
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Failed to fetch URL.';
 		} finally {
@@ -114,7 +129,11 @@
 		}
 	}
 
-	async function doImport(rows: ImportRow[], source: 'csv' | 'text') {
+	async function doImport(
+		rows: ImportRow[],
+		source: 'file' | 'url' | 'text',
+		target?: ImportTarget
+	) {
 		if (!rows.length || importing) return;
 		importSource = source;
 		const deps: ImportActionDeps = {
@@ -127,7 +146,7 @@
 			setImportDoneOnce: (v) => (importDoneOnce = v)
 		};
 		importDoneOnce = false;
-		await importRows(rows, deps);
+		await importRows(rows, deps, target);
 	}
 
 	// ── Backup restore (.queuest) ─────────────────────────────────────────────
@@ -221,7 +240,7 @@
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
 
-	<!-- Letterboxd / IMDb instructions -->
+	<!-- Letterboxd — instructions paired with the file upload that handles them -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Letterboxd</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
@@ -234,8 +253,38 @@
 			>
 			and upload the <code class="text-orange-500">watchlist.csv</code> file below.
 		</p>
+		<input
+			type="file"
+			aria-label="CSV file"
+			accept=".csv"
+			class={FILE_INPUT_CLASS}
+			onchange={onCsvFileChange}
+		/>
+
+		{#if fileFormat && fileRows.length}
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				Found <span class="font-medium text-gray-900 dark:text-white">{fileRows.length}</span>
+				title{fileRows.length === 1 ? '' : 's'} from {fileFormat}.
+			</p>
+		{/if}
+
+		<AddToListButton
+			label="Add to Queue"
+			busy={importing && importSource === 'file'}
+			busyLabel="Matching {importDone} / {importTotal}…"
+			disabled={!fileRows.length || (importing && importSource !== 'file')}
+			{existingCollections}
+			{queueColors}
+			{sharedCollections}
+			{sharedListColors}
+			onAddToQueue={() => doImport(fileRows, 'file')}
+			onAddToList={(target) => doImport(fileRows, 'file', target)}
+		/>
 	</section>
 
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- IMDb — instructions paired with the link-paste that handles them -->
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">IMDb</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
@@ -245,27 +294,9 @@
 				target="_blank"
 				rel="noopener noreferrer"
 				class="text-orange-500 hover:underline">Watchlist</a
-			>, tap ··· → Export, then paste the link below or upload the file.
+			>, tap ··· → Export, then paste the link below. (Got a file instead? The upload above works
+			for an IMDb export too.)
 		</p>
-	</section>
-
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
-
-	<!-- CSV / URL input -->
-	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Upload CSV</h2>
-		<input
-			type="file"
-			aria-label="CSV file"
-			accept=".csv"
-			class={FILE_INPUT_CLASS}
-			onchange={onCsvFileChange}
-		/>
-		<div class="flex items-center gap-2">
-			<div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
-			<span class="text-xs text-gray-400">or paste a link</span>
-			<div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
-		</div>
 		<div class="flex gap-2">
 			<div class="relative flex-1">
 				<input
@@ -300,24 +331,25 @@
 			</button>
 		</div>
 
-		{#if csvFormat && csvRows.length}
+		{#if urlFormat && urlRows.length}
 			<p class="text-sm text-gray-600 dark:text-gray-400">
-				Found <span class="font-medium text-gray-900 dark:text-white">{csvRows.length}</span>
-				title{csvRows.length === 1 ? '' : 's'} from {csvFormat}.
+				Found <span class="font-medium text-gray-900 dark:text-white">{urlRows.length}</span>
+				title{urlRows.length === 1 ? '' : 's'} from {urlFormat}.
 			</p>
 		{/if}
 
-		<button
-			onclick={() => doImport(csvRows, 'csv')}
-			disabled={!csvRows.length || importing}
-			class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-		>
-			{#if importing && importSource === 'csv'}
-				Matching {importDone} / {importTotal}…
-			{:else}
-				Add to Queue
-			{/if}
-		</button>
+		<AddToListButton
+			label="Add to Queue"
+			busy={importing && importSource === 'url'}
+			busyLabel="Matching {importDone} / {importTotal}…"
+			disabled={!urlRows.length || (importing && importSource !== 'url')}
+			{existingCollections}
+			{queueColors}
+			{sharedCollections}
+			{sharedListColors}
+			onAddToQueue={() => doImport(urlRows, 'url')}
+			onAddToList={(target) => doImport(urlRows, 'url', target)}
+		/>
 	</section>
 
 	<div class="border-t border-gray-200 dark:border-gray-800"></div>
@@ -326,8 +358,8 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Paste a list</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			One title per line — from Notes, Keep, or anywhere. Bullets, numbers, and years are stripped
-			automatically.
+			One title per line — from Notes, Keep, Obsidian, or anywhere. Markdown bullets, numbers,
+			checkboxes, and years are stripped automatically.
 		</p>
 		<!-- eslint-disable svelte/no-useless-mustaches -- literal \n only survives inside an expression; Svelte collapses whitespace in static attribute text -->
 		<textarea
@@ -357,17 +389,18 @@
 			</p>
 		{/if}
 
-		<button
-			onclick={() => doImport(textRows, 'text')}
-			disabled={!textRows.length || importing}
-			class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-		>
-			{#if importing && importSource === 'text'}
-				Matching {importDone} / {importTotal}…
-			{:else}
-				Add to Queue
-			{/if}
-		</button>
+		<AddToListButton
+			label="Add to Queue"
+			busy={importing && importSource === 'text'}
+			busyLabel="Matching {importDone} / {importTotal}…"
+			disabled={!textRows.length || (importing && importSource !== 'text')}
+			{existingCollections}
+			{queueColors}
+			{sharedCollections}
+			{sharedListColors}
+			onAddToQueue={() => doImport(textRows, 'text')}
+			onAddToList={(target) => doImport(textRows, 'text', target)}
+		/>
 	</section>
 
 	{#if importError}

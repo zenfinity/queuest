@@ -7,6 +7,7 @@ import { setQueueName, setQueueColor } from './queue-colors';
 import { parseImportCSV } from './import';
 import { saveBudgetPrefs } from './progress';
 import { throwIfNotOk, isConstraintError } from './http';
+import { addItemsToSharedCollection, type SharedCollection } from './collection-actions';
 
 export interface ImportActionDeps {
 	setImporting: (importing: boolean) => void;
@@ -22,9 +23,15 @@ export interface RestoreDeps extends ImportActionDeps {
 	setThemeDark: (dark: boolean) => void;
 }
 
+export type ImportTarget = { tag: string } | { collection: SharedCollection };
+
 const BATCH = 10;
 
-export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Promise<void> {
+export async function importRows(
+	rows: ImportRow[],
+	deps: ImportActionDeps,
+	target?: ImportTarget
+): Promise<void> {
 	if (!rows.length) return;
 	deps.setImporting(true);
 	deps.setImportError('');
@@ -32,6 +39,10 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 	let importDone = 0;
 	let importAdded = 0;
 	let missedTitles: string[] = [];
+	const queueTag = target && 'tag' in target ? target.tag : undefined;
+	// Collected only for a shared destination, and pushed once at the end in
+	// a single pull-merge-push rather than one round trip per row.
+	const addedForSharedPush: WatchlistItem[] = [];
 
 	try {
 		for (let i = 0; i < rows.length; i += BATCH) {
@@ -49,9 +60,13 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 			for (const { title, result } of matched) {
 				if (result) {
 					try {
-						await addItem(result);
+						const created = await addItem({ ...result, queue_tag: queueTag });
 						importAdded++;
+						if (target && 'collection' in target) addedForSharedPush.push(created);
 					} catch (e) {
+						// A duplicate already existed under its own id before this import
+						// started — leave it wherever it already was rather than chasing
+						// down that id to relocate it into the shared destination too.
 						if (isConstraintError(e)) {
 							importAdded++;
 						} else {
@@ -65,6 +80,14 @@ export async function importRows(rows: ImportRow[], deps: ImportActionDeps): Pro
 				deps.setImportDone(importDone);
 			}
 		}
+
+		if (target && 'collection' in target && addedForSharedPush.length > 0) {
+			await addItemsToSharedCollection(target.collection, addedForSharedPush, {
+				setBusy: () => {},
+				setError: deps.setImportError
+			});
+		}
+
 		deps.setImportDoneOnce(true);
 		deps.setMissedTitles(missedTitles);
 		try {
