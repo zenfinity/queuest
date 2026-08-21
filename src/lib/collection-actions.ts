@@ -508,3 +508,37 @@ export async function addItemsToSharedCollection(
 		deps.setBusy(false);
 	}
 }
+
+/**
+ * Removes one item from a shared collection.
+ *
+ * Owner-only in the UI, not on the server: the blob is opaque to the API —
+ * `PUT .../blob` only checks membership, since the server can't see inside
+ * an encrypted payload to tell a removal from any other write. That's the
+ * same reason toggling watched or adding items isn't role-gated either.
+ * Restricting *removal* to the owner is therefore enforced only by which
+ * button the client renders, same trust boundary as the rest of this file's
+ * item-level mutations — real protection would need the server to be able
+ * to read the blob, which would defeat the point of encrypting it.
+ */
+export async function removeItemFromSharedCollection(
+	collection: SharedCollection,
+	current: CollectionItem[],
+	item: CollectionItem,
+	deps: CollectionActionDeps
+): Promise<CollectionItem[] | null> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const dekB64 = await openCollectionKey(collection.wrappedKey);
+		const dek = await importDek(dekB64, false);
+		return await syncCollectionItems(collection.id, dek, current, (merged) =>
+			merged.filter((i) => i.tmdb_id !== item.tmdb_id || i.media_type !== item.media_type)
+		);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not remove that. Try again.');
+		return null;
+	} finally {
+		deps.setBusy(false);
+	}
+}
