@@ -2,6 +2,12 @@ import { readRecord } from './storage';
 
 const NAME_KEY = 'sq:queue:name';
 const COLORS_KEY = 'sq:queue:colors';
+// Deliberately a separate bucket from COLORS_KEY, not reusing it keyed by id
+// instead of name: personal Lists treats every key in the name-keyed map as
+// a real or "created but empty" personal list (see queue-actions.ts's
+// listCollections extraNames) — a shared list's id living in that same map
+// would leak in as a phantom empty personal list with a UUID for a name.
+const SHARED_COLORS_KEY = 'sq:shared-list-colors';
 
 const PALETTE = [
 	'#ef4444',
@@ -99,5 +105,44 @@ export function deleteCollectionColor(name: string): void {
 		}
 	} catch {
 		// Best-effort localStorage write; deletion proceeds regardless
+	}
+}
+
+export function getSharedListColors(): Record<string, string> {
+	return readRecord(SHARED_COLORS_KEY, {});
+}
+
+export function setSharedListColor(id: string, color: string): void {
+	try {
+		const colors = getSharedListColors();
+		colors[id] = color;
+		localStorage.setItem(SHARED_COLORS_KEY, JSON.stringify(colors));
+	} catch {
+		// Best-effort localStorage write; app works fine without persisted colors
+	}
+}
+
+/** Returns existing color for a shared list id, or auto-assigns one from the palette and saves it. */
+export function getOrAssignSharedListColor(id: string): string {
+	try {
+		const colors = getSharedListColors();
+		if (!colors[id]) {
+			const color = autoColor(id);
+			colors[id] = color;
+			localStorage.setItem(SHARED_COLORS_KEY, JSON.stringify(colors));
+			return color;
+		}
+		return colors[id];
+	} catch {
+		// Persist the auto-generated color even if reading/writing failed
+		const color = autoColor(id);
+		try {
+			const colors = getSharedListColors();
+			colors[id] = color;
+			localStorage.setItem(SHARED_COLORS_KEY, JSON.stringify(colors));
+		} catch {
+			// Best-effort localStorage write; color always returned to caller regardless
+		}
+		return color;
 	}
 }

@@ -1,19 +1,18 @@
 <script lang="ts">
-	// One-time onboarding nudge (#169) toward the swipe (#162) / Alt+←→ (#168)
-	// tab-switching gestures — neither is discoverable without being told.
-	// Shown right after the first successful add (see add/+page.svelte) —
-	// on the Queue page it fired too late, after the user had already
-	// navigated there by tapping the nav link once with no idea swipe/Alt+
-	// arrow existed. Persists its own dismissed state in
-	// `sq:nav-hint-dismissed` so it never reappears once shown, whether
-	// dismissed manually or by the auto-hide timer.
-	const DISMISS_KEY = 'sq:nav-hint-dismissed';
+	// Last of the onboarding nudges, same shape as NavHint/ListHint — this one
+	// explains the two sharing options once someone actually has a list to
+	// share, which is also the first moment both buttons are visible at once.
+	// The distinction (snapshot vs. ongoing collaboration) isn't obvious from
+	// two adjacently-labeled buttons alone, and the fuller explanation only
+	// otherwise exists in each button's hover tooltip — invisible on touch.
+	// Only shown with sync on, since Share doesn't exist as an option without
+	// it; mentioning it before then would point at a button that isn't there.
+	const DISMISS_KEY = 'sq:share-hint-dismissed';
 	const AUTO_HIDE_MS = 5000;
 
 	let { show = false }: { show?: boolean } = $props();
 
 	let visible = $state(false);
-	let isTouch = $state(false);
 	let shown = false; // guards against re-triggering if `show` flips true again
 
 	function dismiss() {
@@ -36,7 +35,6 @@
 	$effect(() => {
 		if (!show || shown || alreadyDismissed()) return;
 		shown = true;
-		isTouch = window.matchMedia('(pointer: coarse)').matches;
 		visible = true;
 		const timer = setTimeout(dismiss, AUTO_HIDE_MS);
 		return () => clearTimeout(timer);
@@ -49,12 +47,8 @@
 			class="pointer-events-auto flex items-center gap-2 rounded-full bg-gray-900/90 px-4 py-2 text-sm text-white shadow-lg backdrop-blur dark:bg-gray-800/90"
 		>
 			<span>
-				{#if isTouch}
-					Swipe <span aria-hidden="true">← →</span> to switch tabs
-				{:else}
-					<kbd class="rounded bg-white/20 px-1 py-0.5 font-mono text-xs">Alt</kbd> +
-					<span aria-hidden="true">← →</span> to switch tabs
-				{/if}
+				<span class="font-medium text-orange-400">Read-only</span> sends the list as-is —
+				<span class="font-medium text-orange-400">Share</span> lets others collaborate on it with you
 			</span>
 			<button
 				type="button"

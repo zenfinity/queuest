@@ -32,8 +32,8 @@ describe('the synced/local key partition', () => {
 		expect(overlap).toEqual([]);
 	});
 
-	it('covers exactly the 15 real sq: keys', () => {
-		expect(SYNCED_KEYS.length + LOCAL_KEYS.length).toBe(15);
+	it('covers exactly the 18 real sq: keys', () => {
+		expect(SYNCED_KEYS.length + LOCAL_KEYS.length).toBe(18);
 	});
 
 	it('every sq: string literal in the source tree belongs to exactly one set', () => {

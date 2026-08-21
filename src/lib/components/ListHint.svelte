@@ -1,19 +1,20 @@
 <script lang="ts">
-	// One-time onboarding nudge (#169) toward the swipe (#162) / Alt+←→ (#168)
-	// tab-switching gestures — neither is discoverable without being told.
-	// Shown right after the first successful add (see add/+page.svelte) —
-	// on the Queue page it fired too late, after the user had already
-	// navigated there by tapping the nav link once with no idea swipe/Alt+
-	// arrow existed. Persists its own dismissed state in
-	// `sq:nav-hint-dismissed` so it never reappears once shown, whether
-	// dismissed manually or by the auto-hide timer.
-	const DISMISS_KEY = 'sq:nav-hint-dismissed';
+	// One-time onboarding nudge toward Lists — same shape as NavHint.svelte,
+	// but for organizing rather than navigating: once someone has a handful
+	// of titles queued and hasn't made a list yet, there's finally something
+	// worth grouping, and this is the first mention that grouping is possible
+	// at all. Shown on the Queue page (see app/+page.svelte) once there's
+	// enough in the queue to make the suggestion land, deliberately not on
+	// the very first add — that moment already carries NavHint's nudge, and
+	// stacking two unrelated tips back to back defeats the point of either.
+	import { resolve } from '$app/paths';
+
+	const DISMISS_KEY = 'sq:list-hint-dismissed';
 	const AUTO_HIDE_MS = 5000;
 
 	let { show = false }: { show?: boolean } = $props();
 
 	let visible = $state(false);
-	let isTouch = $state(false);
 	let shown = false; // guards against re-triggering if `show` flips true again
 
 	function dismiss() {
@@ -36,7 +37,6 @@
 	$effect(() => {
 		if (!show || shown || alreadyDismissed()) return;
 		shown = true;
-		isTouch = window.matchMedia('(pointer: coarse)').matches;
 		visible = true;
 		const timer = setTimeout(dismiss, AUTO_HIDE_MS);
 		return () => clearTimeout(timer);
@@ -49,12 +49,10 @@
 			class="pointer-events-auto flex items-center gap-2 rounded-full bg-gray-900/90 px-4 py-2 text-sm text-white shadow-lg backdrop-blur dark:bg-gray-800/90"
 		>
 			<span>
-				{#if isTouch}
-					Swipe <span aria-hidden="true">← →</span> to switch tabs
-				{:else}
-					<kbd class="rounded bg-white/20 px-1 py-0.5 font-mono text-xs">Alt</kbd> +
-					<span aria-hidden="true">← →</span> to switch tabs
-				{/if}
+				Select titles to group them into a list, or start one in
+				<a href={resolve('/lists')} onclick={dismiss} class="font-medium text-orange-400 underline"
+					>Lists</a
+				>
 			</span>
 			<button
 				type="button"

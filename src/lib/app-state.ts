@@ -6,7 +6,7 @@
 //
 // ── The synced/local key partition is the sync contract ─────────────────
 //
-// There are 15 real sq:-prefixed localStorage keys. Some of them describe
+// There are 18 real sq:-prefixed localStorage keys. Some of them describe
 // *this device* rather than the user's account, and must never sync:
 //
 //   sq:welcomed                 — onboarding seen on this device
@@ -14,6 +14,12 @@
 //   sq:dismiss-cancel           — per-provider alert dismissals (device-local)
 //   sq:budget-callout-dismissed — first-visit callout state
 //   sq:nav-hint-dismissed       — swipe/keyboard tab-nav hint seen on this device
+//   sq:list-hint-dismissed      — "group titles into a list" hint seen on this device
+//   sq:share-hint-dismissed     — "Read-only vs Share" hint seen on this device
+//   sq:shared-list-colors       — per-device color swatches for shared lists;
+//                                 unlike sq:queue:colors (personal lists),
+//                                 not wired into buildPrefs/applyPrefs, so it
+//                                 doesn't travel with an export or sync pull
 //
 // Every other sq: key belongs in SYNCED_KEYS. Every key must appear in
 // exactly one of the two sets below — app-state.test.ts greps the whole
@@ -48,7 +54,10 @@ export const LOCAL_KEYS = [
 	'sq:import-missed',
 	'sq:dismiss-cancel',
 	'sq:budget-callout-dismissed',
-	'sq:nav-hint-dismissed'
+	'sq:nav-hint-dismissed',
+	'sq:list-hint-dismissed',
+	'sq:share-hint-dismissed',
+	'sq:shared-list-colors'
 ] as const;
 
 export const APP_STATE_VERSION = 2;

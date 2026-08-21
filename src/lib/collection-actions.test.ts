@@ -12,7 +12,9 @@ import {
 	joinCollection,
 	promoteCollection,
 	loadCollectionItems,
-	toggleCollectionWatched
+	toggleCollectionWatched,
+	renameSharedCollection,
+	addItemsToSharedCollection
 } from './collection-actions';
 
 const noop = { setBusy: () => {}, setError: () => {} };
@@ -377,5 +379,160 @@ describe('loadCollectionItems / toggleCollectionWatched', () => {
 
 		expect(result![0].watch?.[ALICE]).toBeUndefined();
 		expect(result![0].watch?.[BOB]).toBeTruthy();
+	});
+});
+
+describe('renameSharedCollection', () => {
+	it('PATCHes the collection and returns it with the new name', async () => {
+		const fetchMock = vi.fn(async (..._args: unknown[]) =>
+			Response.json({ id: COLL, name: 'Movie Night' })
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		const result = await renameSharedCollection(collection(), 'Movie Night', noop);
+
+		expect(result?.name).toBe('Movie Night');
+		expect(result?.id).toBe(COLL);
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe(`/api/collections/${COLL}`);
+		expect((init as RequestInit).method).toBe('PATCH');
+		expect(JSON.parse(String((init as RequestInit).body))).toEqual({ name: 'Movie Night' });
+	});
+
+	it('surfaces a server error instead of throwing', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				Response.json({ error: 'Only the owner can rename this list' }, { status: 403 })
+			)
+		);
+
+		const c = capture();
+		const result = await renameSharedCollection(collection(), 'New name', c.deps);
+
+		expect(result).toBeNull();
+		expect(c.err()).toBeTruthy();
+	});
+});
+
+describe('addItemsToSharedCollection', () => {
+	beforeEach(async () => {
+		const { enableSyncWithDek } = await import('./sync');
+		await enableSyncWithDek(await generateShareKey(), 'alice@example.com');
+	});
+
+	function stubAddFetch(opts: { initialItems?: unknown[]; members?: unknown[] } = {}) {
+		let version = 1;
+		let stored: unknown[] = opts.initialItems ?? [];
+		const members = opts.members ?? [
+			{ userId: ALICE, email: 'alice@example.com', role: 'owner', dekVersion: 1 }
+		];
+		const mock = vi.fn(async (url: string, init?: RequestInit) => {
+			const u = String(url);
+			if (u.endsWith('/members')) {
+				return Response.json({ members });
+			}
+			if (u.includes('/blob') && (!init || init.method === undefined)) {
+				const { gzip } = await import('./gzip');
+				const { encryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const compressed = await gzip(new TextEncoder().encode(JSON.stringify({ items: stored })));
+				const ciphertext = await encryptBytesWithDek(compressed, dek);
+				return new Response(ciphertext, {
+					status: 200,
+					headers: { 'X-Sync-Version': String(version), 'X-Collection-Dek-Version': '1' }
+				});
+			}
+			if (u.includes('/blob') && init?.method === 'PUT') {
+				const { gunzip } = await import('./gzip');
+				const { decryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const body = await new Response(init.body as BodyInit).arrayBuffer();
+				const plain = await decryptBytesWithDek(body, dek);
+				stored = (JSON.parse(new TextDecoder().decode(await gunzip(plain))) as { items: unknown[] })
+					.items;
+				version++;
+				return Response.json({ version });
+			}
+			throw new Error(`unexpected request: ${u}`);
+		});
+		return { mock, stored: () => stored };
+	}
+
+	async function seedLocal(entries: { tmdb_id: number }[]) {
+		const { addItem, getAll } = await import('./db');
+		for (const e of entries) {
+			await addItem({
+				tmdb_id: e.tmdb_id,
+				media_type: 'movie',
+				title: `Title ${e.tmdb_id}`,
+				poster_path: null,
+				overview: null,
+				providers: [],
+				runtime_minutes: 100,
+				seasons: [],
+				watched_seasons: [],
+				queue_tag: null
+			} as never);
+		}
+		return getAll();
+	}
+
+	it('moves the given items into the shared blob and tombstones them locally', async () => {
+		const items = await seedLocal([{ tmdb_id: 100 }, { tmdb_id: 101 }]);
+		const { mock, stored } = stubAddFetch();
+		vi.stubGlobal('fetch', mock);
+
+		const ok = await addItemsToSharedCollection(collection(), items, noop);
+		expect(ok).toBe(true);
+
+		const blobItems = stored() as { tmdb_id: number; added_by_account_id: string }[];
+		expect(blobItems.map((i) => i.tmdb_id).sort()).toEqual([100, 101]);
+		expect(blobItems.every((i) => i.added_by_account_id === ALICE)).toBe(true);
+
+		const { getAll } = await import('./db');
+		expect(await getAll()).toEqual([]);
+	});
+
+	it('dedupes against items already present in the shared blob', async () => {
+		const items = await seedLocal([{ tmdb_id: 200 }]);
+		const existing = {
+			tmdb_id: 200,
+			media_type: 'movie',
+			title: 'Already there',
+			poster_path: null,
+			overview: null,
+			providers: [],
+			runtime_minutes: 100,
+			seasons: [],
+			watched_seasons: [],
+			added_at: '2026-08-01T00:00:00.000Z',
+			watched_at: null,
+			updated_at: '2026-08-01T00:00:00.000Z',
+			watch: {},
+			added_by_account_id: BOB
+		};
+		const { mock, stored } = stubAddFetch({ initialItems: [existing] });
+		vi.stubGlobal('fetch', mock);
+
+		await addItemsToSharedCollection(collection(), items, noop);
+
+		expect(stored()).toHaveLength(1);
+		expect((stored()[0] as { added_by_account_id: string }).added_by_account_id).toBe(BOB);
+	});
+
+	it('fails without touching local items when the caller is not a recognized member', async () => {
+		const items = await seedLocal([{ tmdb_id: 300 }]);
+		const { mock } = stubAddFetch({ members: [] });
+		vi.stubGlobal('fetch', mock);
+
+		const c = capture();
+		const ok = await addItemsToSharedCollection(collection(), items, c.deps);
+
+		expect(ok).toBe(false);
+		expect(c.err()).toBeTruthy();
+
+		const { getAll } = await import('./db');
+		expect((await getAll()).map((i) => i.tmdb_id)).toEqual([300]);
 	});
 });

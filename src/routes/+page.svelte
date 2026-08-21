@@ -1,11 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { motion } from '$lib/motion.svelte';
 	import { DEFAULT_BUDGET_HOURS } from '$lib/progress';
+	import { shouldRedirectToApp } from '$lib/landing';
 
 	let tab = $state<'timeline' | 'list' | 'cards'>('timeline');
+	// Set in afterNavigate below — true when this page renders at all for a
+	// returning user (a cold load never gets here; it redirects before this
+	// component's markup matters). Swaps the CTAs from "start" to "back to
+	// what you already have" so a welcomed visitor who reached this page via
+	// the logo (#196) isn't offered onboarding they don't need.
+	let welcomed = $state(false);
 
 	// ── Product mock data ─────────────────────────────────────────────────
 	// The mock is a deliberately miniature, stylized impression of the three
@@ -108,17 +115,22 @@
 
 	const WATCHED_SEASONS = ['S1', 'S2', 'S3', 'S4'];
 
-	onMount(() => {
+	// #196: see landing.ts for the redirect condition itself and why it's
+	// pulled out as a plain function.
+	afterNavigate((navigation) => {
 		try {
-			const isPreview = new URLSearchParams(window.location.search).has('preview');
-			if (!isPreview && localStorage.getItem('sq:welcomed')) {
+			const isLanding = new URLSearchParams(window.location.search).has('landing');
+			const isWelcomed = localStorage.getItem('sq:welcomed') === '1';
+			welcomed = isWelcomed;
+			if (shouldRedirectToApp(navigation.type, isWelcomed, isLanding)) {
 				goto(resolve('/app'), { replaceState: true });
-				return;
 			}
 		} catch {
 			// Best-effort localStorage read; app shows landing page if check fails
 		}
+	});
 
+	onMount(() => {
 		// Parallax blobs
 		const blobs = [...document.querySelectorAll<HTMLElement>('[data-parallax]')];
 		function onScroll() {
@@ -205,12 +217,21 @@
 					cancel everything else.
 				</p>
 				<div data-reveal class="flex flex-wrap items-center gap-3">
-					<button
-						onclick={start}
-						class="rounded-2xl bg-orange-500 px-7 py-3.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
-					>
-						Start your queue
-					</button>
+					{#if welcomed}
+						<a
+							href={resolve('/app')}
+							class="rounded-2xl bg-orange-500 px-7 py-3.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
+						>
+							← Back to Queue
+						</a>
+					{:else}
+						<button
+							onclick={start}
+							class="rounded-2xl bg-orange-500 px-7 py-3.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
+						>
+							Start your queue
+						</button>
+					{/if}
 					<a
 						href="#how"
 						class="rounded-2xl bg-gray-100 px-6 py-3.5 text-[15px] font-semibold text-gray-900 transition-[filter] hover:brightness-95 dark:bg-gray-800 dark:text-gray-100"
@@ -656,12 +677,21 @@
 					Add what you want to watch, find out which services have it, and finally know what's worth
 					paying for.
 				</p>
-				<button
-					onclick={start}
-					class="rounded-2xl bg-orange-500 px-9 py-4 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
-				>
-					See what you're paying for — free
-				</button>
+				{#if welcomed}
+					<a
+						href={resolve('/app')}
+						class="inline-block rounded-2xl bg-orange-500 px-9 py-4 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
+					>
+						← Back to Queue
+					</a>
+				{:else}
+					<button
+						onclick={start}
+						class="rounded-2xl bg-orange-500 px-9 py-4 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
+					>
+						See what you're paying for — free
+					</button>
+				{/if}
 			</div>
 		</div>
 	</section>
@@ -680,11 +710,19 @@
 				<a href="#how" class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white"
 					>How it works</a
 				>
-				<button
-					onclick={start}
-					class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white"
-					>Get started</button
-				>
+				{#if welcomed}
+					<a
+						href={resolve('/app')}
+						class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white"
+						>Back to Queue</a
+					>
+				{:else}
+					<button
+						onclick={start}
+						class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white"
+						>Get started</button
+					>
+				{/if}
 			</div>
 			<div class="text-[12px] text-gray-500">© 2026 Queuest</div>
 		</div>

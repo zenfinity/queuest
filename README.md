@@ -29,9 +29,12 @@ The **Gantt view** groups your queue by provider. Each bar's width represents wa
 The **Suggest** tab ranks providers by total remaining watch time across your unwatched titles — useful for deciding what to subscribe to first. Checking off seasons reduces a show's contribution automatically.
 
 ### 3. Your data, your device
-Everything is stored locally in your browser's IndexedDB. No account is required and nothing is tracked — the whole app works signed-out. Use **Settings → Export** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and collection colors — a complete restore.
+Everything is stored locally in your browser's IndexedDB. No account is required and nothing is tracked — the whole app works signed-out. Use **Settings → Export** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and list colors — a complete restore of everything local. Shared lists aren't included, since they never touch local storage — see below.
 
 If you want the same queue on more than one device, **Settings → Sync** adds an optional account. Your queue is encrypted on your device before it's sent, under a key derived from a passphrase that never leaves your browser — so the server stores ciphertext it has no way to read.
+
+### 4. Watch something together
+**Lists** are for organising solo — but any list can become a **shared list**: an ongoing, two-way collection two or more people add to, watch, and track together, each seeing who added what and who's already watched it. Turn a personal list into one from the Lists page; invite by link or QR code. Both people need a Queuest account for this — changes sync on open and after each edit, end-to-end encrypted, so the server never sees the titles either side adds. If someone doesn't want an account, a **read-only link** shares a one-way, disposable snapshot of a list instead — no sign-in for either side, just a link that stops working after 30 days.
 
 ---
 
@@ -39,7 +42,7 @@ If you want the same queue on more than one device, **Settings → Sync** adds a
 
 ### The core idea
 
-- 📊 **Gantt view** — one lane per service, bar width = remaining watch time against your monthly budget. If a lane fits inside one bar-width, one month of that subscription clears it. Lanes can group by service or by collection.
+- 📊 **Gantt view** — one lane per service, bar width = remaining watch time against your monthly budget. If a lane fits inside one bar-width, one month of that subscription clears it. Lanes can group by service or by list.
 - ⏱ **Viewing budget** — set hrs/week × weeks/month on the Budget page; every runtime in the app is framed against it.
 - 🏆 **Suggest** — services ranked by total remaining watch time in your queue, so you know what to subscribe to next.
 - 🔔 **Cancellation alerts** — a nudge when you've nearly cleared everything queued on a service.
@@ -47,15 +50,16 @@ If you want the same queue on more than one device, **Settings → Sync** adds a
 ### Sync and privacy
 
 - 🔐 **End-to-end encrypted sync** — opt in and your queue follows you across devices. Encrypted client-side under a passphrase-derived key that never reaches the server; the server stores only ciphertext it cannot read. Includes a printed recovery code, because a forgotten passphrase is otherwise unrecoverable by design.
-- 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto. Restores queue, preferences, view settings, and collection colors completely.
-- 🔗 **Encrypted share links** — share a filtered subset of your queue as a short URL. The decryption key lives only in the URL fragment, so it never reaches the server. Links expire after 30 days.
+- 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto. Restores queue, preferences, view settings, and list colors completely. Shared lists aren't included — see below.
+- 👥 **Shared lists** — turn any personal list into an ongoing, two-way collection with other people. Each collaborator gets their own keypair; the list's own encryption key is wrapped individually per member, so the server only ever holds ciphertext no single party controls. Invite by link or QR code — the key travels in the URL fragment, never in a request the server logs. A small badge flags what's changed since you last looked. Removing a member rotates the key and re-encrypts the list in one step, so a removed member's access is actually revoked, not just hidden.
+- 🔗 **Read-only links** — the account-free option: a disposable, one-way snapshot of a single list as a short URL, viewable and importable by anyone, no sign-in on either side. The decryption key lives only in the URL fragment. Links expire after 30 days.
 
 ### Organising the queue
 
-- 🏷️ **Collections** — group titles into named, colour-coded collections (date night, with the kids, horror October). Each shows its own runtime total. Imported shared lists land in their own collection automatically.
-- 📋 **Grid, List, and Gantt views** with sort (A–Z, runtime, date added, watched) and optional grouping by collection.
-- 🧭 **Queue dock** — the main filter surface: view switcher, inclusive Watched toggle, and sort/service/collection filters.
-- ✅ **Watch tracking** — mark titles done; season-level progress (with episode counts) shrinks bar widths automatically.
+- 🏷️ **Lists** — group titles into named, colour-coded lists (date night, with the kids, horror October). Each shows its own runtime total. Accepting a read-only link automatically creates a list from it. Select multiple titles at once from the queue to assign, clear, mark watched, or remove them in bulk.
+- 📋 **Grid, List, and Gantt views** with sort (A–Z, runtime, date added, watched) and optional grouping by list.
+- 🧭 **Queue dock** — the main filter surface: view switcher, inclusive Watched toggle, and sort/service/list filters.
+- ✅ **Watch tracking** — mark titles done; season-level progress (with episode counts) shrinks bar widths automatically. On a shared list, each collaborator's own watch mark is tracked independently.
 
 ### Finding and adding titles
 
@@ -67,7 +71,7 @@ If you want the same queue on more than one device, **Settings → Sync** adds a
 
 ### Everything else
 
-- 🚪 **Guided onboarding** for first-time visitors, from the landing page through setting a budget to adding a first title.
+- 🚪 **Guided onboarding** for first-time visitors, from the landing page through setting a budget to adding a first title — including a one-time nudge toward swipe / <kbd>Alt</kbd>+←→ tab switching, shown right after your first add.
 - 🌙 **Dark / light mode**, persisted in preferences and backup file.
 - 🔄 **Refresh provider data** — re-fetch streaming info for every queued title in one click (Settings).
 - 💬 **In-app feedback** — files a GitHub issue directly from Settings.
@@ -81,7 +85,7 @@ If you want the same queue on more than one device, **Settings → Sync** adds a
 | Framework | [SvelteKit 2](https://kit.svelte.dev) + [Svelte 5](https://svelte.dev) (runes) |
 | Styling | [Tailwind CSS v4](https://tailwindcss.com) (Vite plugin, class-based dark mode) |
 | Storage | [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) client-side; [Cloudflare D1](https://developers.cloudflare.com/d1/) + KV server-side for opt-in sync (ciphertext only) |
-| Crypto | [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) — AES-GCM encryption, PBKDF2 key derivation |
+| Crypto | [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) — AES-GCM encryption, PBKDF2 key derivation, RSA-OAEP for per-member wrapped keys on shared lists |
 | Data | [TMDB API](https://developer.themoviedb.org) — search, metadata, JustWatch provider data |
 | Hosting | [Cloudflare Pages](https://pages.cloudflare.com) |
 | Deployment | [@sveltejs/adapter-cloudflare](https://kit.svelte.dev/docs/adapter-cloudflare) |
@@ -121,8 +125,8 @@ npm run preview   # uses wrangler pages dev
 ## Data & Privacy
 
 - **No account required, and none by default.** No analytics, no tracking cookies. Everything works signed-out.
-- **Your watch data lives in your browser's IndexedDB.** It leaves your device only if you export it, share a link, or turn on sync — all three encrypt on your device first.
-- **Sync is opt-in and end-to-end encrypted.** Turning it on creates an account (email + passphrase). Your queue is encrypted client-side under a key derived from your passphrase, which is never sent to the server — the server only ever stores ciphertext it cannot read. See [Sync and encryption](#sync-and-privacy).
+- **Your watch data lives in your browser's IndexedDB.** It leaves your device only if you export it, create a read-only link, turn on sync, or share a list with someone — all four encrypt on your device first.
+- **Sync is opt-in and end-to-end encrypted.** Turning it on creates an account (email + passphrase). Your queue is encrypted client-side under a key derived from your passphrase, which is never sent to the server — the server only ever stores ciphertext it cannot read. Shared lists build on the same account and the same guarantee, extended to multiple people. See [Sync and encryption](#sync-and-privacy).
 - Provider data is sourced from TMDB/JustWatch and reflects US availability only. It can lag real-world changes by a few days.
 - This product uses the TMDB API but is not endorsed or certified by TMDB.
 
@@ -137,6 +141,7 @@ Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API re
 - Provider data is US-only (JustWatch regional restriction via TMDB)
 - Bundle-only availability (e.g. Hulu + Disney+ bundle) is filtered where detected; Disney+ data is inferred rather than sourced directly — see [#5](https://github.com/zenfinity/queuest/issues/5)
 - Importing watchlists from other sources (Plex, additional Trakt-style feeds) is still open — see [#4](https://github.com/zenfinity/queuest/issues/4). Letterboxd, Criterion, and IMDb are already supported via **Add → Import**.
+- Shared lists require an account on both sides — that's the tradeoff for multi-person editing under end-to-end encryption; it isn't push/real-time, it syncs on open and after each edit. The account-free option is a read-only link, which is one-way and doesn't stay in sync with future changes.
 
 ---
 

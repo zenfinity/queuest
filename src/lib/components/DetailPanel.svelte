@@ -43,7 +43,9 @@
 		onClose,
 		footer,
 		existingCollections = [],
-		onSetCollection
+		onSetCollection,
+		sharedCollections = [],
+		onAssignShared
 	}: {
 		item: DetailPanelItem;
 		budgetHours: number;
@@ -53,6 +55,8 @@
 		footer: Snippet<[DetailPanelItem]>;
 		existingCollections?: string[];
 		onSetCollection?: (tag: string | null) => Promise<void>;
+		sharedCollections?: { id: string; name: string }[];
+		onAssignShared?: (collectionId: string) => Promise<void>;
 	} = $props();
 
 	let overviewExpanded = $state(false);
@@ -220,7 +224,11 @@
 								}
 								collectionBusy = true;
 								try {
-									await onSetCollection(value || null);
+									if (value.startsWith('shared:')) {
+										await onAssignShared?.(value.slice('shared:'.length));
+									} else {
+										await onSetCollection(value || null);
+									}
 								} finally {
 									collectionBusy = false;
 								}
@@ -231,6 +239,13 @@
 							{#each existingCollections as collection (collection)}
 								<option value={collection}>{collection}</option>
 							{/each}
+							{#if onAssignShared && sharedCollections.length > 0}
+								<optgroup label="Shared">
+									{#each sharedCollections as coll (coll.id)}
+										<option value={`shared:${coll.id}`}>{coll.name}</option>
+									{/each}
+								</optgroup>
+							{/if}
 							<option value="__manage__">Manage lists…</option>
 						</select>
 					</div>

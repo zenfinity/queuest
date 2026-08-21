@@ -24,8 +24,16 @@
 		saveBudgetPrefs,
 		DEFAULT_BUDGET_HOURS
 	} from '$lib/progress';
-	import { getQueueColors } from '$lib/queue-colors';
+	import { getQueueColors, getOrAssignSharedListColor } from '$lib/queue-colors';
+	import {
+		listCollections as listSharedCollections,
+		addItemsToSharedCollection,
+		type SharedCollection,
+		type CollectionActionDeps
+	} from '$lib/collection-actions';
+	import { isSyncEnabled } from '$lib/sync';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
+	import SharedListSection from '$lib/components/SharedListSection.svelte';
 	import { queueControls, SORT_DEFAULT_DIR, UNCATEGORIZED } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import { readNumber, readRecord } from '$lib/storage';
@@ -33,7 +41,7 @@
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
-	import NavHint from '$lib/components/NavHint.svelte';
+	import ListHint from '$lib/components/ListHint.svelte';
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	function loadPref<T extends string>(key: string, fallback: T): T {
@@ -48,6 +56,8 @@
 	let loaded = $state(false);
 	let queueColors = $state<Record<string, string>>({});
 	let busy = new SvelteSet<number>();
+	let sharedCollections = $state<SharedCollection[]>([]);
+	let sharedListColors = $state<Record<string, string>>({});
 
 	// ── Bulk selection (#113) ────────────────────────────────────────────────
 	let selectMode = $state(false);
@@ -76,10 +86,18 @@
 	}
 
 	async function bulkAssign() {
-		const tag = bulkNewTag.trim() || bulkTargetTag || null;
 		bulkBusy = true;
 		try {
-			await bulkSetCollection(selectedItems(), tag, actionDeps);
+			if (bulkTargetTag.startsWith('shared:') && !bulkNewTag.trim()) {
+				const coll = sharedCollections.find((c) => c.id === bulkTargetTag.slice(7));
+				if (coll) {
+					const ok = await addItemsToSharedCollection(coll, selectedItems(), collectionActionDeps);
+					if (ok) await reload();
+				}
+			} else {
+				const tag = bulkNewTag.trim() || bulkTargetTag || null;
+				await bulkSetCollection(selectedItems(), tag, actionDeps);
+			}
 		} finally {
 			bulkBusy = false;
 		}
@@ -241,6 +259,22 @@
 		await reloadQueue(actionDeps);
 	}
 
+	const collectionActionDeps: CollectionActionDeps = {
+		setBusy: () => {},
+		setError: (message) => {
+			dbError = message;
+		}
+	};
+
+	async function loadSharedCollections() {
+		sharedCollections = await listSharedCollections({ setBusy: () => {}, setError: () => {} });
+		const updated = { ...sharedListColors };
+		for (const coll of sharedCollections) {
+			if (!updated[coll.id]) updated[coll.id] = getOrAssignSharedListColor(coll.id);
+		}
+		sharedListColors = updated;
+	}
+
 	onMount(() => {
 		queueControls.sortBy = loadPref<SortKey>('sq:sort', 'added');
 		queueControls.sortDir = loadPref<'asc' | 'desc'>(
@@ -266,6 +300,10 @@
 
 		Promise.all([reload(), ensureSubscribedLoaded()]).then(() => {
 			loaded = true;
+		});
+
+		isSyncEnabled().then((enabled) => {
+			if (enabled) loadSharedCollections();
 		});
 
 		return () => window.removeEventListener('beforeunload', onBeforeUnload);
@@ -305,8 +343,10 @@
 	});
 
 	// Lets the nav know whether the dock has anything to show, for the lg+ inline placement.
+	// Shared lists count too — their sections read the same sort/watched/service
+	// filters, so the dock earns its keep even when the personal queue is empty.
 	$effect(() => {
-		queueControls.hasItems = loaded && items.length > 0;
+		queueControls.hasItems = loaded && (items.length > 0 || sharedCollections.length > 0);
 	});
 
 	// ── Actions ───────────────────────────────────────────────────────────────
@@ -381,7 +421,7 @@
 	{/if}
 {/snippet}
 
-<NavHint show={loaded && items.length > 0} />
+<ListHint show={loaded && items.length >= 3 && existingCollections.length === 0} />
 
 <h1 class="sr-only">My Queue</h1>
 
@@ -543,6 +583,13 @@
 					{#each existingCollections as collection (collection)}
 						<option value={collection}>{collection}</option>
 					{/each}
+					{#if sharedCollections.length > 0}
+						<optgroup label="Shared">
+							{#each sharedCollections as coll (coll.id)}
+								<option value={`shared:${coll.id}`}>{coll.name}</option>
+							{/each}
+						</optgroup>
+					{/if}
 				</select>
 				<input
 					type="text"
@@ -669,6 +716,17 @@
 	{/if}
 </div>
 
+{#if sharedCollections.length > 0}
+	<div class="mt-6 space-y-2 xs:mt-8">
+		<h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+			Shared Lists
+		</h2>
+		{#each sharedCollections as coll (coll.id)}
+			<SharedListSection collection={coll} color={sharedListColors[coll.id] ?? '#9ca3af'} />
+		{/each}
+	</div>
+{/if}
+
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->
 {#if detailItem}
 	{@const di = detailItem}
@@ -682,6 +740,16 @@
 		onSetCollection={async (tag) => {
 			await setItemCollection(di, tag, actionDeps);
 			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
+		{sharedCollections}
+		onAssignShared={async (collectionId) => {
+			const coll = sharedCollections.find((c) => c.id === collectionId);
+			if (!coll) return;
+			const ok = await addItemsToSharedCollection(coll, [di], collectionActionDeps);
+			if (ok) {
+				await reload();
+				detailItem = null;
+			}
 		}}
 	>
 		{#snippet footer(item)}

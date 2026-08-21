@@ -18,6 +18,7 @@
 		promoteCollection,
 		createInvite,
 		removeMemberAndRotate,
+		renameSharedCollection,
 		listMembers,
 		loadCollectionItems,
 		type SharedCollection,
@@ -29,9 +30,12 @@
 		getQueueColors,
 		setQueueColor,
 		renameCollectionColor,
-		deleteCollectionColor
+		deleteCollectionColor,
+		getOrAssignSharedListColor,
+		setSharedListColor
 	} from '$lib/queue-colors';
 	import { listCollections } from '$lib/queue-actions';
+	import ShareHint from '$lib/components/ShareHint.svelte';
 
 	let syncEnabled = $state(false);
 
@@ -51,6 +55,16 @@
 	let openMembers: CollectionMember[] = $state([]);
 	let loadingMembers = $state(false);
 	let newActivityCounts: Record<string, number> = $state({});
+	let renamingSharedId: string | null = $state(null);
+	let sharedRenameInput = $state('');
+	let sharedRenameBusy = $state(false);
+	let sharedRenameError = $state('');
+	// Deliberately its own map, not queueColors — that one is keyed by
+	// personal list *name* and doubles as the "which names exist" source for
+	// the Lists section (see listCollections's extraNames below). Reusing it
+	// keyed by shared-list *id* briefly leaked shared list ids in as phantom
+	// empty personal lists the first time this shipped.
+	let sharedListColors = $state<Record<string, string>>({});
 
 	async function loadSharedCollections() {
 		sharedCollections = await listSharedCollections({
@@ -62,6 +76,23 @@
 		for (const coll of sharedCollections) {
 			loadActivityCount(coll);
 		}
+		// Color is a local, per-device preference — not part of the collection's
+		// own synced state. Auto-assigned on first view so the swatch is never
+		// just gray.
+		const updated = { ...sharedListColors };
+		let changed = false;
+		for (const coll of sharedCollections) {
+			if (!updated[coll.id]) {
+				updated[coll.id] = getOrAssignSharedListColor(coll.id);
+				changed = true;
+			}
+		}
+		if (changed) sharedListColors = updated;
+	}
+
+	function updateSharedListColor(id: string, color: string) {
+		setSharedListColor(id, color);
+		sharedListColors = { ...sharedListColors, [id]: color };
 	}
 
 	async function loadActivityCount(coll: SharedCollection) {
@@ -155,6 +186,30 @@
 		}
 	}
 
+	function startSharedRename(coll: SharedCollection) {
+		renamingSharedId = coll.id;
+		sharedRenameInput = coll.name;
+		sharedRenameError = '';
+	}
+
+	async function saveSharedRename(coll: SharedCollection) {
+		const name = sharedRenameInput.trim();
+		if (!name || name === coll.name) {
+			renamingSharedId = null;
+			return;
+		}
+		sharedRenameBusy = true;
+		const result = await renameSharedCollection(coll, name, {
+			setBusy: () => {},
+			setError: (e) => (sharedRenameError = e)
+		});
+		sharedRenameBusy = false;
+		if (result) {
+			sharedCollections = sharedCollections.map((c) => (c.id === coll.id ? result : c));
+			renamingSharedId = null;
+		}
+	}
+
 	// ── Personal Lists ────────────────────────────────────────────────────────
 	let queueColors = $state<Record<string, string>>({});
 	let collections = $state<string[]>([]);
@@ -175,12 +230,16 @@
 	let readOnlyLinkUrl = $state('');
 	let readOnlyLinkCopied = $state(false);
 	let readOnlyLinkError = $state('');
+	let readOnlyLinkQr = $state('');
+	let showReadOnlyLinkQr = $state(false);
 
 	async function createReadOnlyLink(name: string) {
 		readOnlyLinkFor = name;
 		readOnlyLinkUrl = '';
 		readOnlyLinkCopied = false;
 		readOnlyLinkError = '';
+		readOnlyLinkQr = '';
+		showReadOnlyLinkQr = false;
 		const tagged = items.filter((i) => i.queue_tag === name);
 		await createShareLink(tagged, new Set([name]), [name], {
 			setShareCreating: (v) => (readOnlyLinkCreating = v),
@@ -194,6 +253,63 @@
 		await navigator.clipboard.writeText(readOnlyLinkUrl);
 		readOnlyLinkCopied = true;
 		setTimeout(() => (readOnlyLinkCopied = false), 2000);
+	}
+
+	// Same on-demand generation as the invite QR above — most people just copy
+	// the link, so the encoder only loads for the ones who ask for a code.
+	async function toggleReadOnlyLinkQr() {
+		showReadOnlyLinkQr = !showReadOnlyLinkQr;
+		if (showReadOnlyLinkQr && !readOnlyLinkQr && readOnlyLinkUrl) {
+			const { toQrSvg } = await import('$lib/qrcode');
+			readOnlyLinkQr = await toQrSvg(readOnlyLinkUrl);
+		}
+	}
+
+	// ── Whole-queue read-only link ───────────────────────────────────────────
+	// Same mechanism as the per-list read-only link, just unscoped — sharing
+	// requiring a list first was real friction for the most natural first
+	// share ("check out my queue") for anyone who hasn't organized into lists
+	// yet. Deliberately no filter UI (status/type/provider) like the old
+	// standalone /share page had — one unfiltered snapshot of everything is a
+	// much smaller surface than that page was, which is the point.
+	let showWholeQueueLink = $state(false);
+	let wholeQueueLinkCreating = $state(false);
+	let wholeQueueLinkUrl = $state('');
+	let wholeQueueLinkCopied = $state(false);
+	let wholeQueueLinkError = $state('');
+	let wholeQueueLinkQr = $state('');
+	let showWholeQueueLinkQr = $state(false);
+
+	async function createWholeQueueLink() {
+		showWholeQueueLink = true;
+		wholeQueueLinkUrl = '';
+		wholeQueueLinkCopied = false;
+		wholeQueueLinkError = '';
+		wholeQueueLinkQr = '';
+		showWholeQueueLinkQr = false;
+		// Empty selectedQueueNames means activeQueues.length is never 1 inside
+		// createShareLink, so it falls back to the account's own queue name
+		// (Settings → Export) rather than picking one list's name arbitrarily.
+		await createShareLink(items, new Set(), [], {
+			setShareCreating: (v) => (wholeQueueLinkCreating = v),
+			setShareUrl: (v) => (wholeQueueLinkUrl = v),
+			setShareError: (v) => (wholeQueueLinkError = v)
+		});
+	}
+
+	async function copyWholeQueueLink() {
+		if (!wholeQueueLinkUrl) return;
+		await navigator.clipboard.writeText(wholeQueueLinkUrl);
+		wholeQueueLinkCopied = true;
+		setTimeout(() => (wholeQueueLinkCopied = false), 2000);
+	}
+
+	async function toggleWholeQueueLinkQr() {
+		showWholeQueueLinkQr = !showWholeQueueLinkQr;
+		if (showWholeQueueLinkQr && !wholeQueueLinkQr && wholeQueueLinkUrl) {
+			const { toQrSvg } = await import('$lib/qrcode');
+			wholeQueueLinkQr = await toQrSvg(wholeQueueLinkUrl);
+		}
 	}
 
 	function updateCollectionColor(tag: string, color: string) {
@@ -299,6 +415,8 @@
 
 <svelte:head><title>Queuest — Lists</title></svelte:head>
 
+<ShareHint show={syncEnabled && collections.length > 0} />
+
 <h1 class="sr-only">Lists</h1>
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
@@ -306,8 +424,8 @@
 	<section class="space-y-3">
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Lists</h2>
 		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Organize your queue into lists, then assign items to them from the detail panel. Importing a
-			shared list automatically creates one.
+			Organize your queue into lists, then assign items to them from the detail panel. Accepting a
+			read-only link automatically creates one.
 		</p>
 		<form
 			class="flex gap-2"
@@ -343,11 +461,25 @@
 					{@const isPromoting = promoteArmed === collection}
 					{@const isReadOnlyLink = readOnlyLinkFor === collection}
 					<div>
-						<div
-							class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60"
-						>
-							<div class="flex items-center gap-2.5 min-w-0 flex-1">
-								<span class="h-3 w-3 shrink-0 rounded-full" style="background:{color};"></span>
+						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
+							<div class="flex items-center gap-2.5 min-w-0">
+								<label class="relative shrink-0 cursor-pointer" title="Change color">
+									<span
+										class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+										style="background:{color};"
+									></span>
+									<input
+										type="color"
+										aria-label="List color"
+										value={color}
+										oninput={(e) =>
+											updateCollectionColor(
+												collection,
+												(e.currentTarget as HTMLInputElement).value
+											)}
+										class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+									/>
+								</label>
 								{#if isRenaming}
 									<!-- svelte-ignore a11y_autofocus -->
 									<input
@@ -370,7 +502,7 @@
 									<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">({count})</span>
 								{/if}
 							</div>
-							<div class="flex items-center gap-1 ml-2 shrink-0">
+							<div class="mt-2 flex flex-wrap items-center gap-1">
 								{#if isRenaming}
 									<button
 										disabled={manageBusy}
@@ -408,23 +540,6 @@
 										Cancel
 									</button>
 								{:else}
-									<label class="relative cursor-pointer" title="Change color">
-										<span
-											class="block h-6 w-6 rounded border border-gray-300 shadow-sm dark:border-gray-600"
-											style="background:{color};"
-										></span>
-										<input
-											type="color"
-											aria-label="List color"
-											value={color}
-											oninput={(e) =>
-												updateCollectionColor(
-													collection,
-													(e.currentTarget as HTMLInputElement).value
-												)}
-											class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-										/>
-									</label>
 									{#if syncEnabled}
 										<button
 											disabled={manageBusy || promoting}
@@ -534,7 +649,23 @@
 										>
 											{readOnlyLinkCopied ? '✓' : 'Copy'}
 										</button>
+										<button
+											onclick={toggleReadOnlyLinkQr}
+											class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+										>
+											{showReadOnlyLinkQr ? 'Hide QR' : 'QR code'}
+										</button>
 									</div>
+									{#if showReadOnlyLinkQr}
+										<div class="mt-2 flex justify-center rounded bg-white p-2">
+											{#if readOnlyLinkQr}
+												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+												{@html readOnlyLinkQr}
+											{:else}
+												<p class="py-8 text-gray-500">Generating…</p>
+											{/if}
+										</div>
+									{/if}
 								{/if}
 								{#if readOnlyLinkError}
 									<p class="mt-1.5 text-red-600 dark:text-red-400">{readOnlyLinkError}</p>
@@ -549,6 +680,68 @@
 						{/if}
 					</div>
 				{/each}
+			</div>
+		{/if}
+
+		<button
+			onclick={createWholeQueueLink}
+			disabled={items.length === 0 || wholeQueueLinkCreating}
+			class="mt-1 w-full rounded-lg border border-dashed border-gray-300 px-3 py-2.5 text-left text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300"
+		>
+			Or share your whole queue as a read-only link
+		</button>
+		{#if showWholeQueueLink}
+			<div
+				class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs dark:border-gray-700 dark:bg-gray-800/60"
+			>
+				<p class="text-gray-700 dark:text-gray-300">
+					Anyone with this link can view your whole queue — no account needed. It's a snapshot:
+					their view won't update when you change your queue, and the link stops working after 30
+					days.
+				</p>
+				{#if wholeQueueLinkCreating}
+					<p class="mt-1.5 text-gray-500 dark:text-gray-400">Creating link…</p>
+				{:else if wholeQueueLinkUrl}
+					<div class="mt-2 flex gap-1">
+						<input
+							type="text"
+							readonly
+							value={wholeQueueLinkUrl}
+							class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
+						/>
+						<button
+							onclick={copyWholeQueueLink}
+							class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+						>
+							{wholeQueueLinkCopied ? '✓' : 'Copy'}
+						</button>
+						<button
+							onclick={toggleWholeQueueLinkQr}
+							class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+						>
+							{showWholeQueueLinkQr ? 'Hide QR' : 'QR code'}
+						</button>
+					</div>
+					{#if showWholeQueueLinkQr}
+						<div class="mt-2 flex justify-center rounded bg-white p-2">
+							{#if wholeQueueLinkQr}
+								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+								{@html wholeQueueLinkQr}
+							{:else}
+								<p class="py-8 text-gray-500">Generating…</p>
+							{/if}
+						</div>
+					{/if}
+				{/if}
+				{#if wholeQueueLinkError}
+					<p class="mt-1.5 text-red-600 dark:text-red-400">{wholeQueueLinkError}</p>
+				{/if}
+				<button
+					onclick={() => (showWholeQueueLink = false)}
+					class="mt-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+				>
+					Close
+				</button>
 			</div>
 		{/if}
 	</section>
@@ -569,58 +762,118 @@
 			{:else}
 				<div class="space-y-2">
 					{#each sharedCollections as coll (coll.id)}
-						<div
-							class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60 flex items-center justify-between"
-						>
-							<div class="min-w-0 flex-1">
-								<p
-									class="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5"
-								>
-									{coll.name}
-									{#if newActivityCounts[coll.id]}
+						{@const isRenamingShared = renamingSharedId === coll.id}
+						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
+							<div class="flex items-center justify-between gap-2">
+								<div class="min-w-0 flex items-center gap-2">
+									<label class="relative shrink-0 cursor-pointer" title="Change color">
 										<span
-											class="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+											class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+											style="background:{sharedListColors[coll.id] ?? '#888888'};"
+										></span>
+										<input
+											type="color"
+											aria-label="List color"
+											value={sharedListColors[coll.id] ?? '#888888'}
+											oninput={(e) =>
+												updateSharedListColor(coll.id, (e.currentTarget as HTMLInputElement).value)}
+											class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+										/>
+									</label>
+									{#if isRenamingShared}
+										<!-- svelte-ignore a11y_autofocus -->
+										<input
+											type="text"
+											aria-label="New list name"
+											maxlength="100"
+											value={sharedRenameInput}
+											oninput={(e) => (sharedRenameInput = e.currentTarget.value)}
+											onkeydown={(e) => {
+												if (e.key === 'Enter') saveSharedRename(coll);
+												if (e.key === 'Escape') renamingSharedId = null;
+											}}
+											autofocus
+											class="min-w-0 flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+										/>
+									{:else}
+										<p
+											class="min-w-0 flex items-center gap-1.5 text-sm font-medium text-gray-800 dark:text-gray-200"
 										>
-											{newActivityCounts[coll.id]} new
-										</span>
+											<span class="truncate">{coll.name}</span>
+											{#if newActivityCounts[coll.id]}
+												<span
+													class="shrink-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+												>
+													{newActivityCounts[coll.id]} new
+												</span>
+											{/if}
+										</p>
 									{/if}
-								</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">
-									{coll.role === 'owner' ? 'You own this' : 'Member'}
-								</p>
+								</div>
+								{#if !isRenamingShared}
+									<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
+										{coll.role === 'owner' ? 'You own this' : 'Member'}
+									</span>
+								{/if}
 							</div>
-							<div class="flex gap-1 ml-2">
-								<a
-									href={resolve('/collections/[id]', { id: coll.id })}
-									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-								>
-									Open
-								</a>
-								{#if coll.role === 'owner'}
+							{#if sharedRenameError && isRenamingShared}
+								<p class="mt-1 text-xs text-red-600 dark:text-red-400">{sharedRenameError}</p>
+							{/if}
+							<div class="mt-2 flex flex-wrap items-center gap-1">
+								{#if isRenamingShared}
 									<button
-										onclick={async () => {
-											openCollection = coll;
-											await generateInviteLink();
-										}}
-										class="text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+										disabled={sharedRenameBusy}
+										onclick={() => saveSharedRename(coll)}
+										class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
 									>
-										Invite
+										Save
+									</button>
+									<button
+										disabled={sharedRenameBusy}
+										onclick={() => (renamingSharedId = null)}
+										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+									>
+										Cancel
+									</button>
+								{:else}
+									<a
+										href={resolve('/collections/[id]', { id: coll.id })}
+										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+									>
+										Open
+									</a>
+									{#if coll.role === 'owner'}
+										<button
+											onclick={async () => {
+												openCollection = coll;
+												await generateInviteLink();
+											}}
+											class="text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+										>
+											Invite
+										</button>
+										<button
+											onclick={() => startSharedRename(coll)}
+											class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+										>
+											Rename
+										</button>
+									{/if}
+									<button
+										onclick={() => {
+											if (openCollection?.id === coll.id) {
+												openCollection = null;
+											} else {
+												openCollection = coll;
+												openMembers = [];
+												loadOpenMembers();
+											}
+										}}
+										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+									>
+										{openCollection?.id === coll.id ? 'Hide' : 'Info'}
 									</button>
 								{/if}
-								<button
-									onclick={() => {
-										if (openCollection?.id === coll.id) {
-											openCollection = null;
-										} else {
-											openCollection = coll;
-											openMembers = [];
-											loadOpenMembers();
-										}
-									}}
-									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-								>
-									{openCollection?.id === coll.id ? 'Hide' : 'Info'}
-								</button>
 							</div>
 						</div>
 						{#if openCollection?.id === coll.id}
@@ -717,7 +970,7 @@
 	{:else}
 		<p class="text-sm text-gray-500 dark:text-gray-400">
 			<a href={resolve('/settings')} class="text-orange-500 hover:underline">Turn on sync</a> to share
-			a list with other people and watch together.
+			a list with other people and let them collab with you on it.
 		</p>
 	{/if}
 </div>
