@@ -1,6 +1,7 @@
 import type { SearchResult, WatchlistItem } from './types';
 import { addItem } from './db';
 import { isConstraintError } from './http';
+import { addItemsToSharedCollection, type SharedCollection } from './collection-actions';
 
 export interface AddActionDeps {
 	setAdding: (id: number, adding: boolean) => void;
@@ -8,15 +9,17 @@ export interface AddActionDeps {
 	setError: (id: number, error: string) => void;
 }
 
-export async function addSearchResultToQueue(
+async function addAndPlace(
 	result: SearchResult,
+	queueTag: string | undefined,
+	sharedCollection: SharedCollection | undefined,
 	deps: AddActionDeps
 ): Promise<void> {
 	deps.setAdding(result.id, true);
 	deps.setError(result.id, '');
 
 	try {
-		const item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> = {
+		const item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at' | 'updated_at'> = {
 			tmdb_id: result.id,
 			media_type: result.media_type,
 			title: result.title,
@@ -32,9 +35,23 @@ export async function addSearchResultToQueue(
 			cast: result.cast,
 			director: result.director,
 			creator: result.creator,
-			imdb_id: result.imdb_id
+			imdb_id: result.imdb_id,
+			queue_tag: queueTag
 		};
-		await addItem(item);
+		const created = await addItem(item);
+
+		if (sharedCollection) {
+			// Same "blob write, then remove locally" ordering promoteCollection
+			// relies on — a failure here leaves the title in the personal queue
+			// (untagged) rather than losing it, at the cost of a retry not
+			// re-attempting the shared push specifically.
+			const ok = await addItemsToSharedCollection(sharedCollection, [created], {
+				setBusy: () => {},
+				setError: (msg) => deps.setError(result.id, msg)
+			});
+			if (!ok) return;
+		}
+
 		deps.setAdded(result.id, true);
 	} catch (e) {
 		if (isConstraintError(e)) {
@@ -46,4 +63,27 @@ export async function addSearchResultToQueue(
 	} finally {
 		deps.setAdding(result.id, false);
 	}
+}
+
+export async function addSearchResultToQueue(
+	result: SearchResult,
+	deps: AddActionDeps
+): Promise<void> {
+	return addAndPlace(result, undefined, undefined, deps);
+}
+
+export type AddListTarget = { tag: string } | { collection: SharedCollection };
+
+// The one-tap-away targeted version of addSearchResultToQueue — lands the
+// title straight in a personal or shared list instead of the untagged queue,
+// skipping the "add, then open the detail panel to assign a list" round trip.
+export async function addSearchResultToList(
+	result: SearchResult,
+	target: AddListTarget,
+	deps: AddActionDeps
+): Promise<void> {
+	if ('tag' in target) {
+		return addAndPlace(result, target.tag, undefined, deps);
+	}
+	return addAndPlace(result, undefined, target.collection, deps);
 }

@@ -115,7 +115,7 @@ export async function getAllIncludingDeleted(): Promise<WatchlistItem[]> {
 
 export async function addItem(
 	item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at' | 'updated_at'>
-): Promise<void> {
+): Promise<WatchlistItem> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
@@ -131,7 +131,7 @@ export async function addItem(
 		const req = tx.objectStore(STORE).add(full);
 		req.onsuccess = () => {
 			notifyMutation();
-			resolve();
+			resolve({ ...full, id: req.result as number });
 		};
 		req.onerror = () => reject(req.error);
 	});
