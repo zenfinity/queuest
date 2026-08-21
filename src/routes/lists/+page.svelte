@@ -842,7 +842,7 @@
 									</button>
 								{:else}
 									<a
-										href={resolve('/collections/[id]', { id: coll.id })}
+										href={resolve('/lists/[id]', { id: coll.id })}
 										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
 									>
 										Open
