@@ -24,7 +24,7 @@
 		saveBudgetPrefs,
 		DEFAULT_BUDGET_HOURS
 	} from '$lib/progress';
-	import { getQueueColors } from '$lib/queue-colors';
+	import { getQueueColors, getOrAssignSharedListColor } from '$lib/queue-colors';
 	import {
 		listCollections as listSharedCollections,
 		addItemsToSharedCollection,
@@ -33,6 +33,7 @@
 	} from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
+	import SharedListSection from '$lib/components/SharedListSection.svelte';
 	import { queueControls, SORT_DEFAULT_DIR, UNCATEGORIZED } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import { readNumber, readRecord } from '$lib/storage';
@@ -56,6 +57,7 @@
 	let queueColors = $state<Record<string, string>>({});
 	let busy = new SvelteSet<number>();
 	let sharedCollections = $state<SharedCollection[]>([]);
+	let sharedListColors = $state<Record<string, string>>({});
 
 	// ── Bulk selection (#113) ────────────────────────────────────────────────
 	let selectMode = $state(false);
@@ -266,6 +268,11 @@
 
 	async function loadSharedCollections() {
 		sharedCollections = await listSharedCollections({ setBusy: () => {}, setError: () => {} });
+		const updated = { ...sharedListColors };
+		for (const coll of sharedCollections) {
+			if (!updated[coll.id]) updated[coll.id] = getOrAssignSharedListColor(coll.id);
+		}
+		sharedListColors = updated;
 	}
 
 	onMount(() => {
@@ -336,8 +343,10 @@
 	});
 
 	// Lets the nav know whether the dock has anything to show, for the lg+ inline placement.
+	// Shared lists count too — their sections read the same sort/watched/service
+	// filters, so the dock earns its keep even when the personal queue is empty.
 	$effect(() => {
-		queueControls.hasItems = loaded && items.length > 0;
+		queueControls.hasItems = loaded && (items.length > 0 || sharedCollections.length > 0);
 	});
 
 	// ── Actions ───────────────────────────────────────────────────────────────
@@ -706,6 +715,17 @@
 		/>
 	{/if}
 </div>
+
+{#if sharedCollections.length > 0}
+	<div class="mt-6 space-y-2 xs:mt-8">
+		<h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+			Shared Lists
+		</h2>
+		{#each sharedCollections as coll (coll.id)}
+			<SharedListSection collection={coll} color={sharedListColors[coll.id] ?? '#9ca3af'} />
+		{/each}
+	</div>
+{/if}
 
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->
 {#if detailItem}
