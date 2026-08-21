@@ -722,7 +722,11 @@
 			Shared Lists
 		</h2>
 		{#each sharedCollections as coll (coll.id)}
-			<SharedListSection collection={coll} color={sharedListColors[coll.id] ?? '#9ca3af'} />
+			<SharedListSection
+				collection={coll}
+				color={sharedListColors[coll.id] ?? '#9ca3af'}
+				{budgetHours}
+			/>
 		{/each}
 	</div>
 {/if}
