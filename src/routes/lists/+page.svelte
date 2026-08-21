@@ -970,7 +970,7 @@
 	{:else}
 		<p class="text-sm text-gray-500 dark:text-gray-400">
 			<a href={resolve('/settings')} class="text-orange-500 hover:underline">Turn on sync</a> to share
-			a list with other people and watch together.
+			a list with other people and let them collab with you on it.
 		</p>
 	{/if}
 </div>
