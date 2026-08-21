@@ -387,7 +387,7 @@
 	>
 		{#if item.poster_path}
 			<img
-				src="{TMDB_IMG}{item.poster_path}"
+				src="{TMDB_IMG}/w92{item.poster_path}"
 				alt=""
 				class="h-16 w-11 shrink-0 rounded object-cover bg-gray-200 dark:bg-gray-700"
 			/>
