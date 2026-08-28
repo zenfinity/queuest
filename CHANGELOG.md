@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.8] — 2026-08-28
+
+### Shared-list posters load again (#213)
+
+`/lists/[id]` and the Queue shared-list section were building poster URLs without a size segment — `${TMDB_IMG}${poster_path}` instead of `${TMDB_IMG}/w92${poster_path}` — so every thumbnail 404'd. Fixed in both places.
+
+### Owners can remove titles from a shared list (#214)
+
+Queue's shared-list section had no way to remove a title short of leaving the whole list. Owners now get a remove control (two-tap arm/confirm, matching the pattern used elsewhere) in every view — grid, list, compact, and the detail panel. This is UI-only gating: the server can't see inside an encrypted blob to tell a removal from any other write, so real enforcement would need the blob itself to be readable server-side, which would defeat the point of encrypting it.
+
+### Invite links survive the "set up sync first" detour (#215)
+
+A logged-out visitor opening an invite link got sent to Settings to turn on sync, which lost the invite token and DEK entirely — neither survives that trip since the fragment never reaches the server to begin with. The invite is now stashed in sessionStorage before the redirect and picked back up once sync finishes, so accepting the invite continues automatically instead of leaving the visitor to find the original link again.
+
 ## [0.9.7] — 2026-08-20
 
 ### Renaming or deleting a list no longer leaves a phantom behind (#207)
