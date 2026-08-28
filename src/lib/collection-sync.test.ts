@@ -349,6 +349,12 @@ describe('syncCollectionItems — the 409 retry loop', () => {
 		expect(ids).toEqual([1, 999]);
 	});
 
+	// jitteredBackoff uses real setTimeout, not a mocked clock — MAX_RETRIES=5
+	// straight conflicts sums up to ~6s of real backoff in the worst case, which
+	// occasionally races past vitest's 5000ms default and flakes. Explicit
+	// timeout, not a shorter retry count or a fake clock: this test's whole
+	// point is exercising the real backoff, so it needs headroom for the real
+	// delay rather than a rewrite of the thing it's testing.
 	it('gives up after MAX_RETRIES straight conflicts', async () => {
 		const dek = await importDek(await generateShareKey(), false);
 		vi.stubGlobal(
@@ -362,7 +368,7 @@ describe('syncCollectionItems — the 409 retry loop', () => {
 		await expect(syncCollectionItems(COLL, dek, [], (merged) => merged)).rejects.toThrow(
 			/repeated conflicts/i
 		);
-	});
+	}, 15000);
 
 	it('surfaces a rotated-key conflict distinctly from a version conflict', async () => {
 		const dek = await importDek(await generateShareKey(), false);
@@ -475,6 +481,8 @@ describe('syncCollectionBallots — the 409 retry loop', () => {
 		expect(Object.keys(result).sort()).toEqual([ALICE, BOB].sort());
 	});
 
+	// See the matching syncCollectionItems test above for why this needs an
+	// explicit timeout rather than the vitest default.
 	it('gives up after MAX_RETRIES straight conflicts', async () => {
 		const dek = await importDek(await generateShareKey(), false);
 		vi.stubGlobal(
@@ -488,7 +496,7 @@ describe('syncCollectionBallots — the 409 retry loop', () => {
 		await expect(syncCollectionBallots(COLL, dek, {}, (merged) => merged)).rejects.toThrow(
 			/repeated conflicts/i
 		);
-	});
+	}, 15000);
 });
 
 describe('MAX_BALLOT_SIZE', () => {
