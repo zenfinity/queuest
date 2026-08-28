@@ -233,6 +233,29 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 	});
 }
 
+/**
+ * Looks up an item by the same [tmdb_id, media_type] key the store's unique
+ * index enforces — used when an `add()` hits that constraint, to tell the
+ * caller which existing row it collided with (and its list) instead of just
+ * "duplicate". Returns tombstoned rows too, same as the index itself does;
+ * callers that only care about active items should check `deleted_at`.
+ */
+export async function getItemByTmdbId(
+	tmdb_id: number,
+	media_type: WatchlistItem['media_type']
+): Promise<WatchlistItem | undefined> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db
+			.transaction(STORE)
+			.objectStore(STORE)
+			.index('tmdb_media')
+			.get([tmdb_id, media_type]);
+		req.onsuccess = () => resolve(req.result as WatchlistItem | undefined);
+		req.onerror = () => reject(req.error);
+	});
+}
+
 export async function setQueueTag(id: number, tag: string | null): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {

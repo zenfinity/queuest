@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ShareItem } from './types';
+import type { DuplicateSkip } from './share-token-actions';
 
 const addItem = vi.fn();
+const getItemByTmdbId = vi.fn();
 const getOrAssignColor = vi.fn();
 
 vi.mock('./db', () => ({
-	addItem: (...args: unknown[]) => addItem(...args)
+	addItem: (...args: unknown[]) => addItem(...args),
+	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args)
 }));
 
 vi.mock('./queue-colors', () => ({
@@ -31,7 +34,7 @@ function makeDeps() {
 	const state = {
 		addingAll: false,
 		addedCount: 0,
-		skipCount: 0,
+		skips: [] as DuplicateSkip[],
 		addDone: false,
 		addError: ''
 	};
@@ -42,8 +45,8 @@ function makeDeps() {
 		setAddedCount: (v: number) => {
 			state.addedCount = v;
 		},
-		setSkipCount: (v: number) => {
-			state.skipCount = v;
+		setSkips: (v: DuplicateSkip[]) => {
+			state.skips = v;
 		},
 		setAddDone: (v: boolean) => {
 			state.addDone = v;
@@ -57,6 +60,8 @@ function makeDeps() {
 
 beforeEach(() => {
 	addItem.mockReset();
+	getItemByTmdbId.mockReset();
+	getItemByTmdbId.mockResolvedValue(undefined);
 	getOrAssignColor.mockReset();
 });
 
@@ -73,7 +78,7 @@ describe('addAllToQueue', () => {
 
 		expect(addItem).toHaveBeenCalledTimes(2);
 		expect(state.addedCount).toBe(2);
-		expect(state.skipCount).toBe(0);
+		expect(state.skips).toEqual([]);
 		expect(state.addDone).toBe(true);
 		expect(state.addingAll).toBe(false);
 		expect(state.addError).toBe('');
@@ -82,13 +87,38 @@ describe('addAllToQueue', () => {
 	it('counts a ConstraintError (already in queue) as a skip, not a failure', async () => {
 		const { state, deps } = makeDeps();
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({ id: 1, queue_tag: 'Horror October', deleted_at: null });
 
 		await addAllToQueue([makeShareItem()], 'My Queue', deps);
 
-		expect(state.skipCount).toBe(1);
+		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: 'Horror October' }]);
 		expect(state.addedCount).toBe(0);
 		expect(state.addDone).toBe(true);
 		expect(state.addError).toBe('');
+	});
+
+	it('attributes a skip to the untagged queue when the existing row has no tag', async () => {
+		const { state, deps } = makeDeps();
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({ id: 1, queue_tag: null, deleted_at: null });
+
+		await addAllToQueue([makeShareItem()], 'My Queue', deps);
+
+		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: null }]);
+	});
+
+	it('does not attribute a skip to a list when the matching row is a tombstone', async () => {
+		const { state, deps } = makeDeps();
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({
+			id: 1,
+			queue_tag: 'Horror October',
+			deleted_at: '2026-01-01T00:00:00.000Z'
+		});
+
+		await addAllToQueue([makeShareItem()], 'My Queue', deps);
+
+		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: null }]);
 	});
 
 	it('only surfaces an error when nothing was added or skipped', async () => {

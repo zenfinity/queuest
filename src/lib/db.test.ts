@@ -38,6 +38,16 @@ describe('db: watchlist items', () => {
 		expect(await db.getAll()).toHaveLength(2);
 	});
 
+	it('getItemByTmdbId finds the row a duplicate add collided with', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie', title: 'Arrival' }));
+		const found = await db.getItemByTmdbId(1, 'movie');
+		expect(found?.title).toBe('Arrival');
+	});
+
+	it('getItemByTmdbId returns undefined when there is no match', async () => {
+		expect(await db.getItemByTmdbId(999, 'movie')).toBeUndefined();
+	});
+
 	it('removes an item by id', async () => {
 		await db.addItem(makeItem());
 		const [{ id }] = await db.getAll();

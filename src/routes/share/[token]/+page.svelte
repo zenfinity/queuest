@@ -6,7 +6,10 @@
 	import { parseSharePayload } from '$lib/share-schema';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { hms, DEFAULT_RUNTIME } from '$lib/progress';
-	import { addAllToQueue as addAllToQueueAction } from '$lib/share-token-actions';
+	import {
+		addAllToQueue as addAllToQueueAction,
+		type DuplicateSkip
+	} from '$lib/share-token-actions';
 
 	let { data }: { data: { token: string } } = $props();
 
@@ -17,16 +20,31 @@
 
 	let addingAll = $state(false);
 	let addedCount = $state(0);
-	let skipCount = $state(0);
+	let skips: DuplicateSkip[] = $state([]);
 	let addDone = $state(false);
 	let addError = $state('');
+
+	// Groups skipped duplicates by the list they're already in, so "already in
+	// queue" can say where instead of just how many — e.g. "2 in Horror
+	// October, 1 in your Queue" rather than a bare count.
+	let skipSummary = $derived.by(() => {
+		if (skips.length === 0) return '';
+		const counts: Record<string, number> = {};
+		for (const s of skips) {
+			const label = s.existingTag ?? 'your Queue';
+			counts[label] = (counts[label] ?? 0) + 1;
+		}
+		return Object.entries(counts)
+			.map(([label, n]) => `${n} in ${label}`)
+			.join(', ');
+	});
 
 	async function addAllToQueue() {
 		if (addingAll) return;
 		await addAllToQueueAction(items, queueName, {
 			setAddingAll: (v) => (addingAll = v),
 			setAddedCount: (v) => (addedCount = v),
-			setSkipCount: (v) => (skipCount = v),
+			setSkips: (v) => (skips = v),
 			setAddDone: (v) => (addDone = v),
 			setAddError: (v) => (addError = v)
 		});
@@ -92,7 +110,7 @@
 			<div class="flex flex-wrap items-center gap-2">
 				{#if pageState === 'ready' && items.length > 0}
 					{#if addDone}
-						{#if addError && !addedCount && !skipCount}
+						{#if addError && !addedCount && !skips.length}
 							<span
 								class="rounded-lg bg-red-100 px-4 py-2 text-sm font-medium text-red-700 dark:bg-red-900/40 dark:text-red-400"
 								title={addError}
@@ -104,9 +122,11 @@
 								class="rounded-lg bg-teal-100 px-4 py-2 text-sm font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-400"
 							>
 								{#if addedCount > 0}
-									✓ {addedCount} added{skipCount > 0 ? ` · ${skipCount} already in queue` : ''}
+									✓ {addedCount} added{skips.length > 0
+										? ` · ${skips.length} already in queue (${skipSummary})`
+										: ''}
 								{:else}
-									✓ Already in your queue
+									✓ Already in queue ({skipSummary})
 								{/if}
 							</span>
 						{/if}
