@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0] — 2026-08-28
+
+### Ranked-choice voting on shared lists (#210)
+
+Members can rank up to 5 titles per shared list — a "Rankings" panel shows your own ballot (add, remove, reorder) alongside the group's combined pick order, aggregated by Borda count (5 points for a 1st choice down to 1 for 5th, summed across everyone who's ranked). A rank toggle sits on every shared-item card, in the detail panel, and on the `/lists/[id]` page. Ranking is independent of watched status, and a title removed from the list just drops quietly out of the tally rather than needing anyone to clean up their ballot.
+
 ## [0.9.9] — 2026-08-28
 
 ### Shared-import duplicates say where they already are (#212)
