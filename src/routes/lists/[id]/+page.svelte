@@ -16,10 +16,12 @@
 		listMembers,
 		loadCollectionItems,
 		toggleCollectionWatched,
+		setMyBallot,
 		type SharedCollection,
 		type CollectionMember
 	} from '$lib/collection-actions';
-	import type { CollectionItem } from '$lib/collection-sync';
+	import { MAX_BALLOT_SIZE, type CollectionItem, type BallotEntry } from '$lib/collection-sync';
+	import { bordaTally } from '$lib/ranking';
 	import { getSyncStatus } from '$lib/sync';
 	import { getLastViewed, markViewed, hasNewActivity } from '$lib/collection-activity';
 
@@ -30,8 +32,11 @@
 	let collection: SharedCollection | null = $state(null);
 	let members: CollectionMember[] = $state([]);
 	let items: CollectionItem[] = $state([]);
+	let ballots: Record<string, BallotEntry> = $state({});
 	let myUserId = $state('');
 	let togglingKey = $state('');
+	let rankingBusy = $state(false);
+	let showRankings = $state(false);
 	// The watermark from *before* this visit — captured once, up front, so an
 	// item stays flagged "new" for the whole time you're looking at this page
 	// even though markViewed() below immediately moves the stored watermark
@@ -73,7 +78,9 @@
 			(collection.role === 'owner' ? collection.ownerUserId : '');
 
 		lastViewed = await getLastViewed(id);
-		items = await loadCollectionItems(collection, noop);
+		const state = await loadCollectionItems(collection, noop);
+		items = state.items;
+		ballots = state.ballots;
 		loading = false;
 		await markViewed(id);
 	});
@@ -94,6 +101,34 @@
 		if (result) items = result;
 		togglingKey = '';
 	}
+
+	// ── Ranked voting (#210) ──────────────────────────────────────────────
+	let myBallot = $derived(
+		(ballots[myUserId]?.items ?? []).filter((key) => items.some((i) => itemKey(i) === key))
+	);
+
+	function rankOf(item: CollectionItem): number | null {
+		const i = myBallot.indexOf(itemKey(item));
+		return i === -1 ? null : i + 1;
+	}
+
+	async function toggleRank(item: CollectionItem) {
+		if (!collection || !myUserId) return;
+		const key = itemKey(item);
+		const current = myBallot;
+		const next = current.includes(key)
+			? current.filter((k) => k !== key)
+			: current.length >= MAX_BALLOT_SIZE
+				? current
+				: [...current, key];
+		if (next === current) return;
+		rankingBusy = true;
+		const result = await setMyBallot(collection, ballots, myUserId, next, noop);
+		if (result) ballots = result;
+		rankingBusy = false;
+	}
+
+	let tally = $derived(bordaTally(items, ballots));
 </script>
 
 <svelte:head><title>Queuest — {collection?.name ?? 'Shared list'}</title></svelte:head>
@@ -125,6 +160,81 @@
 
 		{#if loadError}
 			<p class="text-sm text-red-600 dark:text-red-400">{loadError}</p>
+		{/if}
+
+		{#if items.length > 0}
+			<div>
+				<button
+					onclick={() => (showRankings = !showRankings)}
+					class="flex items-center gap-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+					aria-expanded={showRankings}
+				>
+					<span class="transition-transform {showRankings ? 'rotate-90' : ''}">▸</span>
+					🏆 Rankings
+					{#if tally.length > 0}
+						<span class="text-gray-400 dark:text-gray-600">· {tally.length} ranked</span>
+					{/if}
+				</button>
+				{#if showRankings}
+					<div class="mt-2 space-y-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/40">
+						<div>
+							<p
+								class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+							>
+								Your ballot
+							</p>
+							{#if myBallot.length === 0}
+								<p class="text-xs text-gray-400 dark:text-gray-600">
+									Tap ☆ Rank on a title below to rank up to {MAX_BALLOT_SIZE}.
+								</p>
+							{:else}
+								<ol class="space-y-1">
+									{#each myBallot as key, i (key)}
+										{@const bItem = items.find((it) => itemKey(it) === key)}
+										{#if bItem}
+											<li class="flex items-center gap-2 text-xs">
+												<span class="w-4 shrink-0 text-right font-semibold text-orange-500"
+													>{i + 1}</span
+												>
+												<span class="min-w-0 flex-1 truncate">{bItem.title}</span>
+											</li>
+										{/if}
+									{/each}
+								</ol>
+							{/if}
+						</div>
+						<div>
+							<p
+								class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+							>
+								Group ranking
+							</p>
+							{#if tally.length === 0}
+								<p class="text-xs text-gray-400 dark:text-gray-600">
+									No one has ranked anything yet.
+								</p>
+							{:else}
+								<ol class="space-y-1">
+									{#each tally as row, i (itemKey(row.item))}
+										<li class="flex items-center gap-2 text-xs">
+											<span class="w-4 shrink-0 text-right font-semibold text-gray-400"
+												>{i + 1}</span
+											>
+											<span class="min-w-0 flex-1 truncate">{row.item.title}</span>
+											<span class="shrink-0 text-gray-400 dark:text-gray-500"
+												>{row.score} pt{row.score === 1 ? '' : 's'} · {row.voters} voter{row.voters ===
+												1
+													? ''
+													: 's'}</span
+											>
+										</li>
+									{/each}
+								</ol>
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
 		{/if}
 
 		{#if items.length === 0}
@@ -171,6 +281,20 @@
 								Added by {memberLabel(item.added_by_account_id ?? null)}
 							</p>
 							<div class="mt-1.5 flex items-center gap-2">
+								<button
+									disabled={rankingBusy ||
+										!myUserId ||
+										(!rankOf(item) && myBallot.length >= MAX_BALLOT_SIZE)}
+									onclick={() => toggleRank(item)}
+									title={rankOf(item)
+										? `Ranked #${rankOf(item)} — tap to remove`
+										: 'Add to your ranked picks'}
+									class="text-xs px-2 py-1 rounded font-medium disabled:opacity-50 {rankOf(item)
+										? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+										: 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+								>
+									{rankOf(item) ? `★ #${rankOf(item)}` : '☆ Rank'}
+								</button>
 								<button
 									disabled={togglingKey === key || !myUserId}
 									onclick={() => toggle(item)}

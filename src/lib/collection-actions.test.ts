@@ -15,7 +15,8 @@ import {
 	toggleCollectionWatched,
 	renameSharedCollection,
 	addItemsToSharedCollection,
-	removeItemFromSharedCollection
+	removeItemFromSharedCollection,
+	setMyBallot
 } from './collection-actions';
 
 const noop = { setBusy: () => {}, setError: () => {} };
@@ -352,7 +353,7 @@ describe('loadCollectionItems / toggleCollectionWatched', () => {
 
 	it('loads and decrypts the collection blob', async () => {
 		vi.stubGlobal('fetch', stubViewFetch([seedItem(1)]).mock);
-		const items = await loadCollectionItems(collection(), noop);
+		const { items } = await loadCollectionItems(collection(), noop);
 		expect(items).toHaveLength(1);
 		expect(items[0].tmdb_id).toBe(1);
 	});
@@ -361,7 +362,7 @@ describe('loadCollectionItems / toggleCollectionWatched', () => {
 		const { mock, stored } = stubViewFetch([seedItem(5)]);
 		vi.stubGlobal('fetch', mock);
 
-		const items = await loadCollectionItems(collection(), noop);
+		const { items } = await loadCollectionItems(collection(), noop);
 		const result = await toggleCollectionWatched(collection(), items, items[0], ALICE, true, noop);
 
 		expect(result).not.toBeNull();
@@ -375,7 +376,7 @@ describe('loadCollectionItems / toggleCollectionWatched', () => {
 		const { mock } = stubViewFetch([seeded]);
 		vi.stubGlobal('fetch', mock);
 
-		const items = await loadCollectionItems(collection(), noop);
+		const { items } = await loadCollectionItems(collection(), noop);
 		const result = await toggleCollectionWatched(collection(), items, items[0], ALICE, false, noop);
 
 		expect(result![0].watch?.[ALICE]).toBeUndefined();
@@ -595,7 +596,7 @@ describe('removeItemFromSharedCollection', () => {
 		const { mock, stored } = stubBlobFetch([seedItem(1), seedItem(2)]);
 		vi.stubGlobal('fetch', mock);
 
-		const items = await loadCollectionItems(collection(), noop);
+		const { items } = await loadCollectionItems(collection(), noop);
 		const target = items.find((i) => i.tmdb_id === 1)!;
 		const result = await removeItemFromSharedCollection(collection(), items, target, noop);
 
@@ -610,7 +611,7 @@ describe('removeItemFromSharedCollection', () => {
 		const { mock, stored } = stubBlobFetch([movie, show]);
 		vi.stubGlobal('fetch', mock);
 
-		const items = await loadCollectionItems(collection(), noop);
+		const { items } = await loadCollectionItems(collection(), noop);
 		const target = items.find((i) => i.media_type === 'movie')!;
 		await removeItemFromSharedCollection(collection(), items, target, noop);
 
@@ -632,6 +633,95 @@ describe('removeItemFromSharedCollection', () => {
 			{ ...seedItem(1) } as never,
 			c.deps
 		);
+
+		expect(result).toBeNull();
+		expect(c.err()).toBeTruthy();
+	});
+});
+
+describe('setMyBallot', () => {
+	function stubBlobFetch(initialBallots: Record<string, unknown> = {}) {
+		let version = 1;
+		let stored: Record<string, unknown> = initialBallots;
+		const mock = vi.fn(async (url: string, init?: RequestInit) => {
+			const u = String(url);
+			if (u.includes('/blob') && (!init || init.method === undefined)) {
+				const { gzip } = await import('./gzip');
+				const { encryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const compressed = await gzip(
+					new TextEncoder().encode(JSON.stringify({ items: [], ballots: stored }))
+				);
+				const ciphertext = await encryptBytesWithDek(compressed, dek);
+				return new Response(ciphertext, {
+					status: 200,
+					headers: { 'X-Sync-Version': String(version), 'X-Collection-Dek-Version': '1' }
+				});
+			}
+			if (u.includes('/blob') && init?.method === 'PUT') {
+				const { gunzip } = await import('./gzip');
+				const { decryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const body = await new Response(init.body as BodyInit).arrayBuffer();
+				const plain = await decryptBytesWithDek(body, dek);
+				stored = (
+					JSON.parse(new TextDecoder().decode(await gunzip(plain))) as {
+						ballots: Record<string, unknown>;
+					}
+				).ballots;
+				version++;
+				return Response.json({ version });
+			}
+			throw new Error(`unexpected request: ${u}`);
+		});
+		return { mock, stored: () => stored };
+	}
+
+	it('writes this account’s ballot and leaves others untouched', async () => {
+		const bobsBallot = { items: ['movie:9'], updatedAt: '2026-08-01T00:00:00.000Z' };
+		const { mock, stored } = stubBlobFetch({ [BOB]: bobsBallot });
+		vi.stubGlobal('fetch', mock);
+
+		const result = await setMyBallot(
+			collection(),
+			{ [BOB]: bobsBallot },
+			ALICE,
+			['movie:1', 'movie:2'],
+			noop
+		);
+
+		expect(result).not.toBeNull();
+		expect(result![ALICE].items).toEqual(['movie:1', 'movie:2']);
+		expect(result![BOB].items).toEqual(['movie:9']);
+		expect((stored() as Record<string, { items: string[] }>)[ALICE].items).toEqual([
+			'movie:1',
+			'movie:2'
+		]);
+	});
+
+	it('caps the ballot even if the caller passes more than the max', async () => {
+		const { mock } = stubBlobFetch({});
+		vi.stubGlobal('fetch', mock);
+
+		const result = await setMyBallot(
+			collection(),
+			{},
+			ALICE,
+			['movie:1', 'movie:2', 'movie:3', 'movie:4', 'movie:5', 'movie:6'],
+			noop
+		);
+
+		expect(result![ALICE].items).toHaveLength(5);
+	});
+
+	it('surfaces an error and returns null on failure', async () => {
+		const c = capture();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response('nope', { status: 500 }))
+		);
+
+		const result = await setMyBallot(collection(), {}, ALICE, ['movie:1'], c.deps);
 
 		expect(result).toBeNull();
 		expect(c.err()).toBeTruthy();

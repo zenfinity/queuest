@@ -98,7 +98,7 @@
 	async function loadActivityCount(coll: SharedCollection) {
 		const watermark = await getLastViewed(coll.id);
 		if (!watermark) return;
-		const items = await loadCollectionItems(coll, { setBusy: () => {}, setError: () => {} });
+		const { items } = await loadCollectionItems(coll, { setBusy: () => {}, setError: () => {} });
 		newActivityCounts = { ...newActivityCounts, [coll.id]: countNewActivity(items, watermark) };
 	}
 
