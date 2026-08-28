@@ -328,6 +328,54 @@ describe('db: collection tag bulk updates', () => {
 	});
 });
 
+describe('db: custom sort order (#216)', () => {
+	it('assigns each new item a later sort_order than the last', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'A' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'B' }));
+		await db.addItem(makeItem({ tmdb_id: 3, title: 'C' }));
+
+		const all = await db.getAll();
+		const a = all.find((i) => i.title === 'A')!;
+		const b = all.find((i) => i.title === 'B')!;
+		const c = all.find((i) => i.title === 'C')!;
+		expect(a.sort_order).toBeLessThan(b.sort_order!);
+		expect(b.sort_order).toBeLessThan(c.sort_order!);
+	});
+
+	it('setSortOrder renumbers the given ids to match their array position', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'A' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'B' }));
+		await db.addItem(makeItem({ tmdb_id: 3, title: 'C' }));
+		const [a, b, c] = await db.getAll();
+
+		await db.setSortOrder([c.id, a.id, b.id]);
+
+		const after = await db.getAll();
+		expect(after.find((i) => i.id === c.id)!.sort_order).toBe(0);
+		expect(after.find((i) => i.id === a.id)!.sort_order).toBe(1);
+		expect(after.find((i) => i.id === b.id)!.sort_order).toBe(2);
+	});
+
+	it('setSortOrder bumps updated_at on every reordered item', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'A' }));
+		const [a] = await db.getAll();
+
+		await db.setSortOrder([a.id]);
+
+		expect(typeof (await db.getAll())[0].updated_at).toBe('string');
+	});
+
+	it('setSortOrder leaves ids outside the list untouched', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'A' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'B' }));
+		const [a, b] = await db.getAll();
+
+		await db.setSortOrder([a.id]);
+
+		expect((await db.getAll()).find((i) => i.id === b.id)!.sort_order).toBe(b.sort_order);
+	});
+});
+
 describe('db: meta store', () => {
 	it('returns undefined for an unset key', async () => {
 		expect(await db.getMeta('nope')).toBeUndefined();

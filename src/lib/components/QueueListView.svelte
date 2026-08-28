@@ -17,10 +17,13 @@
 		groupByCollection = false,
 		selectMode = false,
 		selected = new Set<number>(),
+		rankMode = false,
 		onToggle,
 		onRemove,
 		onOpenDetail,
 		onToggleSelect,
+		onMoveUp,
+		onMoveDown,
 		seasonPicker
 	}: {
 		items: WatchlistItem[];
@@ -30,10 +33,14 @@
 		groupByCollection?: boolean;
 		selectMode?: boolean;
 		selected?: Set<number>;
+		/** Custom "Rank" sort is active (#216) — shows move up/down instead of relying on drag. */
+		rankMode?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
 		onOpenDetail: (item: WatchlistItem) => void;
 		onToggleSelect?: (item: WatchlistItem) => void;
+		onMoveUp?: (item: WatchlistItem) => void;
+		onMoveDown?: (item: WatchlistItem) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -53,7 +60,7 @@
 	}}
 />
 
-{#snippet rowContent(item: WatchlistItem)}
+{#snippet rowContent(item: WatchlistItem, isFirst: boolean, isLast: boolean)}
 	{@const rt = remainingRuntime(item)}
 	{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
 	{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null)}
@@ -103,6 +110,26 @@
 		{/if}
 		{#if !selectMode}
 			<div class="flex shrink-0 gap-1">
+				{#if rankMode}
+					<button
+						class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+						disabled={isFirst}
+						onclick={(e) => {
+							e.stopPropagation();
+							onMoveUp?.(item);
+						}}
+						aria-label="Move up">↑</button
+					>
+					<button
+						class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+						disabled={isLast}
+						onclick={(e) => {
+							e.stopPropagation();
+							onMoveDown?.(item);
+						}}
+						aria-label="Move down">↓</button
+					>
+				{/if}
 				<button
 					class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 					disabled={busy.has(item.id)}
@@ -245,7 +272,7 @@
 					>
 				</div>
 				<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
-					{#each section.items as item (item.id)}
+					{#each section.items as item, i (item.id)}
 						{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 						<!-- Row click is a convenience only — the title button inside rowContent
 						     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
@@ -265,7 +292,7 @@
 								else onOpenDetail(item);
 							}}
 						>
-							{@render rowContent(item)}
+							{@render rowContent(item, i === 0, i === section.items.length - 1)}
 						</div>
 					{/each}
 				</div>
@@ -274,7 +301,7 @@
 	</div>
 {:else}
 	<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
-		{#each items as item (item.id)}
+		{#each items as item, i (item.id)}
 			{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 			<!-- Row click is a convenience only — see the grouped branch above. -->
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -292,7 +319,7 @@
 					else onOpenDetail(item);
 				}}
 			>
-				{@render rowContent(item)}
+				{@render rowContent(item, i === 0, i === items.length - 1)}
 			</div>
 		{/each}
 	</div>

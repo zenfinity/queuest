@@ -1,6 +1,11 @@
 // Shared queue filter/view state — read by both the layout (nav-inline dock at lg+)
 // and the queue page (fixed floating dock below lg, and applying filters/sort).
-export type SortKey = 'added' | 'title' | 'runtime';
+// 'rank' (#216) is custom manual order, backed by WatchlistItem.sort_order —
+// distinct from the others, which all derive from an existing field. Grouping
+// by collection (see groupByCollection below) disables it: reordering across
+// alphabetical sections has no clear meaning, so the queue page suppresses
+// the move controls whenever both are on at once rather than defining one.
+export type SortKey = 'added' | 'title' | 'runtime' | 'rank';
 export type ViewKey = 'grid' | 'list' | 'lanes';
 export type ServiceFilterKey = 'all' | 'subscribed' | 'not-subscribed';
 export type GanttGroupKey = 'provider' | 'collection';
@@ -8,7 +13,8 @@ export type GanttGroupKey = 'provider' | 'collection';
 export const SORT_DEFAULT_DIR: Record<SortKey, 'asc' | 'desc'> = {
 	added: 'desc',
 	title: 'asc',
-	runtime: 'asc'
+	runtime: 'asc',
+	rank: 'asc'
 };
 
 // Sentinel for "items with no collection assigned" — distinct from `null`,

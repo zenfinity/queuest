@@ -5,6 +5,7 @@ import {
 	setWatched,
 	updateShowProgress,
 	setQueueTag,
+	setSortOrder,
 	gcTombstones
 } from './db';
 
@@ -140,6 +141,35 @@ export function groupIntoCollections(
 	}
 
 	return sections;
+}
+
+/**
+ * Swaps an item with its neighbor in `visibleOrder` (the currently
+ * sorted/filtered list, not the whole queue — see setSortOrder in db.ts for
+ * why only that list gets renumbered) and persists the result. No-ops at
+ * either end of the list rather than wrapping.
+ */
+export async function moveItem(
+	item: WatchlistItem,
+	direction: 'up' | 'down',
+	visibleOrder: WatchlistItem[],
+	deps: QueueActionDeps
+): Promise<void> {
+	const idx = visibleOrder.findIndex((i) => i.id === item.id);
+	const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+	if (idx === -1 || swapIdx < 0 || swapIdx >= visibleOrder.length) return;
+
+	deps.setBusy(item.id, true);
+	try {
+		const reordered = [...visibleOrder];
+		[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+		await setSortOrder(reordered.map((i) => i.id));
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not reorder this title.');
+	} finally {
+		deps.setBusy(item.id, false);
+	}
 }
 
 export async function setItemCollection(
