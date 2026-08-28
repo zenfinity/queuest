@@ -5,10 +5,14 @@ import {
 	mergeCollectionWatch,
 	mergeCollectionItem,
 	mergeCollectionItems,
+	mergeCollectionBallots,
 	syncCollectionItems,
-	fetchCollectionItems,
+	syncCollectionBallots,
+	fetchCollectionState,
+	MAX_BALLOT_SIZE,
 	CollectionKeyRotatedError,
-	type CollectionItem
+	type CollectionItem,
+	type BallotEntry
 } from './collection-sync';
 
 const ALICE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -63,6 +67,38 @@ describe('mergeCollectionWatch', () => {
 		expect(mergeCollectionWatch(undefined, { [ALICE]: 'x' })).toEqual({ [ALICE]: 'x' });
 		expect(mergeCollectionWatch({ [ALICE]: 'x' }, undefined)).toEqual({ [ALICE]: 'x' });
 		expect(mergeCollectionWatch(undefined, undefined)).toBeUndefined();
+	});
+});
+
+function ballot(items: string[], updatedAt: string): BallotEntry {
+	return { items, updatedAt };
+}
+
+describe('mergeCollectionBallots', () => {
+	it('unions ballots from both sides', () => {
+		const merged = mergeCollectionBallots(
+			{ [ALICE]: ballot(['movie:1'], '2026-08-01T00:00:00Z') },
+			{ [BOB]: ballot(['movie:2'], '2026-08-02T00:00:00Z') }
+		);
+		expect(merged[ALICE].items).toEqual(['movie:1']);
+		expect(merged[BOB].items).toEqual(['movie:2']);
+	});
+
+	it('takes the whole newer ballot within one account, not a per-item merge', () => {
+		const merged = mergeCollectionBallots(
+			{ [ALICE]: ballot(['movie:1', 'movie:2'], '2026-08-01T00:00:00Z') },
+			{ [ALICE]: ballot(['movie:3'], '2026-08-02T00:00:00Z') }
+		);
+		// The newer ballot replaces the older one outright — movie:1/movie:2
+		// don't linger merged in alongside movie:3.
+		expect(merged[ALICE].items).toEqual(['movie:3']);
+	});
+
+	it('handles either side being empty', () => {
+		const a = { [ALICE]: ballot(['movie:1'], '2026-08-01T00:00:00Z') };
+		expect(mergeCollectionBallots(a, {})).toEqual(a);
+		expect(mergeCollectionBallots({}, a)).toEqual(a);
+		expect(mergeCollectionBallots({}, {})).toEqual({});
 	});
 });
 
@@ -146,7 +182,7 @@ async function pulledResponse(
 	});
 }
 
-describe('fetchCollectionItems', () => {
+describe('fetchCollectionState', () => {
 	it('decrypts and validates items through the untrusted-payload parser', async () => {
 		const getDek = makeCrypto();
 		const dek = await getDek();
@@ -157,7 +193,7 @@ describe('fetchCollectionItems', () => {
 			vi.fn(async () => pulledResponse(remoteItems, dek, 3))
 		);
 
-		const items = await fetchCollectionItems(COLL, dek);
+		const { items } = await fetchCollectionState(COLL, dek);
 		expect(items).toHaveLength(1);
 		expect(items[0].watch?.[ALICE]).toBe('2026-08-01T00:00:00.000Z');
 	});
@@ -181,7 +217,81 @@ describe('fetchCollectionItems', () => {
 			)
 		);
 
-		expect(await fetchCollectionItems(COLL, dek)).toEqual([]);
+		expect((await fetchCollectionState(COLL, dek)).items).toEqual([]);
+	});
+
+	it('returns an empty ballots map for an empty or missing blob', async () => {
+		const getDek = makeCrypto();
+		const dek = await getDek();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => pulledResponse([], dek, 1))
+		);
+
+		expect((await fetchCollectionState(COLL, dek)).ballots).toEqual({});
+	});
+
+	it('decrypts and validates ballots through the untrusted-payload parser', async () => {
+		const getDek = makeCrypto();
+		const dek = await getDek();
+		const { encryptBytesWithDek } = await import('./crypto');
+		const compressed = await gzip(
+			new TextEncoder().encode(
+				JSON.stringify({
+					items: [],
+					ballots: {
+						[ALICE]: { items: ['movie:42', 'tv:7'], updatedAt: '2026-08-01T00:00:00.000Z' }
+					}
+				})
+			)
+		);
+		const ciphertext = await encryptBytesWithDek(compressed, dek);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(ciphertext, {
+						status: 200,
+						headers: { 'X-Sync-Version': '1', 'X-Collection-Dek-Version': '1' }
+					})
+			)
+		);
+
+		const { ballots } = await fetchCollectionState(COLL, dek);
+		expect(ballots[ALICE]).toEqual({
+			items: ['movie:42', 'tv:7'],
+			updatedAt: '2026-08-01T00:00:00.000Z'
+		});
+	});
+
+	it('drops a malformed ballot entry rather than trusting it', async () => {
+		const getDek = makeCrypto();
+		const dek = await getDek();
+		const { encryptBytesWithDek } = await import('./crypto');
+		const compressed = await gzip(
+			new TextEncoder().encode(
+				JSON.stringify({
+					items: [],
+					ballots: {
+						[ALICE]: { items: ['not-a-valid-key'], updatedAt: 'not-a-date' },
+						__proto__: { items: ['movie:1'], updatedAt: '2026-08-01T00:00:00.000Z' }
+					}
+				})
+			)
+		);
+		const ciphertext = await encryptBytesWithDek(compressed, dek);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(ciphertext, {
+						status: 200,
+						headers: { 'X-Sync-Version': '1', 'X-Collection-Dek-Version': '1' }
+					})
+			)
+		);
+
+		expect((await fetchCollectionState(COLL, dek)).ballots).toEqual({});
 	});
 });
 
@@ -239,6 +349,12 @@ describe('syncCollectionItems — the 409 retry loop', () => {
 		expect(ids).toEqual([1, 999]);
 	});
 
+	// jitteredBackoff uses real setTimeout, not a mocked clock — MAX_RETRIES=5
+	// straight conflicts sums up to ~6s of real backoff in the worst case, which
+	// occasionally races past vitest's 5000ms default and flakes. Explicit
+	// timeout, not a shorter retry count or a fake clock: this test's whole
+	// point is exercising the real backoff, so it needs headroom for the real
+	// delay rather than a rewrite of the thing it's testing.
 	it('gives up after MAX_RETRIES straight conflicts', async () => {
 		const dek = await importDek(await generateShareKey(), false);
 		vi.stubGlobal(
@@ -252,7 +368,7 @@ describe('syncCollectionItems — the 409 retry loop', () => {
 		await expect(syncCollectionItems(COLL, dek, [], (merged) => merged)).rejects.toThrow(
 			/repeated conflicts/i
 		);
-	});
+	}, 15000);
 
 	it('surfaces a rotated-key conflict distinctly from a version conflict', async () => {
 		const dek = await importDek(await generateShareKey(), false);
@@ -269,5 +385,122 @@ describe('syncCollectionItems — the 409 retry loop', () => {
 		await expect(syncCollectionItems(COLL, dek, [], (m) => m)).rejects.toBeInstanceOf(
 			CollectionKeyRotatedError
 		);
+	});
+
+	it('relays existing ballots through unchanged on an item-only mutation', async () => {
+		const dek = await importDek(await generateShareKey(), false);
+		const existingBallots = { [ALICE]: ballot(['movie:1'], '2026-08-01T00:00:00Z') };
+		let pushedBallots: unknown;
+
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_url: string, init?: RequestInit) => {
+				if (!init || init.method === undefined) {
+					const { encryptBytesWithDek } = await import('./crypto');
+					const compressed = await gzip(
+						new TextEncoder().encode(JSON.stringify({ items: [], ballots: existingBallots }))
+					);
+					const ciphertext = await encryptBytesWithDek(compressed, dek);
+					return new Response(ciphertext, {
+						status: 200,
+						headers: { 'X-Sync-Version': '1', 'X-Collection-Dek-Version': '1' }
+					});
+				}
+				const body = await new Response(init.body as BodyInit).arrayBuffer();
+				const { decryptBytesWithDek } = await import('./crypto');
+				const plain = await decryptBytesWithDek(body, dek);
+				const { gunzip } = await import('./gzip');
+				const json = JSON.parse(new TextDecoder().decode(await gunzip(plain))) as {
+					ballots: unknown;
+				};
+				pushedBallots = json.ballots;
+				return Response.json({ version: 2 });
+			})
+		);
+
+		await syncCollectionItems(COLL, dek, [], (merged) => [
+			...merged,
+			item({ tmdb_id: 1, title: 'added' })
+		]);
+
+		expect(pushedBallots).toEqual(existingBallots);
+	});
+});
+
+describe('syncCollectionBallots — the 409 retry loop', () => {
+	it('re-fetches, re-merges, and re-applies the mutation until the push lands', async () => {
+		const dek = await importDek(await generateShareKey(), false);
+		let serverVersion = 1;
+		let serverBallots: Record<string, BallotEntry> = {};
+		let putAttempts = 0;
+
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_url: string, init?: RequestInit) => {
+				if (!init || init.method === undefined) {
+					const { encryptBytesWithDek } = await import('./crypto');
+					const compressed = await gzip(
+						new TextEncoder().encode(JSON.stringify({ items: [], ballots: serverBallots }))
+					);
+					const ciphertext = await encryptBytesWithDek(compressed, dek);
+					return new Response(ciphertext, {
+						status: 200,
+						headers: { 'X-Sync-Version': String(serverVersion), 'X-Collection-Dek-Version': '1' }
+					});
+				}
+				if (init.method === 'PUT') {
+					putAttempts++;
+					if (putAttempts === 1) {
+						serverVersion++;
+						serverBallots = { [BOB]: ballot(['movie:2'], '2026-08-02T00:00:00Z') };
+						return new Response(JSON.stringify({ error: 'Version conflict' }), { status: 409 });
+					}
+					serverVersion++;
+					const body = await new Response(init.body as BodyInit).arrayBuffer();
+					const { decryptBytesWithDek } = await import('./crypto');
+					const plain = await decryptBytesWithDek(body, dek);
+					const { gunzip } = await import('./gzip');
+					const json = JSON.parse(new TextDecoder().decode(await gunzip(plain))) as {
+						ballots: Record<string, BallotEntry>;
+					};
+					serverBallots = json.ballots;
+					return Response.json({ version: serverVersion });
+				}
+				throw new Error('unexpected method');
+			})
+		);
+
+		const result = await syncCollectionBallots(COLL, dek, {}, (merged) => ({
+			...merged,
+			[ALICE]: ballot(['movie:1'], '2026-08-03T00:00:00Z')
+		}));
+
+		expect(putAttempts).toBe(2);
+		// Both this device's ballot AND the concurrent writer's ballot survive —
+		// the retry re-merged against the newer remote rather than overwriting it.
+		expect(Object.keys(result).sort()).toEqual([ALICE, BOB].sort());
+	});
+
+	// See the matching syncCollectionItems test above for why this needs an
+	// explicit timeout rather than the vitest default.
+	it('gives up after MAX_RETRIES straight conflicts', async () => {
+		const dek = await importDek(await generateShareKey(), false);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_url: string, init?: RequestInit) => {
+				if (!init || init.method === undefined) return pulledResponse([], dek, 1);
+				return new Response(JSON.stringify({ error: 'Version conflict' }), { status: 409 });
+			})
+		);
+
+		await expect(syncCollectionBallots(COLL, dek, {}, (merged) => merged)).rejects.toThrow(
+			/repeated conflicts/i
+		);
+	}, 15000);
+});
+
+describe('MAX_BALLOT_SIZE', () => {
+	it('is 5 — up to 5 ranked picks per member', () => {
+		expect(MAX_BALLOT_SIZE).toBe(5);
 	});
 });

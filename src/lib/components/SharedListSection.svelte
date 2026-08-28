@@ -21,10 +21,12 @@
 		loadCollectionItems,
 		toggleCollectionWatched,
 		removeItemFromSharedCollection,
+		setMyBallot,
 		type SharedCollection,
 		type CollectionMember
 	} from '$lib/collection-actions';
-	import type { CollectionItem } from '$lib/collection-sync';
+	import { MAX_BALLOT_SIZE, type CollectionItem, type BallotEntry } from '$lib/collection-sync';
+	import { bordaTally } from '$lib/ranking';
 	import { getSyncStatus } from '$lib/sync';
 	import { getLastViewed, markViewed, hasNewActivity } from '$lib/collection-activity';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
@@ -54,10 +56,13 @@
 	let loaded = $state(false);
 	let error = $state('');
 	let items: CollectionItem[] = $state([]);
+	let ballots: Record<string, BallotEntry> = $state({});
 	let members: CollectionMember[] = $state([]);
 	let myUserId = $state('');
 	let togglingKey = $state('');
 	let removingKey = $state('');
+	let rankingBusy = $state(false);
+	let showRankings = $state(false);
 	// Two-tap confirm, same "arm, then a second click removes" pattern as the
 	// bulk-remove/delete-list controls elsewhere in the app — this is
 	// destructive for everyone in the list, not just the person clicking.
@@ -106,7 +111,9 @@
 			members.find((m) => m.email === status.email)?.userId ??
 			(collection.role === 'owner' ? collection.ownerUserId : '');
 		lastViewed = await getLastViewed(collection.id);
-		items = await loadCollectionItems(collection, noop);
+		const state = await loadCollectionItems(collection, noop);
+		items = state.items;
+		ballots = state.ballots;
 		loading = false;
 		loaded = true;
 		await markViewed(collection.id);
@@ -146,6 +153,50 @@
 		removingKey = '';
 		removeArmedKey = null;
 	}
+
+	// ── Ranked voting (#210) ──────────────────────────────────────────────
+	// My ballot filtered down to keys that still match a current item — a
+	// title an owner removed (#214) just stops rendering here rather than
+	// leaving a ghost entry; the stored ballot itself is untouched, so it
+	// comes back if the title is ever re-added.
+	let myBallot = $derived(
+		(ballots[myUserId]?.items ?? []).filter((key) => items.some((i) => itemKey(i) === key))
+	);
+
+	function rankOf(item: CollectionItem): number | null {
+		const i = myBallot.indexOf(itemKey(item));
+		return i === -1 ? null : i + 1;
+	}
+
+	async function pushBallot(next: string[]) {
+		if (!myUserId) return;
+		rankingBusy = true;
+		const result = await setMyBallot(collection, ballots, myUserId, next, noop);
+		if (result) ballots = result;
+		rankingBusy = false;
+	}
+
+	async function toggleRank(item: CollectionItem) {
+		const key = itemKey(item);
+		const current = myBallot;
+		const next = current.includes(key)
+			? current.filter((k) => k !== key)
+			: current.length >= MAX_BALLOT_SIZE
+				? current
+				: [...current, key];
+		if (next === current) return;
+		await pushBallot(next);
+	}
+
+	async function moveBallotEntry(index: number, direction: 'up' | 'down') {
+		const swapIndex = direction === 'up' ? index - 1 : index + 1;
+		if (swapIndex < 0 || swapIndex >= myBallot.length) return;
+		const next = [...myBallot];
+		[next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+		await pushBallot(next);
+	}
+
+	let tally = $derived(bordaTally(items, ballots));
 
 	let visibleItems = $derived.by(() => {
 		let list = items;
@@ -276,6 +327,23 @@
 			</p>
 			<div class="mt-auto flex gap-1.5 pt-1">
 				<button
+					class="shrink-0 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-40 {rankOf(
+						item
+					)
+						? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400'
+						: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
+					disabled={rankingBusy || (!rankOf(item) && myBallot.length >= MAX_BALLOT_SIZE)}
+					onclick={() => toggleRank(item)}
+					aria-label={rankOf(item)
+						? `Remove ${item.title} from your ranking`
+						: `Rank ${item.title}`}
+					title={rankOf(item)
+						? `Ranked #${rankOf(item)} — tap to remove`
+						: 'Add to your ranked picks'}
+				>
+					{rankOf(item) ? `★${rankOf(item)}` : '☆'}
+				</button>
+				<button
 					class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
 					disabled={togglingKey === key}
 					onclick={() => toggleWatched(item)}
@@ -342,6 +410,21 @@
 					>✓</span
 				>
 			{/if}
+			<button
+				class="shrink-0 rounded px-1.5 py-1 text-[10px] font-medium transition-colors disabled:opacity-40 {rankOf(
+					item
+				)
+					? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400'
+					: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
+				disabled={rankingBusy || (!rankOf(item) && myBallot.length >= MAX_BALLOT_SIZE)}
+				onclick={() => toggleRank(item)}
+				aria-label={rankOf(item) ? `Remove ${item.title} from your ranking` : `Rank ${item.title}`}
+				title={rankOf(item)
+					? `Ranked #${rankOf(item)} — tap to remove`
+					: 'Add to your ranked picks'}
+			>
+				{rankOf(item) ? `★${rankOf(item)}` : '☆'}
+			</button>
 			<button
 				class="shrink-0 rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 				disabled={togglingKey === key}
@@ -460,6 +543,21 @@
 			</p>
 			<div class="mt-1.5 flex gap-1.5">
 				<button
+					disabled={rankingBusy || (!rankOf(item) && myBallot.length >= MAX_BALLOT_SIZE)}
+					onclick={() => toggleRank(item)}
+					aria-label={rankOf(item)
+						? `Remove ${item.title} from your ranking`
+						: `Rank ${item.title}`}
+					title={rankOf(item)
+						? `Ranked #${rankOf(item)} — tap to remove`
+						: 'Add to your ranked picks'}
+					class="rounded px-2 py-1 text-xs font-medium disabled:opacity-50 {rankOf(item)
+						? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+						: 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+				>
+					{rankOf(item) ? `★ #${rankOf(item)}` : '☆ Rank'}
+				</button>
+				<button
 					disabled={togglingKey === key}
 					onclick={() => toggleWatched(item)}
 					class="rounded px-2 py-1 text-xs font-medium disabled:opacity-50 {myWatch
@@ -485,7 +583,96 @@
 	</div>
 {/snippet}
 
+{#snippet rankingsPanel()}
+	<div class="mt-2 space-y-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/40">
+		<div>
+			<p
+				class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+			>
+				Your ballot
+			</p>
+			{#if myBallot.length === 0}
+				<p class="text-xs text-gray-400 dark:text-gray-600">
+					Tap ☆ on a title below to rank up to {MAX_BALLOT_SIZE}.
+				</p>
+			{:else}
+				<ol class="space-y-1">
+					{#each myBallot as key, i (key)}
+						{@const bItem = items.find((it) => itemKey(it) === key)}
+						{#if bItem}
+							<li class="flex items-center gap-2 text-xs">
+								<span class="w-4 shrink-0 text-right font-semibold text-orange-500">{i + 1}</span>
+								<span class="min-w-0 flex-1 truncate">{bItem.title}</span>
+								<button
+									class="rounded bg-gray-200 px-1.5 py-0.5 text-gray-500 disabled:opacity-30 dark:bg-gray-700 dark:text-gray-400"
+									disabled={rankingBusy || i === 0}
+									onclick={() => moveBallotEntry(i, 'up')}
+									aria-label="Move {bItem.title} up">↑</button
+								>
+								<button
+									class="rounded bg-gray-200 px-1.5 py-0.5 text-gray-500 disabled:opacity-30 dark:bg-gray-700 dark:text-gray-400"
+									disabled={rankingBusy || i === myBallot.length - 1}
+									onclick={() => moveBallotEntry(i, 'down')}
+									aria-label="Move {bItem.title} down">↓</button
+								>
+								<button
+									class="rounded bg-gray-200 px-1.5 py-0.5 text-red-500 disabled:opacity-30 dark:bg-gray-700"
+									disabled={rankingBusy}
+									onclick={() => toggleRank(bItem)}
+									aria-label="Remove {bItem.title} from your ranking">✕</button
+								>
+							</li>
+						{/if}
+					{/each}
+				</ol>
+			{/if}
+		</div>
+		<div>
+			<p
+				class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+			>
+				Group ranking
+			</p>
+			{#if tally.length === 0}
+				<p class="text-xs text-gray-400 dark:text-gray-600">No one has ranked anything yet.</p>
+			{:else}
+				<ol class="space-y-1">
+					{#each tally as row, i (itemKey(row.item))}
+						<li class="flex items-center gap-2 text-xs">
+							<span class="w-4 shrink-0 text-right font-semibold text-gray-400">{i + 1}</span>
+							<span class="min-w-0 flex-1 truncate">{row.item.title}</span>
+							<span class="shrink-0 text-gray-400 dark:text-gray-500"
+								>{row.score} pt{row.score === 1 ? '' : 's'} · {row.voters} voter{row.voters === 1
+									? ''
+									: 's'}</span
+							>
+						</li>
+					{/each}
+				</ol>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
 {#snippet content()}
+	{#if loaded && items.length > 0}
+		<div class="mb-3">
+			<button
+				onclick={() => (showRankings = !showRankings)}
+				class="flex items-center gap-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+				aria-expanded={showRankings}
+			>
+				<span class="transition-transform {showRankings ? 'rotate-90' : ''}">▸</span>
+				🏆 Rankings
+				{#if tally.length > 0}
+					<span class="text-gray-400 dark:text-gray-600">· {tally.length} ranked</span>
+				{/if}
+			</button>
+			{#if showRankings}
+				{@render rankingsPanel()}
+			{/if}
+		</div>
+	{/if}
 	{#if loading}
 		<p class="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
 	{:else if error}
@@ -556,6 +743,18 @@
 		onClose={() => (detailItem = null)}
 	>
 		{#snippet footer()}
+			<button
+				class="rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 {rankOf(
+					di
+				)
+					? 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/40 dark:text-orange-400'
+					: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+				disabled={rankingBusy || (!rankOf(di) && myBallot.length >= MAX_BALLOT_SIZE)}
+				onclick={() => toggleRank(di)}
+				title={rankOf(di) ? `Ranked #${rankOf(di)} — tap to remove` : 'Add to your ranked picks'}
+			>
+				{rankOf(di) ? `★ #${rankOf(di)}` : '☆ Rank'}
+			</button>
 			<button
 				class="flex-1 rounded-lg py-2 text-sm font-medium transition-colors
 					{watchedByMe(di)

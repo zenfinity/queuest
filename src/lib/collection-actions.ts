@@ -14,7 +14,14 @@ import { b64urlEncode } from './base64url';
 import { getSyncDek, getUserPrivateKey, removeItem } from './db';
 import { ensureKeypair } from './keypair';
 import { throwIfNotOk } from './http';
-import { syncCollectionItems, fetchCollectionItems, type CollectionItem } from './collection-sync';
+import {
+	syncCollectionItems,
+	syncCollectionBallots,
+	fetchCollectionState,
+	MAX_BALLOT_SIZE,
+	type CollectionItem,
+	type BallotEntry
+} from './collection-sync';
 import type { WatchlistItem } from './types';
 import { getSyncStatus } from './sync';
 
@@ -369,24 +376,26 @@ function toCollectionItem(item: WatchlistItem, accountId: string): CollectionIte
 }
 
 /**
- * Loads a shared collection's items for the queue view. Resolves the
- * collection's DEK from its wrapped copy, then pulls and decrypts — a
+ * Loads a shared collection's items and ballots for the queue view. Resolves
+ * the collection's DEK from its wrapped copy, then pulls and decrypts — a
  * read-only fetch, no push, so opening a collection never risks colliding
- * with a concurrent writer.
+ * with a concurrent writer. Ballots come back alongside items (one blob
+ * pull covers both) since every surface that shows items also needs ballots
+ * to render ranks and the group tally.
  */
 export async function loadCollectionItems(
 	collection: SharedCollection,
 	deps: CollectionActionDeps
-): Promise<CollectionItem[]> {
+): Promise<{ items: CollectionItem[]; ballots: Record<string, BallotEntry> }> {
 	deps.setBusy(true);
 	deps.setError('');
 	try {
 		const dekB64 = await openCollectionKey(collection.wrappedKey);
 		const dek = await importDek(dekB64, false);
-		return await fetchCollectionItems(collection.id, dek);
+		return await fetchCollectionState(collection.id, dek);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not load this collection.');
-		return [];
+		return { items: [], ballots: {} };
 	} finally {
 		deps.setBusy(false);
 	}
@@ -422,6 +431,42 @@ export async function toggleCollectionWatched(
 		);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not save that. Try again.');
+		return null;
+	} finally {
+		deps.setBusy(false);
+	}
+}
+
+/**
+ * Replaces this account's own ballot and pushes the change. Whole-ballot
+ * replace, not a per-item edit — see mergeCollectionBallots for why a ranked
+ * list can't be merged item-by-item the way `watch` marks are; a member's
+ * ballot is one ordered thing, not several independent marks. Capped to
+ * MAX_BALLOT_SIZE again here even though the UI already enforces it, so a
+ * bug upstream can't push an oversized ballot.
+ */
+export async function setMyBallot(
+	collection: SharedCollection,
+	currentBallots: Record<string, BallotEntry>,
+	myAccountId: string,
+	itemsInOrder: string[],
+	deps: CollectionActionDeps
+): Promise<Record<string, BallotEntry> | null> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const dekB64 = await openCollectionKey(collection.wrappedKey);
+		const dek = await importDek(dekB64, false);
+		const entry: BallotEntry = {
+			items: itemsInOrder.slice(0, MAX_BALLOT_SIZE),
+			updatedAt: new Date().toISOString()
+		};
+		return await syncCollectionBallots(collection.id, dek, currentBallots, (merged) => ({
+			...merged,
+			[myAccountId]: entry
+		}));
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not save your ranking. Try again.');
 		return null;
 	} finally {
 		deps.setBusy(false);
