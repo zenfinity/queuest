@@ -1,12 +1,19 @@
 import type { ShareItem } from './types';
-import { addItem } from './db';
+import { addItem, getItemByTmdbId } from './db';
 import { getOrAssignColor } from './queue-colors';
 import { isConstraintError } from './http';
+
+/** One title skipped because it's already in the queue — `existingTag` is
+ * the list it's already under, or null for the untagged personal queue. */
+export interface DuplicateSkip {
+	title: string;
+	existingTag: string | null;
+}
 
 export interface ShareTokenActionDeps {
 	setAddingAll: (adding: boolean) => void;
 	setAddedCount: (count: number) => void;
-	setSkipCount: (count: number) => void;
+	setSkips: (skips: DuplicateSkip[]) => void;
 	setAddDone: (done: boolean) => void;
 	setAddError: (error: string) => void;
 }
@@ -21,7 +28,7 @@ export async function addAllToQueue(
 	const fallbackTag = queueName || 'Shared List';
 	getOrAssignColor(fallbackTag);
 	let added = 0;
-	let dupes = 0;
+	const skips: DuplicateSkip[] = [];
 	const failures: string[] = [];
 	try {
 		for (const item of items) {
@@ -54,7 +61,13 @@ export async function addAllToQueue(
 				added++;
 			} catch (err) {
 				if (isConstraintError(err)) {
-					dupes++;
+					// A tombstoned row (previously removed) matches the same unique
+					// index but isn't "in" any list — fall back to no tag rather
+					// than misreporting where it lives.
+					const existing = await getItemByTmdbId(item.tmdb_id, item.media_type);
+					const existingTag =
+						existing && !existing.deleted_at ? (existing.queue_tag ?? null) : null;
+					skips.push({ title: item.title, existingTag });
 				} else {
 					const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 					console.error('addItem failed for', item.title, err);
@@ -63,7 +76,7 @@ export async function addAllToQueue(
 			}
 		}
 		deps.setAddedCount(added);
-		deps.setSkipCount(dupes);
+		deps.setSkips(skips);
 		deps.setAddDone(true);
 		if (failures.length > 0) {
 			deps.setAddError(failures.join('\n'));

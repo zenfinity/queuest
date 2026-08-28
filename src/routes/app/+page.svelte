@@ -10,6 +10,7 @@
 		toggleSeasonProgress,
 		listCollections,
 		setItemCollection,
+		moveItem,
 		bulkSetCollection,
 		bulkSetWatched,
 		bulkRemove,
@@ -249,11 +250,20 @@
 			if (queueControls.sortBy === 'runtime') {
 				return (remainingRuntime(a) - remainingRuntime(b)) * mul;
 			}
+			if (queueControls.sortBy === 'rank') {
+				return ((a.sort_order ?? 0) - (b.sort_order ?? 0)) * mul;
+			}
 			return a.added_at.localeCompare(b.added_at) * mul;
 		});
 	}
 
 	let flatItems = $derived(sorted(visibleItems));
+
+	// Move-up/down (#216) only has a clear meaning against a single flat
+	// order — grouped-by-collection sections are alphabetical, and
+	// reordering "across" them isn't a defined operation, so the controls
+	// are suppressed rather than picking an arbitrary one.
+	let rankMode = $derived(queueControls.sortBy === 'rank' && !queueControls.groupByCollection);
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	let dbError = $state('');
@@ -273,6 +283,13 @@
 
 	async function reload() {
 		await reloadQueue(actionDeps);
+	}
+
+	async function moveUp(item: WatchlistItem) {
+		await moveItem(item, 'up', flatItems, actionDeps);
+	}
+	async function moveDown(item: WatchlistItem) {
+		await moveItem(item, 'down', flatItems, actionDeps);
 	}
 
 	const collectionActionDeps: CollectionActionDeps = {
@@ -750,10 +767,13 @@
 			groupByCollection={queueControls.groupByCollection}
 			{selectMode}
 			selected={selectedIds}
+			{rankMode}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
 			onToggleSelect={toggleSelected}
+			onMoveUp={moveUp}
+			onMoveDown={moveDown}
 			{seasonPicker}
 		/>
 
@@ -767,10 +787,13 @@
 			groupByCollection={queueControls.groupByCollection}
 			{selectMode}
 			selected={selectedIds}
+			{rankMode}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
 			onToggleSelect={toggleSelected}
+			onMoveUp={moveUp}
+			onMoveDown={moveDown}
 			{seasonPicker}
 		/>
 

@@ -153,7 +153,7 @@
 							>
 						{/if}
 					</div>
-					{#each [['added', 'Recent'], ['title', 'A–Z'], ['runtime', 'Runtime']] as const as [key, label] (key)}
+					{#each [['added', 'Recent'], ['title', 'A–Z'], ['runtime', 'Runtime'], ['rank', 'Rank']] as const as [key, label] (key)}
 						<div class="flex items-center gap-0.5">
 							<button
 								onclick={() => setSortBy(key)}

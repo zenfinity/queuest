@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.9] — 2026-08-28
+
+### Shared-import duplicates say where they already are (#212)
+
+Importing a shared list silently skipped titles already queued under a different list, reporting only a bare count. Skips now name the list — "2 in Horror October, 1 in your Queue" instead of "3 already in queue."
+
+### Custom "Rank" sort for the main queue (#216)
+
+A new sort mode alongside Recent/A–Z/Runtime: drag-free move up/down controls for arranging your queue in whatever order you want. Persists locally and syncs across devices like everything else in the queue. Suppressed when grouped by collection, since reordering across alphabetical sections isn't a defined operation.
+
 ## [0.9.8] — 2026-08-28
 
 ### Shared-list posters load again (#213)

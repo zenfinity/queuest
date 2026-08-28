@@ -4,7 +4,7 @@ const DB_NAME = 'streamq';
 const STORE = 'watchlist';
 const SERVICES_STORE = 'services';
 const META_STORE = 'meta';
-const VERSION = 3;
+const VERSION = 4;
 
 let _dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -61,6 +61,32 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 					db.createObjectStore(SERVICES_STORE, { keyPath: 'provider_id' });
 				}
 			}
+			// Backfill an initial custom order (#216) so "Rank" sort has a
+			// deterministic starting point instead of every existing row sharing
+			// undefined — natural key order (== insertion order, since ids
+			// autoIncrement) is as good a starting point as any. Must not run
+			// concurrently with the v3 cursor below: two cursors doing
+			// read-modify-write over the same store in one versionchange
+			// transaction each hold their own snapshot of a row, so whichever
+			// commits second clobbers the other's field — hence this only ever
+			// starts once that cursor (if it ran at all) has finished.
+			function backfillSortOrder() {
+				const store = tx.objectStore(STORE);
+				const cursorReq = store.openCursor();
+				let i = 0;
+				cursorReq.onsuccess = () => {
+					const cursor = cursorReq.result;
+					if (!cursor) return;
+					const item = cursor.value as WatchlistItem;
+					if (item.sort_order === undefined) {
+						item.sort_order = i;
+						cursor.update(item);
+					}
+					i++;
+					cursor.continue();
+				};
+			}
+
 			if (oldVersion < 3) {
 				if (!db.objectStoreNames.contains(META_STORE)) {
 					db.createObjectStore(META_STORE, { keyPath: 'key' });
@@ -71,7 +97,10 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 				const cursorReq = store.openCursor();
 				cursorReq.onsuccess = () => {
 					const cursor = cursorReq.result;
-					if (!cursor) return;
+					if (!cursor) {
+						if (oldVersion < 4) backfillSortOrder();
+						return;
+					}
 					const item = cursor.value as WatchlistItem;
 					if (!item.updated_at) {
 						item.updated_at = item.added_at ?? new Date().toISOString();
@@ -79,6 +108,8 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 					}
 					cursor.continue();
 				};
+			} else if (oldVersion < 4) {
+				backfillSortOrder();
 			}
 		};
 		req.onsuccess = () => resolve(req.result);
@@ -119,21 +150,31 @@ export async function addItem(
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
 		// JSON round-trip strips Svelte 5 reactive Proxies — structuredClone cannot clone them
 		const plain = JSON.parse(JSON.stringify(item)) as typeof item;
 		const now = nowIso();
-		const full: Omit<WatchlistItem, 'id'> = {
-			...plain,
-			added_at: now,
-			watched_at: null,
-			updated_at: now
+		// New items land at the end of custom "Rank" order (#216). count()
+		// includes tombstones, so this can overshoot the true number of visible
+		// items — harmless, since sort_order only needs to exceed every existing
+		// value, not be contiguous.
+		const countReq = store.count();
+		countReq.onsuccess = () => {
+			const full: Omit<WatchlistItem, 'id'> = {
+				...plain,
+				added_at: now,
+				watched_at: null,
+				updated_at: now,
+				sort_order: countReq.result
+			};
+			const addReq = store.add(full);
+			addReq.onsuccess = () => {
+				notifyMutation();
+				resolve({ ...full, id: addReq.result as number });
+			};
+			addReq.onerror = () => reject(addReq.error);
 		};
-		const req = tx.objectStore(STORE).add(full);
-		req.onsuccess = () => {
-			notifyMutation();
-			resolve({ ...full, id: req.result as number });
-		};
-		req.onerror = () => reject(req.error);
+		countReq.onerror = () => reject(countReq.error);
 	});
 }
 
@@ -233,6 +274,29 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 	});
 }
 
+/**
+ * Looks up an item by the same [tmdb_id, media_type] key the store's unique
+ * index enforces — used when an `add()` hits that constraint, to tell the
+ * caller which existing row it collided with (and its list) instead of just
+ * "duplicate". Returns tombstoned rows too, same as the index itself does;
+ * callers that only care about active items should check `deleted_at`.
+ */
+export async function getItemByTmdbId(
+	tmdb_id: number,
+	media_type: WatchlistItem['media_type']
+): Promise<WatchlistItem | undefined> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db
+			.transaction(STORE)
+			.objectStore(STORE)
+			.index('tmdb_media')
+			.get([tmdb_id, media_type]);
+		req.onsuccess = () => resolve(req.result as WatchlistItem | undefined);
+		req.onerror = () => reject(req.error);
+	});
+}
+
 export async function setQueueTag(id: number, tag: string | null): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
@@ -255,6 +319,38 @@ export async function setQueueTag(id: number, tag: string | null): Promise<void>
 			put.onerror = () => reject(put.error);
 		};
 		get.onerror = () => reject(get.error);
+	});
+}
+
+/**
+ * Bulk-reassigns sort_order to match `orderedIds` — the custom "Rank" sort
+ * mode's move-up/move-down (#216). Renumbers only the given ids (typically
+ * the currently visible/filtered list); ids left out keep their existing
+ * value, same "not atomic across a batch write" tradeoff already accepted
+ * for renameCollectionTag. Rides the existing whole-item LWW sync merge for
+ * free — no separate merge rule needed, same as every other field here.
+ */
+export async function setSortOrder(orderedIds: number[]): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const now = nowIso();
+		orderedIds.forEach((id, index) => {
+			const get = store.get(id);
+			get.onsuccess = () => {
+				const item = get.result as WatchlistItem | undefined;
+				if (!item) return;
+				item.sort_order = index;
+				item.updated_at = now;
+				store.put(item);
+			};
+		});
+		tx.oncomplete = () => {
+			notifyMutation();
+			resolve();
+		};
+		tx.onerror = () => reject(tx.error);
 	});
 }
 

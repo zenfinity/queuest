@@ -17,10 +17,13 @@
 		groupByCollection = false,
 		selectMode = false,
 		selected = new Set<number>(),
+		rankMode = false,
 		onToggle,
 		onRemove,
 		onOpenDetail,
 		onToggleSelect,
+		onMoveUp,
+		onMoveDown,
 		seasonPicker
 	}: {
 		items: WatchlistItem[];
@@ -30,10 +33,14 @@
 		groupByCollection?: boolean;
 		selectMode?: boolean;
 		selected?: Set<number>;
+		/** Custom "Rank" sort is active (#216) — shows move up/down instead of relying on drag. */
+		rankMode?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
 		onOpenDetail: (item: WatchlistItem) => void;
 		onToggleSelect?: (item: WatchlistItem) => void;
+		onMoveUp?: (item: WatchlistItem) => void;
+		onMoveDown?: (item: WatchlistItem) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -57,7 +64,7 @@
 	}}
 />
 
-{#snippet cardContent(item: WatchlistItem)}
+{#snippet cardContent(item: WatchlistItem, isFirst: boolean, isLast: boolean)}
 	{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null)}
 	{@const cardPct = Math.min(100, (remainingRuntime(item) / (budgetHours * 60)) * 100)}
 	{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
@@ -190,6 +197,26 @@
 		{/if}
 		{#if !selectMode}
 			<div class="mt-auto flex gap-1.5 pt-1">
+				{#if rankMode}
+					<button
+						class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+						disabled={isFirst}
+						onclick={(e) => {
+							e.stopPropagation();
+							onMoveUp?.(item);
+						}}
+						aria-label="Move up">↑</button
+					>
+					<button
+						class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+						disabled={isLast}
+						onclick={(e) => {
+							e.stopPropagation();
+							onMoveDown?.(item);
+						}}
+						aria-label="Move down">↓</button
+					>
+				{/if}
 				<button
 					class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
 					disabled={busy.has(item.id)}
@@ -231,7 +258,7 @@
 					>· {hms(sectionRemainingMins)}</span
 				>
 			</div>
-			{#each section.items as item (item.id)}
+			{#each section.items as item, i (item.id)}
 				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 				<!-- Card click is a convenience only — the poster button inside cardContent
 				     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
@@ -251,12 +278,12 @@
 						else onOpenDetail(item);
 					}}
 				>
-					{@render cardContent(item)}
+					{@render cardContent(item, i === 0, i === section.items.length - 1)}
 				</div>
 			{/each}
 		{/each}
 	{:else}
-		{#each items as item (item.id)}
+		{#each items as item, i (item.id)}
 			{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 			<!-- Card click is a convenience only — see the grouped branch above. -->
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -274,7 +301,7 @@
 					else onOpenDetail(item);
 				}}
 			>
-				{@render cardContent(item)}
+				{@render cardContent(item, i === 0, i === items.length - 1)}
 			</div>
 		{/each}
 	{/if}
