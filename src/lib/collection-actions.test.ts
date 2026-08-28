@@ -14,7 +14,8 @@ import {
 	loadCollectionItems,
 	toggleCollectionWatched,
 	renameSharedCollection,
-	addItemsToSharedCollection
+	addItemsToSharedCollection,
+	removeItemFromSharedCollection
 } from './collection-actions';
 
 const noop = { setBusy: () => {}, setError: () => {} };
@@ -534,5 +535,105 @@ describe('addItemsToSharedCollection', () => {
 
 		const { getAll } = await import('./db');
 		expect((await getAll()).map((i) => i.tmdb_id)).toEqual([300]);
+	});
+});
+
+describe('removeItemFromSharedCollection', () => {
+	function stubBlobFetch(initialItems: unknown[]) {
+		let version = 1;
+		let stored: unknown[] = initialItems;
+		const mock = vi.fn(async (url: string, init?: RequestInit) => {
+			const u = String(url);
+			if (u.includes('/blob') && (!init || init.method === undefined)) {
+				const { gzip } = await import('./gzip');
+				const { encryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const compressed = await gzip(new TextEncoder().encode(JSON.stringify({ items: stored })));
+				const ciphertext = await encryptBytesWithDek(compressed, dek);
+				return new Response(ciphertext, {
+					status: 200,
+					headers: { 'X-Sync-Version': String(version), 'X-Collection-Dek-Version': '1' }
+				});
+			}
+			if (u.includes('/blob') && init?.method === 'PUT') {
+				const { gunzip } = await import('./gzip');
+				const { decryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const body = await new Response(init.body as BodyInit).arrayBuffer();
+				const plain = await decryptBytesWithDek(body, dek);
+				stored = (JSON.parse(new TextDecoder().decode(await gunzip(plain))) as { items: unknown[] })
+					.items;
+				version++;
+				return Response.json({ version });
+			}
+			throw new Error(`unexpected request: ${u}`);
+		});
+		return { mock, stored: () => stored };
+	}
+
+	function seedItem(tmdb_id: number, overrides: Record<string, unknown> = {}) {
+		return {
+			tmdb_id,
+			media_type: 'movie',
+			title: `Title ${tmdb_id}`,
+			poster_path: null,
+			overview: null,
+			providers: [],
+			runtime_minutes: 100,
+			seasons: [],
+			watched_seasons: [],
+			added_at: '2026-08-01T00:00:00.000Z',
+			watched_at: null,
+			updated_at: '2026-08-01T00:00:00.000Z',
+			watch: {},
+			added_by_account_id: ALICE,
+			...overrides
+		};
+	}
+
+	it('removes only the targeted item, leaving the rest of the blob alone', async () => {
+		const { mock, stored } = stubBlobFetch([seedItem(1), seedItem(2)]);
+		vi.stubGlobal('fetch', mock);
+
+		const items = await loadCollectionItems(collection(), noop);
+		const target = items.find((i) => i.tmdb_id === 1)!;
+		const result = await removeItemFromSharedCollection(collection(), items, target, noop);
+
+		expect(result).not.toBeNull();
+		expect(result!.map((i) => i.tmdb_id)).toEqual([2]);
+		expect((stored() as { tmdb_id: number }[]).map((i) => i.tmdb_id)).toEqual([2]);
+	});
+
+	it('matches by tmdb_id + media_type, not just tmdb_id', async () => {
+		const movie = seedItem(1, { media_type: 'movie' });
+		const show = seedItem(1, { media_type: 'tv', title: 'Show 1' });
+		const { mock, stored } = stubBlobFetch([movie, show]);
+		vi.stubGlobal('fetch', mock);
+
+		const items = await loadCollectionItems(collection(), noop);
+		const target = items.find((i) => i.media_type === 'movie')!;
+		await removeItemFromSharedCollection(collection(), items, target, noop);
+
+		const remaining = stored() as { media_type: string }[];
+		expect(remaining).toHaveLength(1);
+		expect(remaining[0].media_type).toBe('tv');
+	});
+
+	it('surfaces an error and returns null on failure, without touching the blob', async () => {
+		const c = capture();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response('nope', { status: 500 }))
+		);
+
+		const result = await removeItemFromSharedCollection(
+			collection(),
+			[],
+			{ ...seedItem(1) } as never,
+			c.deps
+		);
+
+		expect(result).toBeNull();
+		expect(c.err()).toBeTruthy();
 	});
 });

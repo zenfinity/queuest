@@ -9,6 +9,7 @@
 	import { page } from '$app/state';
 	import { joinCollection } from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
+	import { setPendingInvite } from '$lib/pending-invite';
 
 	const token = page.params.token ?? '';
 
@@ -29,6 +30,10 @@
 	onMount(async () => {
 		dek = window.location.hash.replace(/^#/, '');
 		needsSync = !(await isSyncEnabled());
+		// Stashed up front, not on the "Set up sync" click — the visitor is
+		// about to be shown that prompt regardless, and this way there's no
+		// link-click handler to keep in sync with the plain <a> below.
+		if (needsSync && dek) setPendingInvite({ token, dek });
 
 		try {
 			const res = await fetch(`/api/collections/invites/${encodeURIComponent(token)}`);

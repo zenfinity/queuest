@@ -20,6 +20,7 @@
 		listMembers,
 		loadCollectionItems,
 		toggleCollectionWatched,
+		removeItemFromSharedCollection,
 		type SharedCollection,
 		type CollectionMember
 	} from '$lib/collection-actions';
@@ -56,6 +57,11 @@
 	let members: CollectionMember[] = $state([]);
 	let myUserId = $state('');
 	let togglingKey = $state('');
+	let removingKey = $state('');
+	// Two-tap confirm, same "arm, then a second click removes" pattern as the
+	// bulk-remove/delete-list controls elsewhere in the app — this is
+	// destructive for everyone in the list, not just the person clicking.
+	let removeArmedKey: string | null = $state(null);
 	let lastViewed: string | undefined = $state(undefined);
 	let detailItem: CollectionItem | null = $state(null);
 
@@ -126,6 +132,19 @@
 		);
 		if (result) items = result;
 		togglingKey = '';
+	}
+
+	async function removeItemAction(item: CollectionItem) {
+		const key = itemKey(item);
+		if (removeArmedKey !== key) {
+			removeArmedKey = key;
+			return;
+		}
+		removingKey = key;
+		const result = await removeItemFromSharedCollection(collection, items, item, noop);
+		if (result) items = result;
+		removingKey = '';
+		removeArmedKey = null;
 	}
 
 	let visibleItems = $derived.by(() => {
@@ -255,14 +274,27 @@
 			<p class="text-[10px] text-gray-400 dark:text-gray-500">
 				Added by {memberLabel(item.added_by_account_id ?? null)}
 			</p>
-			<div class="mt-auto pt-1">
+			<div class="mt-auto flex gap-1.5 pt-1">
 				<button
-					class="w-full rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
+					class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
 					disabled={togglingKey === key}
 					onclick={() => toggleWatched(item)}
 				>
 					{myWatch ? 'Unwatch' : '✓ Watched'}
 				</button>
+				{#if collection.role === 'owner'}
+					<button
+						class="shrink-0 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-40 {removeArmedKey ===
+						key
+							? 'bg-red-600 text-white hover:bg-red-700'
+							: 'bg-gray-100 text-red-500 hover:bg-red-100 dark:bg-gray-800 dark:hover:bg-red-900/30'}"
+						disabled={removingKey === key}
+						onclick={() => removeItemAction(item)}
+						aria-label="Remove {item.title} from this list"
+					>
+						{removeArmedKey === key ? 'Confirm' : '✕'}
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -317,6 +349,19 @@
 			>
 				{myWatch ? 'Unwatch' : '✓'}
 			</button>
+			{#if collection.role === 'owner'}
+				<button
+					class="shrink-0 rounded px-1.5 py-1 text-[10px] font-medium transition-colors disabled:opacity-40 {removeArmedKey ===
+					key
+						? 'bg-red-600 text-white hover:bg-red-700'
+						: 'bg-gray-100 text-red-500 hover:bg-red-100 dark:bg-gray-800 dark:hover:bg-red-900/30'}"
+					disabled={removingKey === key}
+					onclick={() => removeItemAction(item)}
+					aria-label="Remove {item.title} from this list"
+				>
+					{removeArmedKey === key ? 'Confirm' : '✕'}
+				</button>
+			{/if}
 		</div>
 
 		<div class="ml-11 mt-1.5 flex items-center gap-2">
@@ -387,7 +432,7 @@
 	>
 		{#if item.poster_path}
 			<img
-				src="{TMDB_IMG}{item.poster_path}"
+				src="{TMDB_IMG}/w92{item.poster_path}"
 				alt=""
 				class="h-16 w-11 shrink-0 rounded object-cover bg-gray-200 dark:bg-gray-700"
 			/>
@@ -413,15 +458,29 @@
 				{item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '—'} · Added by
 				{memberLabel(item.added_by_account_id ?? null)}
 			</p>
-			<button
-				disabled={togglingKey === key}
-				onclick={() => toggleWatched(item)}
-				class="mt-1.5 rounded px-2 py-1 text-xs font-medium disabled:opacity-50 {myWatch
-					? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-					: 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-			>
-				{myWatch ? '✓ Watched' : 'Mark watched'}
-			</button>
+			<div class="mt-1.5 flex gap-1.5">
+				<button
+					disabled={togglingKey === key}
+					onclick={() => toggleWatched(item)}
+					class="rounded px-2 py-1 text-xs font-medium disabled:opacity-50 {myWatch
+						? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+						: 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+				>
+					{myWatch ? '✓ Watched' : 'Mark watched'}
+				</button>
+				{#if collection.role === 'owner'}
+					<button
+						disabled={removingKey === key}
+						onclick={() => removeItemAction(item)}
+						aria-label="Remove {item.title} from this list"
+						class="rounded px-2 py-1 text-xs font-medium disabled:opacity-50 {removeArmedKey === key
+							? 'bg-red-600 text-white hover:bg-red-700'
+							: 'bg-gray-200 text-red-500 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-red-900/30'}"
+					>
+						{removeArmedKey === key ? 'Confirm' : '✕'}
+					</button>
+				{/if}
+			</div>
 		</div>
 	</div>
 {/snippet}
@@ -510,6 +569,23 @@
 			>
 				{watchedByMe(di) ? '↩ Unwatch' : '✓ Watched'}
 			</button>
+			{#if collection.role === 'owner'}
+				{@const key = itemKey(di)}
+				<button
+					class="rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 {removeArmedKey ===
+					key
+						? 'bg-red-600 text-white hover:bg-red-700'
+						: 'bg-gray-100 text-red-500 hover:bg-red-100 dark:bg-gray-800 dark:hover:bg-red-900/50'}"
+					disabled={removingKey === key}
+					onclick={async () => {
+						const wasArmed = removeArmedKey === key;
+						await removeItemAction(di);
+						if (wasArmed) detailItem = null;
+					}}
+				>
+					{removeArmedKey === key ? 'Confirm remove' : '✕ Remove'}
+				</button>
+			{/if}
 		{/snippet}
 	</DetailPanel>
 {/if}

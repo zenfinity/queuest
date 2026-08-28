@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { trapFocus } from '$lib/focus-trap';
 	import {
@@ -24,6 +26,7 @@
 		deleteAccount
 	} from '$lib/sync-account-actions';
 	import { getQueueName, setQueueName } from '$lib/queue-colors';
+	import { takePendingInvite } from '$lib/pending-invite';
 	import pkg from '../../../package.json';
 
 	const VERSION = pkg.version;
@@ -315,6 +318,23 @@
 
 		syncEnabled = await isSyncEnabled();
 		if (syncEnabled) syncView = 'status';
+	});
+
+	// Resumes a shared-list invite that sent a logged-out visitor here to set
+	// up sync first (#215) — fires however sync ends up enabled (signup,
+	// sign-in, or recovery all set syncEnabled below), and no-ops if nothing
+	// is pending. Lands back on the same confirm-before-joining screen, not
+	// an automatic join — see that page's own note on why joining is never
+	// automatic on link-open.
+	$effect(() => {
+		if (!syncEnabled) return;
+		const pending = takePendingInvite();
+		if (pending) {
+			// resolve() IS used below — the rule can't see through the template literal
+			// appending #dek, which resolve() itself can't produce (not a route segment).
+			// eslint-disable-next-line svelte/no-navigation-without-resolve
+			goto(`${resolve('/lists/join/[token]', { token: pending.token })}#${pending.dek}`);
+		}
 	});
 </script>
 
