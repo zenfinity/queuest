@@ -48,6 +48,7 @@
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
 	import ListHint from '$lib/components/ListHint.svelte';
+	import SyncHint from '$lib/components/SyncHint.svelte';
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	function loadPref<T extends string>(key: string, fallback: T): T {
@@ -65,6 +66,7 @@
 	let sharedCollections = $state<SharedCollection[]>([]);
 	let sharedListColors = $state<Record<string, string>>({});
 	let sharedFilterStats: { count: number; remainingMins: number } | null = $state(null);
+	let syncEnabled = $state(false);
 
 	// ── Bulk selection (#113) ────────────────────────────────────────────────
 	let selectMode = $state(false);
@@ -336,6 +338,7 @@
 		});
 
 		isSyncEnabled().then((enabled) => {
+			syncEnabled = enabled;
 			if (enabled) loadSharedCollections();
 		});
 
@@ -480,6 +483,9 @@
 {/snippet}
 
 <ListHint show={loaded && items.length >= 3 && existingCollections.length === 0} />
+<SyncHint
+	show={loaded && !syncEnabled && (items.length >= 20 || items.some((i) => i.watched_at))}
+/>
 
 <h1 class="sr-only">My Queue</h1>
 
