@@ -74,7 +74,7 @@ Can't agree on what to watch? Everyone can **rank their top 5 picks**, and Queue
 - 📥 **Import** an existing watchlist from Letterboxd, Criterion, or IMDb — CSV, URL, or pasted list.
 - 📺 **Streaming providers** per title (JustWatch / US), with bundle filtering and Disney+ inference (see below). Rent/Buy indicator when a title isn't on subscription, and Kanopy/Hoopla library links when it isn't streaming at all.
 - 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season/next-episode dates; mid-season episodes distinguished from premieres.
-- 🎬 **Detail panel** — poster lightbox, full overview, cast, genres, providers, per-season progress, and IMDb links for the title.
+- 🎬 **Detail panel** — poster lightbox, full overview, cast, genres, providers, per-season progress, and IMDb links for the title, its director, and each cast member.
 
 ### Everything else
 
