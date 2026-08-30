@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0] — 2026-08-30
+
+### Detail panel showed date-added instead of release year (#224)
+
+`WatchlistItem` never carried a release year — only the Add/search page's result type computed one, and it was dropped when a title was added to the queue. The detail panel's year fallback then reached for `added_at`, which read as "everything's from 2026" for older titles in shared lists. Items now carry a real `year`, threaded through at add-time and validated for sync/collection round-trips; the `added_at` fallback is gone. Items already in a queue won't show a year until re-added or (in a future pass) backfilled via "Refresh provider data."
+
+### Shared-list links show the actual list in previews (#219)
+
+Pasting an invite link or a shared-list link into a chat app showed generic "Queuest" branding instead of the list itself. Invite links (`/lists/join/[token]`) now preview the real list name and who sent it; `/lists/[id]` shows a generic-but-relevant "Shared list on Queuest" preview instead, since its contents are end-to-end encrypted and there's no way to resolve a name for an arbitrary id without an account.
+
+### Subscribed services get their own onboarding moment (#227)
+
+Subscribed Services already sat before "Add titles" in the onboarding sequence but read as an incidental section rather than a deliberate step. It now explains why it's worth setting up first — so Suggest and the "not subscribed" indicators are useful from the very first title added, instead of being a surprise later.
+
 ## [1.0.0] — 2026-08-28
 
 ### Ranked-choice voting on shared lists (#210)
