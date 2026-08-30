@@ -41,6 +41,7 @@ export interface WatchlistItem {
 	title: string;
 	poster_path: string | null;
 	overview: string | null;
+	year?: string | null; // release year, from SearchResult.year at add-time; absent on pre-#224 rows
 	providers: Provider[];
 	rentable?: boolean; // true if available to rent/buy but not on subscription
 	runtime_minutes: number | null; // total runtime (all seasons)

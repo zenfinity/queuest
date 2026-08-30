@@ -13,6 +13,16 @@
 
 	let { children } = $props();
 
+	// Default og:title/og:description — matches the copy that used to be
+	// static in app.html. A route overrides either by returning ogTitle /
+	// ogDescription from its own load() (see lists/join/[token] and
+	// lists/[id] for #219); everything else falls back to these.
+	const DEFAULT_OG_TITLE = 'Queuest';
+	const DEFAULT_OG_DESCRIPTION =
+		'Figure out how long you actually need a streaming subscription — before paying for another month.';
+	let ogTitle = $derived(page.data?.ogTitle ?? DEFAULT_OG_TITLE);
+	let ogDescription = $derived(page.data?.ogDescription ?? DEFAULT_OG_DESCRIPTION);
+
 	const navLinks = [
 		{ href: '/budget', label: 'Budget', exact: false },
 		{ href: '/add', label: 'Add', exact: false },
@@ -188,6 +198,13 @@
 		tick().then(updateCurve);
 	});
 </script>
+
+<svelte:head>
+	<meta property="og:title" content={ogTitle} />
+	<meta property="og:description" content={ogDescription} />
+	<meta name="twitter:title" content={ogTitle} />
+	<meta name="twitter:description" content={ogDescription} />
+</svelte:head>
 
 <svelte:document
 	onclick={(e) => {

@@ -282,6 +282,7 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		title,
 		poster_path: validatePath(item.poster_path),
 		overview: typeof item.overview === 'string' ? item.overview.slice(0, 5000) : null,
+		year: typeof item.year === 'string' && /^\d{4}$/.test(item.year) ? item.year : null,
 		providers,
 		rentable: coerceBoolean(item.rentable),
 		runtime_minutes: coerceNumber(item.runtime_minutes, 100000),
