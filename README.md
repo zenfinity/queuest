@@ -34,7 +34,9 @@ Everything is stored locally in your browser's IndexedDB. No account is required
 If you want the same queue on more than one device, **Settings → Sync** adds an optional account. Your queue is encrypted on your device before it's sent, under a key derived from a passphrase that never leaves your browser — so the server stores ciphertext it has no way to read.
 
 ### 4. Watch something together
-**Lists** are for organising solo — but any list can become a **shared list**: an ongoing, two-way collection two or more people add to, watch, and track together, each seeing who added what and who's already watched it. Turn a personal list into one from the Lists page; invite by link or QR code. Both people need a Queuest account for this — changes sync on open and after each edit, end-to-end encrypted, so the server never sees the titles either side adds. If someone doesn't want an account, a **read-only link** shares a one-way, disposable snapshot of a list instead — no sign-in for either side, just a link that stops working after 30 days.
+**Lists** are for organising solo — but any list can become a **shared list**: an ongoing, two-way collection two or more people add to, watch, and track together, each seeing who added what and who's already watched it. Turn a personal list into one from the Lists page; invite by link or QR code. Both people need a Queuest account for this — changes sync on open and after each edit, end-to-end encrypted, so the server never sees the titles either side adds. The owner can remove a title from the list without it affecting anyone else's copy.
+
+Can't agree on what to watch? Everyone can **rank their top 5 picks**, and Queuest aggregates them into a live group ranking — sort the list by Rank to see it in that order. If someone doesn't want an account, a **read-only link** shares a one-way, disposable snapshot of a list instead — no sign-in for either side, just a link that stops working after 30 days.
 
 ---
 
@@ -51,19 +53,24 @@ If you want the same queue on more than one device, **Settings → Sync** adds a
 
 - 🔐 **End-to-end encrypted sync** — opt in and your queue follows you across devices. Encrypted client-side under a passphrase-derived key that never reaches the server; the server stores only ciphertext it cannot read. Includes a printed recovery code, because a forgotten passphrase is otherwise unrecoverable by design.
 - 🔒 **Encrypted export / import** — AES-GCM + PBKDF2 via Web Crypto. Restores queue, preferences, view settings, and list colors completely. Shared lists aren't included — see below.
-- 👥 **Shared lists** — turn any personal list into an ongoing, two-way collection with other people. Each collaborator gets their own keypair; the list's own encryption key is wrapped individually per member, so the server only ever holds ciphertext no single party controls. Invite by link or QR code — the key travels in the URL fragment, never in a request the server logs. A small badge flags what's changed since you last looked. Removing a member rotates the key and re-encrypts the list in one step, so a removed member's access is actually revoked, not just hidden.
+
+### Shared lists
+
+- 👥 **Turn any list into a shared one** — an ongoing, two-way collection other people add to, watch, and track alongside you, each seeing who added what and who's already watched it. Each collaborator gets their own keypair; the list's own encryption key is wrapped individually per member, so the server only ever holds ciphertext no single party controls. Invite by link or QR code — the key travels in the URL fragment, never in a request the server logs. A small badge flags what's changed since you last looked. Removing a member rotates the key and re-encrypts the list in one step, so a removed member's access is actually revoked, not just hidden. The owner can also remove individual titles without leaving the list.
+- 🏆 **Ranked-choice voting** — everyone can rank up to 5 titles per shared list; picks are aggregated into a live group ranking by Borda count (5 points for a 1st choice down to 1 for 5th), shown next to your own editable ballot. Sort the list by Rank to see it in the group's order.
 - 🔗 **Read-only links** — the account-free option: a disposable, one-way snapshot of a single list as a short URL, viewable and importable by anyone, no sign-in on either side. The decryption key lives only in the URL fragment. Links expire after 30 days.
+- 🔍 **Link previews that show the actual list** — pasting an invite link into a chat app previews the real list name and who sent it, instead of generic branding.
 
 ### Organising the queue
 
 - 🏷️ **Lists** — group titles into named, colour-coded lists (date night, with the kids, horror October). Each shows its own runtime total. Accepting a read-only link automatically creates a list from it. Select multiple titles at once from the queue to assign, clear, mark watched, or remove them in bulk.
-- 📋 **Grid, List, and Gantt views** with sort (A–Z, runtime, date added, watched) and optional grouping by list.
+- 📋 **Grid, List, and Gantt views** with sort (A–Z, runtime, date added, watched, and a manual **Rank** you set with move up/down) and optional grouping by list.
 - 🧭 **Queue dock** — the main filter surface: view switcher, inclusive Watched toggle, and sort/service/list filters.
 - ✅ **Watch tracking** — mark titles done; season-level progress (with episode counts) shrinks bar widths automatically. On a shared list, each collaborator's own watch mark is tracked independently.
 
 ### Finding and adding titles
 
-- 🔍 **Search** movies and TV (TMDB), with a detail panel showing cast, providers, seasons, and release dates before you add.
+- 🔍 **Search** movies and TV (TMDB) by title, actor, or director, with live suggestions as you type and a detail panel showing cast, providers, seasons, and release dates before you add.
 - 📥 **Import** an existing watchlist from Letterboxd, Criterion, or IMDb — CSV, URL, or pasted list.
 - 📺 **Streaming providers** per title (JustWatch / US), with bundle filtering and Disney+ inference (see below). Rent/Buy indicator when a title isn't on subscription, and Kanopy/Hoopla library links when it isn't streaming at all.
 - 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season/next-episode dates; mid-season episodes distinguished from premieres.
@@ -126,7 +133,7 @@ npm run preview   # uses wrangler pages dev
 
 - **No account required, and none by default.** No analytics, no tracking cookies. Everything works signed-out.
 - **Your watch data lives in your browser's IndexedDB.** It leaves your device only if you export it, create a read-only link, turn on sync, or share a list with someone — all four encrypt on your device first.
-- **Sync is opt-in and end-to-end encrypted.** Turning it on creates an account (email + passphrase). Your queue is encrypted client-side under a key derived from your passphrase, which is never sent to the server — the server only ever stores ciphertext it cannot read. Shared lists build on the same account and the same guarantee, extended to multiple people. See [Sync and encryption](#sync-and-privacy).
+- **Sync is opt-in and end-to-end encrypted.** Turning it on creates an account (email + passphrase). Your queue is encrypted client-side under a key derived from your passphrase, which is never sent to the server — the server only ever stores ciphertext it cannot read. Shared lists build on the same account and the same guarantee, extended to multiple people. See [Sync and privacy](#sync-and-privacy) and [Shared lists](#shared-lists).
 - Provider data is sourced from TMDB/JustWatch and reflects US availability only. It can lag real-world changes by a few days.
 - This product uses the TMDB API but is not endorsed or certified by TMDB.
 
