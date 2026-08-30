@@ -211,6 +211,19 @@
 			list = list.filter((i) => !watchedByMe(i));
 		}
 		const mul = queueControls.sortDir === 'asc' ? 1 : -1;
+		if (queueControls.sortBy === 'rank') {
+			// Group Ranking order (#229) — bordaTally is already sorted
+			// highest-score-first, so its array index *is* the rank. Titles
+			// nobody has ranked aren't in the tally at all; they sort after
+			// every ranked title, in their own added_at order.
+			const rankIndex = new Map(tally.map((row, i) => [itemKey(row.item), i]));
+			return [...list].sort((a, b) => {
+				const ra = rankIndex.get(itemKey(a)) ?? tally.length;
+				const rb = rankIndex.get(itemKey(b)) ?? tally.length;
+				if (ra !== rb) return (ra - rb) * mul;
+				return a.added_at.localeCompare(b.added_at) * mul;
+			});
+		}
 		return [...list].sort((a, b) => {
 			if (queueControls.sortBy === 'title') return a.title.localeCompare(b.title) * mul;
 			if (queueControls.sortBy === 'runtime') return (rt(a) - rt(b)) * mul;

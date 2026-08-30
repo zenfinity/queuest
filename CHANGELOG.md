@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0] — 2026-08-30
+
+### Shared lists' Rank sort actually sorts by rank (#229)
+
+Selecting Rank in a shared list's filter menu silently fell through to date-added order — the sort had no branch for it, despite the list's own Group Ranking sitting right above the same picker. Rank now orders by that tally's score, with unranked titles trailing in date-added order.
+
+### Search by actor or director (#62)
+
+The Add page only ever matched titles — searching a name like "Denzel Washington" or "Greta Gerwig" returned nothing. Search now also checks TMDB's person index alongside titles; a confident match surfaces their titles in their own "Titles with {name}" section, hydrated through the same provider/runtime pipeline as any other result.
+
+### Live search suggestions (#63)
+
+A debounced autocomplete dropdown now appears as you type in the Add page's search box, instead of waiting for Enter — a cheap, title/poster/year-only lookup, not the full hydrated search.
+
 ## [1.1.0] — 2026-08-30
 
 ### Detail panel showed date-added instead of release year (#224)

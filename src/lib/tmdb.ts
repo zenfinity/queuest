@@ -72,6 +72,67 @@ export async function searchMulti(query: string, apiKey: string) {
 	return (data.results ?? []).filter((r) => r.media_type === 'movie' || r.media_type === 'tv');
 }
 
+// ── Cast/crew search (#62) ──────────────────────────────────────────────────
+
+export interface PersonMatch {
+	id: number;
+	name: string;
+	popularity: number;
+}
+
+/** Top hit from TMDB's person search — the caller decides whether it's a
+ * confident-enough match to act on (see MIN_PERSON_POPULARITY in
+ * add/+page.server.ts). */
+export async function searchPerson(query: string, apiKey: string): Promise<PersonMatch | null> {
+	const res = await tmdbFetch(
+		`${BASE}/search/person?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US`
+	);
+	if (!res.ok) return null;
+	const data = (await res.json()) as { results?: PersonMatch[] };
+	return data.results?.[0] ?? null;
+}
+
+/**
+ * A person's movie+TV credits, deduped (someone can appear in both `cast`
+ * and `crew` for the same title) and capped by popularity — not batch-fetched
+ * in full, since a prolific actor/director's combined credits can run into
+ * the hundreds and each one still needs its own providers+runtime call
+ * downstream (same amplification concern as #66/#73). Items come back in the
+ * same raw shape searchMulti() results do, so callers can hydrate them with
+ * the exact same code path.
+ */
+export async function getPersonCombinedCredits(
+	personId: number,
+	apiKey: string,
+	limit: number
+): Promise<Record<string, unknown>[]> {
+	const res = await tmdbFetch(
+		`${BASE}/person/${personId}/combined_credits?api_key=${apiKey}&language=en-US`
+	);
+	if (!res.ok) return [];
+	const data = (await res.json()) as {
+		cast?: Record<string, unknown>[];
+		crew?: Record<string, unknown>[];
+	};
+	const all = [...(data.cast ?? []), ...(data.crew ?? [])].filter(
+		(c) => c.media_type === 'movie' || c.media_type === 'tv'
+	);
+
+	const byKey = new Map<string, Record<string, unknown>>();
+	for (const credit of all) {
+		const key = `${credit.media_type}:${credit.id}`;
+		const existing = byKey.get(key);
+		const popularity = (credit.popularity as number) ?? 0;
+		if (!existing || popularity > ((existing.popularity as number) ?? 0)) {
+			byKey.set(key, credit);
+		}
+	}
+
+	return [...byKey.values()]
+		.sort((a, b) => ((b.popularity as number) ?? 0) - ((a.popularity as number) ?? 0))
+		.slice(0, limit);
+}
+
 interface RuntimeResult {
 	runtime_minutes: number | null;
 	seasons: SeasonSummary[];
