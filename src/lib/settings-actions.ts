@@ -56,6 +56,7 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 				r.genres,
 				r.cast,
 				r.director,
+				r.director_id,
 				r.creator,
 				r.imdb_id
 			);

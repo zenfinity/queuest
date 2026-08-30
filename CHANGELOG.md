@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0] — 2026-08-30
+
+### IMDb links for cast and director names (#180)
+
+Follow-up to #142, which only linked the title itself. Cast members and a movie's director are now clickable, opening their IMDb person page in a new tab — resolved lazily per click through a new small proxy endpoint, not batch-fetched for every name on every result.
+
+### Search finds titles filed under an alternate name (#200)
+
+Searching "nausica" never returned *Nausicaä of the Valley of the Wind* — it's filed on TMDB under its disowned English dub title, "Warriors of the Wind," and the match only happens through an alternate title, which TMDB's own relevance ranking buried on page 2 despite far higher popularity than anything on page 1. Search now reaches into page 2 when page 1 doesn't already have enough results, ranking those extras by popularity.
+
+### Onboarding hints for sync and ranked voting (#191)
+
+Two features that shipped with no onboarding at all — sync and ranked-choice voting on shared lists (#210) — now get the same brief, dismiss-once nudge the app already uses for Lists and Sharing. A new global "Show onboarding tips" toggle in Settings turns all of them off at once.
+
 ## [1.2.0] — 2026-08-30
 
 ### Shared lists' Rank sort actually sorts by rank (#229)

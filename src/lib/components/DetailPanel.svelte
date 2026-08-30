@@ -20,6 +20,7 @@
 		media_type: 'movie' | 'tv';
 		runtime_minutes: number | null;
 		director?: string | null;
+		director_id?: number | null;
 		creator?: string | null;
 		genres?: string[];
 		cast?: CastMember[];
@@ -63,6 +64,31 @@
 	let posterExpanded = $state(false);
 	let releasePopupOpen = $state(false);
 	let collectionBusy = $state(false);
+
+	// IMDb person links (#180) — lazy-resolved on click, not batch-fetched for
+	// every cast member up front (same amplification concern as #66/#73: most
+	// of a title's ~9 cast+director names will never be clicked). One
+	// in-flight resolve at a time is enough and keeps a flurry of taps from
+	// opening several tabs at once.
+	let resolvingPersonId: number | null = $state(null);
+
+	async function openImdbPerson(personId: number) {
+		if (resolvingPersonId !== null) return;
+		resolvingPersonId = personId;
+		try {
+			const res = await fetch(`/api/person-external-id?id=${personId}`);
+			if (res.ok) {
+				const { imdb_id } = (await res.json()) as { imdb_id: string | null };
+				if (imdb_id) {
+					window.open(`https://www.imdb.com/name/${imdb_id}/`, '_blank', 'noopener,noreferrer');
+				}
+			}
+		} catch {
+			// Best-effort — same as any other cast member with no id to resolve
+		} finally {
+			resolvingPersonId = null;
+		}
+	}
 
 	// A caller can switch `item` directly (e.g. clicking a different poster
 	// while the panel is already open) without the panel ever closing, so this
@@ -176,7 +202,20 @@
 					<span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-800"
 						>{item.media_type === 'movie' ? '🎬 Movie' : '📺 TV'}</span
 					>
-					{#if item.director}<span>Dir. {item.director}</span>{/if}
+					{#if item.director}
+						{#if item.director_id}
+							<button
+								type="button"
+								onclick={() => openImdbPerson(item.director_id!)}
+								disabled={resolvingPersonId === item.director_id}
+								class="hover:text-orange-500 hover:underline disabled:opacity-60"
+							>
+								Dir. {item.director}{resolvingPersonId === item.director_id ? '…' : ''}
+							</button>
+						{:else}
+							<span>Dir. {item.director}</span>
+						{/if}
+					{/if}
 					{#if item.creator}<span>Created by {item.creator}</span>{/if}
 					{#if item.imdb_id}
 						<a
@@ -320,11 +359,22 @@
 										</div>
 									{/if}
 								</div>
-								<p
-									class="text-center text-[9px] font-medium leading-tight text-gray-700 dark:text-gray-300 line-clamp-2"
-								>
-									{c.name}
-								</p>
+								{#if c.id}
+									<button
+										type="button"
+										onclick={() => openImdbPerson(c.id!)}
+										disabled={resolvingPersonId === c.id}
+										class="text-center text-[9px] font-medium leading-tight text-gray-700 line-clamp-2 hover:text-orange-500 hover:underline disabled:opacity-60 dark:text-gray-300"
+									>
+										{c.name}{resolvingPersonId === c.id ? '…' : ''}
+									</button>
+								{:else}
+									<p
+										class="text-center text-[9px] font-medium leading-tight text-gray-700 dark:text-gray-300 line-clamp-2"
+									>
+										{c.name}
+									</p>
+								{/if}
 								<p
 									class="text-center text-[9px] leading-tight text-gray-400 dark:text-gray-600 line-clamp-1"
 								>

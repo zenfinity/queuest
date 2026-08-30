@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatRuntime, augmentProviders, getRuntime, DISNEY_PLUS_PROVIDER } from './tmdb';
+import {
+	formatRuntime,
+	augmentProviders,
+	getRuntime,
+	searchMulti,
+	getPersonExternalId,
+	SEARCH_RESULTS_CAP,
+	DISNEY_PLUS_PROVIDER
+} from './tmdb';
 import type { Provider } from './types';
 
 function provider(id: number, name: string): Provider {
@@ -15,6 +23,96 @@ const AMAZON_CHANNEL = provider(1000, 'Apple TV Amazon Channel');
 const APPLE_TV = provider(350, 'Apple TV');
 const AMAZON_PRIME = provider(9, 'Amazon Prime Video');
 const AMAZON_PRIME_WITH_ADS = provider(2100, 'Amazon Prime Video with Ads');
+
+describe('searchMulti — page 2 fallback (#200)', () => {
+	const OK = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+	const movie = (title: string, popularity: number) => ({
+		media_type: 'movie',
+		title,
+		popularity
+	});
+	const person = (name: string) => ({ media_type: 'person', name, popularity: 1 });
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('does not fetch page 2 when page 1 already fills the results cap', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			OK({
+				results: Array.from({ length: SEARCH_RESULTS_CAP }, (_, i) => movie(`Movie ${i}`, 10)),
+				total_pages: 2
+			})
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		const results = await searchMulti('batman', 'key');
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(results).toHaveLength(SEARCH_RESULTS_CAP);
+	});
+
+	it('does not fetch page 2 when TMDB reports there is only one page', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(OK({ results: [movie('Obscure Movie', 1)], total_pages: 1 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await searchMulti('some obscure query', 'key');
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('falls back to page 2 when page 1 comes up short, ranking the extras by popularity', async () => {
+		// Mirrors the real bug: "Nausicaä of the Valley of the Wind" is filed
+		// under its disowned dub title "Warriors of the Wind", so it only
+		// surfaces via an alternate-title match on page 2 — far more popular
+		// than everything already on page 1, but TMDB's own relevance order
+		// buries it behind low-popularity page-2 noise too.
+		const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+			if (url.includes('page=2')) {
+				return OK({
+					results: [
+						person('Nausica Someone'),
+						movie('Nausicaa', 0.9),
+						movie('Warriors of the Wind', 15.3), // the actual match
+						movie('Nausicaa - Ocean Doc', 0.7)
+					],
+					total_pages: 2
+				});
+			}
+			return OK({ results: [movie('Nausicaa: The Other Odyssey', 1.2)], total_pages: 2 });
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const results = await searchMulti('nausica', 'key');
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		// Page 1's single result stays first; page 2's extras are appended
+		// sorted by popularity, with the real match landing right after it —
+		// not buried behind lower-popularity noise the way TMDB's raw order had it.
+		expect(results.map((r) => r.title)).toEqual([
+			'Nausicaa: The Other Odyssey',
+			'Warriors of the Wind',
+			'Nausicaa',
+			'Nausicaa - Ocean Doc'
+		]);
+	});
+
+	it('filters person results out of both pages', async () => {
+		const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+			if (url.includes('page=2')) {
+				return OK({ results: [person('Some Person'), movie('Real Match', 5)], total_pages: 2 });
+			}
+			return OK({ results: [person('Another Person')], total_pages: 2 });
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const results = await searchMulti('query', 'key');
+
+		expect(results).toEqual([movie('Real Match', 5)]);
+	});
+});
 
 describe('formatRuntime', () => {
 	it('formats movie runtime as Xh Ym', () => {
@@ -341,5 +439,117 @@ describe('getRuntime — tv release info and season summaries', () => {
 		);
 		const result = await getRuntime(1, 'tv', 'key');
 		expect(result.imdb_id).toBe('tt7818638');
+	});
+});
+
+describe('getRuntime — cast and director person ids (#180)', () => {
+	const OK = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('captures each cast member’s TMDB person id for a movie', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					runtime: 120,
+					genres: [],
+					credits: {
+						cast: [{ id: 501, name: 'Actor One', character: 'Lead', order: 0 }],
+						crew: []
+					}
+				})
+			)
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.cast).toEqual([
+			{ id: 501, name: 'Actor One', character: 'Lead', profile_path: null }
+		]);
+	});
+
+	it('captures the director’s person id for a movie', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					runtime: 120,
+					genres: [],
+					credits: {
+						cast: [],
+						crew: [
+							{ id: 77, name: 'Some Editor', job: 'Editor' },
+							{ id: 88, name: 'Some Director', job: 'Director' }
+						]
+					}
+				})
+			)
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.director).toBe('Some Director');
+		expect(result.director_id).toBe(88);
+	});
+
+	it('leaves director and director_id null for a movie with no credited director', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(OK({ runtime: 120, genres: [], credits: { cast: [], crew: [] } }))
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.director).toBeNull();
+		expect(result.director_id).toBeNull();
+	});
+
+	it('captures cast person ids for a TV show, and leaves director_id null (not linkable — creator is a joined string)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					number_of_episodes: 1,
+					episode_run_time: [30],
+					seasons: [],
+					networks: [],
+					genres: [],
+					created_by: [{ name: 'Some Creator' }],
+					credits: { cast: [{ id: 900, name: 'TV Actor', character: 'Role', order: 0 }] }
+				})
+			)
+		);
+		const result = await getRuntime(1, 'tv', 'key');
+		expect(result.cast).toEqual([
+			{ id: 900, name: 'TV Actor', character: 'Role', profile_path: null }
+		]);
+		expect(result.creator).toBe('Some Creator');
+		expect(result.director_id).toBeNull();
+	});
+});
+
+describe('getPersonExternalId (#180)', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('returns the resolved imdb_id', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi
+				.fn()
+				.mockResolvedValue(new Response(JSON.stringify({ imdb_id: 'nm0000138' }), { status: 200 }))
+		);
+		expect(await getPersonExternalId(1, 'key')).toBe('nm0000138');
+	});
+
+	it('returns null when TMDB has no imdb_id on file for this person', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(new Response(JSON.stringify({ imdb_id: null }), { status: 200 }))
+		);
+		expect(await getPersonExternalId(1, 'key')).toBeNull();
+	});
+
+	it('returns null on a failed request rather than throwing', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 500 })));
+		expect(await getPersonExternalId(1, 'key')).toBeNull();
 	});
 });

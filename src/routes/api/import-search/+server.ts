@@ -84,6 +84,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				genres: runtimeData.genres,
 				cast: runtimeData.cast,
 				director: runtimeData.director,
+				director_id: runtimeData.director_id,
 				creator: runtimeData.creator,
 				imdb_id: runtimeData.imdb_id
 			};

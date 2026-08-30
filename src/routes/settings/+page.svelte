@@ -155,6 +155,18 @@
 		}
 	}
 
+	// ── Onboarding tips kill switch (#191) ───────────────────────────────────
+	let hintsDisabled = $state(false);
+
+	function toggleHintsDisabled() {
+		hintsDisabled = !hintsDisabled;
+		try {
+			localStorage.setItem('sq:hints-disabled', hintsDisabled ? 'true' : 'false');
+		} catch {
+			// Best-effort localStorage write; toggle always updates state regardless
+		}
+	}
+
 	// ── Queue identity ────────────────────────────────────────────────────────
 	let myQueueName = $state('My Queue');
 
@@ -314,6 +326,7 @@
 	// ── Persistence ───────────────────────────────────────────────────────────
 	onMount(async () => {
 		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
+		hintsDisabled = localStorage.getItem('sq:hints-disabled') === 'true';
 		myQueueName = getQueueName();
 
 		syncEnabled = await isSyncEnabled();
@@ -381,6 +394,34 @@
 				<span
 					class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
 					{cancelAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}"
+				>
+				</span>
+			</button>
+		</div>
+	</section>
+
+	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+
+	<!-- Onboarding tips (#191) -->
+	<section class="space-y-3">
+		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Onboarding Tips</h2>
+		<p class="text-sm text-gray-600 dark:text-gray-400">
+			Brief nudges toward features you haven't tried yet — lists, sync, sharing, ranking. Each one
+			only shows once; turn this off to silence all of them, seen or not.
+		</p>
+		<div class="flex items-center justify-between">
+			<span class="text-sm text-gray-600 dark:text-gray-400">Show onboarding tips</span>
+			<button
+				role="switch"
+				aria-checked={!hintsDisabled}
+				aria-label="Show onboarding tips"
+				onclick={toggleHintsDisabled}
+				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors
+					{!hintsDisabled ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}"
+			>
+				<span
+					class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
+					{!hintsDisabled ? 'translate-x-6' : 'translate-x-1'}"
 				>
 				</span>
 			</button>

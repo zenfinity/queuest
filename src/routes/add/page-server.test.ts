@@ -11,17 +11,23 @@ const getRuntime = vi.fn();
 const searchPerson = vi.fn();
 const getPersonCombinedCredits = vi.fn();
 
-// augmentProviders is pure — use the real implementation instead of mocking it, so
-// this test actually exercises its Disney+/Hulu disambiguation and tier dedup.
+// Spread the real module through so pure functions and constants (e.g.
+// augmentProviders, SEARCH_RESULTS_CAP) stay real without being listed here
+// one by one — only the network-calling functions below get overridden. An
+// explicit allowlist silently breaks +page.server.ts every time it starts
+// importing something new from this module, which is exactly what happened
+// when SEARCH_RESULTS_CAP was added (#200): the mock had no such export, so
+// importing it from the mocked module threw, and every test failed with a
+// generic "Could not reach TMDB" from the load function's catch-all.
 vi.mock('$lib/tmdb', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/tmdb')>();
 	return {
+		...actual,
 		searchMulti: (...args: unknown[]) => searchMulti(...args),
 		getWatchProviders: (...args: unknown[]) => getWatchProviders(...args),
 		getRuntime: (...args: unknown[]) => getRuntime(...args),
 		searchPerson: (...args: unknown[]) => searchPerson(...args),
-		getPersonCombinedCredits: (...args: unknown[]) => getPersonCombinedCredits(...args),
-		augmentProviders: actual.augmentProviders
+		getPersonCombinedCredits: (...args: unknown[]) => getPersonCombinedCredits(...args)
 	};
 });
 

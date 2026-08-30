@@ -6,7 +6,7 @@
 //
 // ── The synced/local key partition is the sync contract ─────────────────
 //
-// There are 18 real sq:-prefixed localStorage keys. Some of them describe
+// There are 21 real sq:-prefixed localStorage keys. Some of them describe
 // *this device* rather than the user's account, and must never sync:
 //
 //   sq:welcomed                 — onboarding seen on this device
@@ -16,10 +16,17 @@
 //   sq:nav-hint-dismissed       — swipe/keyboard tab-nav hint seen on this device
 //   sq:list-hint-dismissed      — "group titles into a list" hint seen on this device
 //   sq:share-hint-dismissed     — "Read-only vs Share" hint seen on this device
+//   sq:sync-hint-dismissed      — sync nudge seen on this device (#191)
+//   sq:ranking-hint-dismissed   — ranked-voting nudge seen on this device (#191)
 //   sq:shared-list-colors       — per-device color swatches for shared lists;
 //                                 unlike sq:queue:colors (personal lists),
 //                                 not wired into buildPrefs/applyPrefs, so it
 //                                 doesn't travel with an export or sync pull
+//
+// (Every per-hint dismissal key above is device-local by design — it's a
+// record of what THIS device has shown, not a preference. sq:hints-disabled,
+// the global "stop showing me tips" kill switch, is the actual preference and
+// lives in SYNCED_KEYS instead, same reasoning as sq:cancel-alerts.)
 //
 // Every other sq: key belongs in SYNCED_KEYS. Every key must appear in
 // exactly one of the two sets below — app-state.test.ts greps the whole
@@ -46,7 +53,8 @@ export const SYNCED_KEYS = [
 	'sq:budget:weeks',
 	'sq:cancel-alerts',
 	'sq:queue:name',
-	'sq:queue:colors'
+	'sq:queue:colors',
+	'sq:hints-disabled'
 ] as const;
 
 export const LOCAL_KEYS = [
@@ -57,6 +65,8 @@ export const LOCAL_KEYS = [
 	'sq:nav-hint-dismissed',
 	'sq:list-hint-dismissed',
 	'sq:share-hint-dismissed',
+	'sq:sync-hint-dismissed',
+	'sq:ranking-hint-dismissed',
 	'sq:shared-list-colors'
 ] as const;
 
@@ -74,6 +84,11 @@ export interface AppStatePrefs {
 	sortDir?: 'asc' | 'desc';
 	view?: 'grid' | 'list' | 'lanes';
 	cancelAlerts?: boolean;
+	/** Global kill switch for onboarding hints (#191) — a real cross-device
+	 * preference ("stop showing me tips everywhere"), unlike each individual
+	 * hint's own `sq:*-hint-dismissed` key, which is local/per-device since
+	 * it's a record of what that device has already shown. */
+	hintsDisabled?: boolean;
 }
 
 export interface AppStateSnapshot {
@@ -106,7 +121,8 @@ function buildPrefs(): AppStatePrefs {
 		sort: (readRaw('sq:sort') as AppStatePrefs['sort']) ?? 'added',
 		sortDir: (readRaw('sq:sortDir') as AppStatePrefs['sortDir']) ?? 'desc',
 		view: (readRaw('sq:view') as AppStatePrefs['view']) ?? 'grid',
-		cancelAlerts: readRaw('sq:cancel-alerts') === 'true'
+		cancelAlerts: readRaw('sq:cancel-alerts') === 'true',
+		hintsDisabled: readRaw('sq:hints-disabled') === 'true'
 	};
 }
 
@@ -159,6 +175,9 @@ export function applyPrefs(prefs: AppStatePrefs): void {
 		if (typeof prefs.cancelAlerts === 'boolean') {
 			localStorage.setItem('sq:cancel-alerts', String(prefs.cancelAlerts));
 		}
+		if (typeof prefs.hintsDisabled === 'boolean') {
+			localStorage.setItem('sq:hints-disabled', String(prefs.hintsDisabled));
+		}
 	} catch {
 		// Best-effort localStorage write; a failed pref write here isn't fatal —
 		// the item/service sync (the actual point of the engine) already applied.
@@ -190,10 +209,12 @@ function parseCastMember(raw: unknown): CastMember | null {
 	const c = raw as Record<string, unknown>;
 	const name = coerceString(c.name, 200);
 	if (!name) return null;
+	const id = coerceNumber(c.id);
 	return {
 		name,
 		character: coerceString(c.character, 200),
-		profile_path: validatePath(c.profile_path)
+		profile_path: validatePath(c.profile_path),
+		...(id !== null ? { id } : {})
 	};
 }
 
@@ -297,6 +318,7 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		...(genres ? { genres } : {}),
 		...(cast ? { cast } : {}),
 		director: typeof item.director === 'string' ? item.director.slice(0, 200) : null,
+		director_id: coerceNumber(item.director_id),
 		creator: typeof item.creator === 'string' ? item.creator.slice(0, 200) : null,
 		imdb_id: validateImdbId(item.imdb_id),
 		...(parseWatch(item.watch) ? { watch: parseWatch(item.watch) } : {}),
@@ -382,7 +404,8 @@ function parsePrefs(raw: unknown): AppStatePrefs | undefined {
 		...(typeof p.view === 'string' && ['grid', 'list', 'lanes'].includes(p.view)
 			? { view: p.view as AppStatePrefs['view'] }
 			: {}),
-		...(typeof p.cancelAlerts === 'boolean' ? { cancelAlerts: p.cancelAlerts } : {})
+		...(typeof p.cancelAlerts === 'boolean' ? { cancelAlerts: p.cancelAlerts } : {}),
+		...(typeof p.hintsDisabled === 'boolean' ? { hintsDisabled: p.hintsDisabled } : {})
 	};
 
 	return Object.keys(prefs).length > 0 ? prefs : undefined;

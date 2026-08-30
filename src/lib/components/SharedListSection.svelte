@@ -30,6 +30,7 @@
 	import { getSyncStatus } from '$lib/sync';
 	import { getLastViewed, markViewed, hasNewActivity } from '$lib/collection-activity';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
+	import RankingHint from '$lib/components/RankingHint.svelte';
 
 	let {
 		collection,
@@ -746,6 +747,8 @@
 		{/if}
 	</div>
 {/if}
+
+<RankingHint show={(inline || expanded) && loaded && items.length >= 2 && myBallot.length === 0} />
 
 {#if detailItem}
 	{@const di = detailItem}
