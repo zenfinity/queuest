@@ -63,13 +63,65 @@ async function tmdbFetch(url: string): Promise<Response> {
 	return new Response('Rate limited', { status: 429 });
 }
 
-export async function searchMulti(query: string, apiKey: string) {
+// How many search results +page.server.ts hydrates and shows — exported so
+// searchMulti (below) can use the same number to decide whether page 1 alone
+// already has enough to fill the list.
+export const SEARCH_RESULTS_CAP = 8;
+
+interface MultiSearchPage {
+	results: Record<string, unknown>[];
+	totalPages: number;
+}
+
+async function fetchMultiSearchPage(
+	query: string,
+	apiKey: string,
+	page: number
+): Promise<MultiSearchPage> {
 	const res = await tmdbFetch(
-		`${BASE}/search/multi?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US`
+		`${BASE}/search/multi?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US&page=${page}`
 	);
-	if (!res.ok) return [];
-	const data = (await res.json()) as { results: Record<string, unknown>[] };
-	return (data.results ?? []).filter((r) => r.media_type === 'movie' || r.media_type === 'tv');
+	if (!res.ok) return { results: [], totalPages: 1 };
+	const data = (await res.json()) as { results?: Record<string, unknown>[]; total_pages?: number };
+	return { results: data.results ?? [], totalPages: data.total_pages ?? 1 };
+}
+
+function toMovieOrTv(results: Record<string, unknown>[]): Record<string, unknown>[] {
+	return results.filter((r) => r.media_type === 'movie' || r.media_type === 'tv');
+}
+
+/**
+ * TMDB's relevance ranking weighs a literal title-substring match over an
+ * alternate-title match, regardless of popularity — a well-known title whose
+ * only textual match is an AKA can land on page 2 even at far higher
+ * popularity than everything on page 1. "Nausicaä of the Valley of the Wind"
+ * is filed under its disowned English dub title, "Warriors of the Wind" —
+ * searching "nausica" only matches it through a US alternate title, which
+ * pushes it to page 2 behind a dozen barely-popular, coincidentally-named
+ * people (#200).
+ *
+ * Page 2 is only fetched when page 1 didn't already fill the results list —
+ * when it did, TMDB's own ordering is left untouched rather than
+ * second-guessed. A blanket popularity re-sort was tried and rejected: for an
+ * ambiguous single-word query like "batman", it promoted an obscure,
+ * freakishly-viral entry (popularity 116 vs. ~35 for the flagship TV show)
+ * above everything TMDB itself ranked first. Popularity is only trustworthy
+ * here as a tiebreaker among page 2's already-lower-confidence matches, not
+ * as an override of page 1's relevance ranking.
+ */
+export async function searchMulti(query: string, apiKey: string) {
+	const first = await fetchMultiSearchPage(query, apiKey, 1);
+	const primary = toMovieOrTv(first.results);
+
+	if (primary.length < SEARCH_RESULTS_CAP && first.totalPages > 1) {
+		const second = await fetchMultiSearchPage(query, apiKey, 2);
+		const extras = toMovieOrTv(second.results).sort(
+			(a, b) => (Number(b.popularity) || 0) - (Number(a.popularity) || 0)
+		);
+		primary.push(...extras);
+	}
+
+	return primary;
 }
 
 // ── Cast/crew search (#62) ──────────────────────────────────────────────────

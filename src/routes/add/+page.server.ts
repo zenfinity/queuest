@@ -6,7 +6,8 @@ import {
 	getPersonCombinedCredits,
 	getWatchProviders,
 	getRuntime,
-	augmentProviders
+	augmentProviders,
+	SEARCH_RESULTS_CAP
 } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
 
@@ -88,7 +89,9 @@ export const load: PageServerLoad = async ({ url }) => {
 			searchPerson(query, apiKey)
 		]);
 
-		const results = await Promise.all(raw.slice(0, 8).map((item) => hydrate(item, apiKey)));
+		const results = await Promise.all(
+			raw.slice(0, SEARCH_RESULTS_CAP).map((item) => hydrate(item, apiKey))
+		);
 
 		let person: PersonResults | null = null;
 		if (personMatch && personMatch.popularity >= MIN_PERSON_POPULARITY) {

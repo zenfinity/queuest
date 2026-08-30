@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatRuntime, augmentProviders, getRuntime, DISNEY_PLUS_PROVIDER } from './tmdb';
+import {
+	formatRuntime,
+	augmentProviders,
+	getRuntime,
+	searchMulti,
+	SEARCH_RESULTS_CAP,
+	DISNEY_PLUS_PROVIDER
+} from './tmdb';
 import type { Provider } from './types';
 
 function provider(id: number, name: string): Provider {
@@ -15,6 +22,96 @@ const AMAZON_CHANNEL = provider(1000, 'Apple TV Amazon Channel');
 const APPLE_TV = provider(350, 'Apple TV');
 const AMAZON_PRIME = provider(9, 'Amazon Prime Video');
 const AMAZON_PRIME_WITH_ADS = provider(2100, 'Amazon Prime Video with Ads');
+
+describe('searchMulti — page 2 fallback (#200)', () => {
+	const OK = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+	const movie = (title: string, popularity: number) => ({
+		media_type: 'movie',
+		title,
+		popularity
+	});
+	const person = (name: string) => ({ media_type: 'person', name, popularity: 1 });
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('does not fetch page 2 when page 1 already fills the results cap', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			OK({
+				results: Array.from({ length: SEARCH_RESULTS_CAP }, (_, i) => movie(`Movie ${i}`, 10)),
+				total_pages: 2
+			})
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		const results = await searchMulti('batman', 'key');
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(results).toHaveLength(SEARCH_RESULTS_CAP);
+	});
+
+	it('does not fetch page 2 when TMDB reports there is only one page', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(OK({ results: [movie('Obscure Movie', 1)], total_pages: 1 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await searchMulti('some obscure query', 'key');
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('falls back to page 2 when page 1 comes up short, ranking the extras by popularity', async () => {
+		// Mirrors the real bug: "Nausicaä of the Valley of the Wind" is filed
+		// under its disowned dub title "Warriors of the Wind", so it only
+		// surfaces via an alternate-title match on page 2 — far more popular
+		// than everything already on page 1, but TMDB's own relevance order
+		// buries it behind low-popularity page-2 noise too.
+		const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+			if (url.includes('page=2')) {
+				return OK({
+					results: [
+						person('Nausica Someone'),
+						movie('Nausicaa', 0.9),
+						movie('Warriors of the Wind', 15.3), // the actual match
+						movie('Nausicaa - Ocean Doc', 0.7)
+					],
+					total_pages: 2
+				});
+			}
+			return OK({ results: [movie('Nausicaa: The Other Odyssey', 1.2)], total_pages: 2 });
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const results = await searchMulti('nausica', 'key');
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		// Page 1's single result stays first; page 2's extras are appended
+		// sorted by popularity, with the real match landing right after it —
+		// not buried behind lower-popularity noise the way TMDB's raw order had it.
+		expect(results.map((r) => r.title)).toEqual([
+			'Nausicaa: The Other Odyssey',
+			'Warriors of the Wind',
+			'Nausicaa',
+			'Nausicaa - Ocean Doc'
+		]);
+	});
+
+	it('filters person results out of both pages', async () => {
+		const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+			if (url.includes('page=2')) {
+				return OK({ results: [person('Some Person'), movie('Real Match', 5)], total_pages: 2 });
+			}
+			return OK({ results: [person('Another Person')], total_pages: 2 });
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const results = await searchMulti('query', 'key');
+
+		expect(results).toEqual([movie('Real Match', 5)]);
+	});
+});
 
 describe('formatRuntime', () => {
 	it('formats movie runtime as Xh Ym', () => {
