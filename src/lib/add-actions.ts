@@ -25,6 +25,7 @@ async function addAndPlace(
 			title: result.title,
 			poster_path: result.poster_path,
 			overview: result.overview,
+			year: result.year,
 			providers: result.providers,
 			rentable: result.rentable,
 			runtime_minutes: result.runtime_minutes,

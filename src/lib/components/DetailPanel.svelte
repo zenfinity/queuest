@@ -91,7 +91,7 @@
 		posterExpanded = false;
 	}
 
-	let displayYear = $derived(item.year ?? item.added_at?.slice(0, 4) ?? null);
+	let displayYear = $derived(item.year ?? null);
 	let hue = $derived(item.providers[0] ? providerHue(item.providers[0].provider_id) : null);
 	// remainingRuntime is typed for the full WatchlistItem, but only reads
 	// media_type/seasons/runtime_minutes/watched_seasons — all present here

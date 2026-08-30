@@ -177,10 +177,17 @@
 		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
 			Subscribed Services
 		</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
-			Mark which streaming services you subscribe to. Queuest uses this to surface relevant
-			suggestions.
-		</p>
+		{#if isOnboarding}
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				Set this before adding titles — Queuest can flag what's actually available to you from the
+				first title you add, instead of only after the fact.
+			</p>
+		{:else}
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				Mark which streaming services you subscribe to. Queuest uses this to surface relevant
+				suggestions.
+			</p>
+		{/if}
 
 		{#if !loaded}
 			<p class="text-sm text-gray-400 dark:text-gray-600">Loading…</p>
