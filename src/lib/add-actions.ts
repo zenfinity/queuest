@@ -35,6 +35,7 @@ async function addAndPlace(
 			genres: result.genres,
 			cast: result.cast,
 			director: result.director,
+			director_id: result.director_id,
 			creator: result.creator,
 			imdb_id: result.imdb_id,
 			queue_tag: queueTag

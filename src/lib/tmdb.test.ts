@@ -4,6 +4,7 @@ import {
 	augmentProviders,
 	getRuntime,
 	searchMulti,
+	getPersonExternalId,
 	SEARCH_RESULTS_CAP,
 	DISNEY_PLUS_PROVIDER
 } from './tmdb';
@@ -438,5 +439,117 @@ describe('getRuntime — tv release info and season summaries', () => {
 		);
 		const result = await getRuntime(1, 'tv', 'key');
 		expect(result.imdb_id).toBe('tt7818638');
+	});
+});
+
+describe('getRuntime — cast and director person ids (#180)', () => {
+	const OK = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('captures each cast member’s TMDB person id for a movie', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					runtime: 120,
+					genres: [],
+					credits: {
+						cast: [{ id: 501, name: 'Actor One', character: 'Lead', order: 0 }],
+						crew: []
+					}
+				})
+			)
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.cast).toEqual([
+			{ id: 501, name: 'Actor One', character: 'Lead', profile_path: null }
+		]);
+	});
+
+	it('captures the director’s person id for a movie', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					runtime: 120,
+					genres: [],
+					credits: {
+						cast: [],
+						crew: [
+							{ id: 77, name: 'Some Editor', job: 'Editor' },
+							{ id: 88, name: 'Some Director', job: 'Director' }
+						]
+					}
+				})
+			)
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.director).toBe('Some Director');
+		expect(result.director_id).toBe(88);
+	});
+
+	it('leaves director and director_id null for a movie with no credited director', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(OK({ runtime: 120, genres: [], credits: { cast: [], crew: [] } }))
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.director).toBeNull();
+		expect(result.director_id).toBeNull();
+	});
+
+	it('captures cast person ids for a TV show, and leaves director_id null (not linkable — creator is a joined string)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					number_of_episodes: 1,
+					episode_run_time: [30],
+					seasons: [],
+					networks: [],
+					genres: [],
+					created_by: [{ name: 'Some Creator' }],
+					credits: { cast: [{ id: 900, name: 'TV Actor', character: 'Role', order: 0 }] }
+				})
+			)
+		);
+		const result = await getRuntime(1, 'tv', 'key');
+		expect(result.cast).toEqual([
+			{ id: 900, name: 'TV Actor', character: 'Role', profile_path: null }
+		]);
+		expect(result.creator).toBe('Some Creator');
+		expect(result.director_id).toBeNull();
+	});
+});
+
+describe('getPersonExternalId (#180)', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('returns the resolved imdb_id', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi
+				.fn()
+				.mockResolvedValue(new Response(JSON.stringify({ imdb_id: 'nm0000138' }), { status: 200 }))
+		);
+		expect(await getPersonExternalId(1, 'key')).toBe('nm0000138');
+	});
+
+	it('returns null when TMDB has no imdb_id on file for this person', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(new Response(JSON.stringify({ imdb_id: null }), { status: 200 }))
+		);
+		expect(await getPersonExternalId(1, 'key')).toBeNull();
+	});
+
+	it('returns null on a failed request rather than throwing', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 500 })));
+		expect(await getPersonExternalId(1, 'key')).toBeNull();
 	});
 });

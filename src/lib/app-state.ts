@@ -190,10 +190,12 @@ function parseCastMember(raw: unknown): CastMember | null {
 	const c = raw as Record<string, unknown>;
 	const name = coerceString(c.name, 200);
 	if (!name) return null;
+	const id = coerceNumber(c.id);
 	return {
 		name,
 		character: coerceString(c.character, 200),
-		profile_path: validatePath(c.profile_path)
+		profile_path: validatePath(c.profile_path),
+		...(id !== null ? { id } : {})
 	};
 }
 
@@ -297,6 +299,7 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		...(genres ? { genres } : {}),
 		...(cast ? { cast } : {}),
 		director: typeof item.director === 'string' ? item.director.slice(0, 200) : null,
+		director_id: coerceNumber(item.director_id),
 		creator: typeof item.creator === 'string' ? item.creator.slice(0, 200) : null,
 		imdb_id: validateImdbId(item.imdb_id),
 		...(parseWatch(item.watch) ? { watch: parseWatch(item.watch) } : {}),

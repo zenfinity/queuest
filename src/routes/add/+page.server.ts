@@ -40,6 +40,7 @@ async function hydrate(item: Record<string, unknown>, apiKey: string): Promise<S
 			genres,
 			cast,
 			director,
+			director_id,
 			creator,
 			imdb_id
 		}
@@ -64,6 +65,7 @@ async function hydrate(item: Record<string, unknown>, apiKey: string): Promise<S
 		genres,
 		cast,
 		director,
+		director_id,
 		creator,
 		imdb_id
 	};

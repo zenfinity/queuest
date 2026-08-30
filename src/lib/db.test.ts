@@ -165,8 +165,9 @@ describe('db: watchlist items', () => {
 			seasons,
 			240,
 			['Drama'],
-			[{ name: 'Actor', character: 'Lead', profile_path: null }],
+			[{ name: 'Actor', character: 'Lead', profile_path: null, id: 42 }],
 			'Director Name',
+			7,
 			'Creator Name',
 			'tt0111161'
 		);
@@ -178,8 +179,9 @@ describe('db: watchlist items', () => {
 		expect(item.seasons).toEqual(seasons);
 		expect(item.runtime_minutes).toBe(240);
 		expect(item.genres).toEqual(['Drama']);
-		expect(item.cast).toEqual([{ name: 'Actor', character: 'Lead', profile_path: null }]);
+		expect(item.cast).toEqual([{ name: 'Actor', character: 'Lead', profile_path: null, id: 42 }]);
 		expect(item.director).toBe('Director Name');
+		expect(item.director_id).toBe(7);
 		expect(item.creator).toBe('Creator Name');
 		expect(item.imdb_id).toBe('tt0111161');
 	});

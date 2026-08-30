@@ -22,6 +22,7 @@ export interface RefreshResult {
 	genres: string[];
 	cast: CastMember[];
 	director: string | null;
+	director_id: number | null;
 	creator: string | null;
 	imdb_id: string | null;
 }
@@ -70,6 +71,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						genres,
 						cast,
 						director,
+						director_id,
 						creator,
 						imdb_id
 					}
@@ -88,6 +90,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					genres,
 					cast,
 					director,
+					director_id,
 					creator,
 					imdb_id
 				});

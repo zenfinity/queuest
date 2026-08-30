@@ -2,6 +2,7 @@ export interface CastMember {
 	name: string;
 	character: string;
 	profile_path: string | null;
+	id?: number; // TMDB person id, for resolving an IMDb link (#180); absent on pre-#180 rows
 }
 
 export interface Provider {
@@ -57,7 +58,8 @@ export interface WatchlistItem {
 	genres?: string[];
 	cast?: CastMember[];
 	director?: string | null; // movie director
-	creator?: string | null; // TV show creator(s)
+	director_id?: number | null; // TMDB person id for director, for an IMDb link (#180); movies only
+	creator?: string | null; // TV show creator(s) — not linkable: a joined string of possibly several names, see #180
 	imdb_id?: string | null; // e.g. "tt0111161" — from TMDB external_ids, for a "View on IMDb" link
 
 	// ── Collaborative Collections (#188) ────────────────────────────────────
@@ -95,6 +97,7 @@ export interface SearchResult {
 	genres: string[];
 	cast: CastMember[];
 	director: string | null;
+	director_id: number | null;
 	creator: string | null;
 	imdb_id: string | null;
 }
