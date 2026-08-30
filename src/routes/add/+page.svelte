@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$lib/types';
+	import type { SearchSuggestion } from '../api/search-suggestions/+server';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { releaseChip, DEFAULT_BUDGET_HOURS } from '$lib/progress';
@@ -30,6 +31,52 @@
 	let searching = $derived(!!navigating.to);
 
 	let query = $state(page.url.searchParams.get('q') ?? '');
+
+	// ── Live suggestions dropdown (#63) ──────────────────────────────────────
+	let formEl: HTMLFormElement | undefined = $state();
+	let suggestions: SearchSuggestion[] = $state([]);
+	let showSuggestions = $state(false);
+	let suggestAbort: AbortController | null = null;
+	let suggestTimer: ReturnType<typeof setTimeout> | undefined;
+	const SUGGEST_DEBOUNCE_MS = 300;
+
+	function handleQueryInput() {
+		clearTimeout(suggestTimer);
+		const q = query.trim();
+		if (!q) {
+			showSuggestions = false;
+			suggestions = [];
+			return;
+		}
+		suggestTimer = setTimeout(() => fetchSuggestions(q), SUGGEST_DEBOUNCE_MS);
+	}
+
+	async function fetchSuggestions(q: string) {
+		// Cancel any still-in-flight request so a slow earlier response can't
+		// land after a newer one and clobber it with stale results.
+		suggestAbort?.abort();
+		const controller = new AbortController();
+		suggestAbort = controller;
+		try {
+			const res = await fetch(`/api/search-suggestions?q=${encodeURIComponent(q)}`, {
+				signal: controller.signal
+			});
+			if (!res.ok || controller.signal.aborted) return;
+			const results = (await res.json()) as SearchSuggestion[];
+			if (controller.signal.aborted) return;
+			suggestions = results;
+			showSuggestions = results.length > 0;
+		} catch {
+			// Aborted, or a network hiccup on a suggestions call — not worth surfacing as an error.
+		}
+	}
+
+	function selectSuggestion(s: SearchSuggestion) {
+		query = s.title;
+		showSuggestions = false;
+		formEl?.requestSubmit();
+	}
+
 	let adding = new SvelteSet<number>();
 	let added = new SvelteSet<number>();
 	let errors = new SvelteMap<number, string>();
@@ -115,20 +162,44 @@
 		{/if}
 	</div>
 
-	<form action="/search" method="GET" class="flex gap-2">
+	<form
+		bind:this={formEl}
+		action="/search"
+		method="GET"
+		class="flex gap-2"
+		onsubmit={() => {
+			clearTimeout(suggestTimer);
+			showSuggestions = false;
+		}}
+	>
 		<div class="relative flex-1">
 			<input
 				name="q"
 				type="search"
 				bind:value={query}
+				oninput={handleQueryInput}
+				onfocus={() => (showSuggestions = suggestions.length > 0)}
+				onblur={() => {
+					// Delay so a click on a suggestion (a blur-triggering mousedown)
+					// still registers before the dropdown disappears out from under it.
+					setTimeout(() => (showSuggestions = false), 150);
+				}}
 				placeholder="Search movies and TV shows…"
+				autocomplete="off"
+				role="combobox"
+				aria-expanded={showSuggestions}
+				aria-controls="search-suggestions"
 				class="w-full rounded-lg bg-gray-100 px-4 py-2.5 pr-9 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 transition-shadow focus:ring-orange-500 [&::-webkit-search-cancel-button]:hidden dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:ring-gray-800 dark:focus:ring-orange-500"
 			/>
 			{#if query}
 				<button
 					type="button"
 					aria-label="Clear search"
-					onclick={() => (query = '')}
+					onclick={() => {
+						query = '';
+						suggestions = [];
+						showSuggestions = false;
+					}}
 					class="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
 				>
 					<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -137,6 +208,42 @@
 						/>
 					</svg>
 				</button>
+			{/if}
+			{#if showSuggestions}
+				<div
+					id="search-suggestions"
+					role="listbox"
+					class="absolute top-full left-0 z-20 mt-1 w-full overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-700"
+				>
+					{#each suggestions as s (s.id)}
+						<button
+							type="button"
+							role="option"
+							aria-selected="false"
+							onclick={() => selectSuggestion(s)}
+							class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+						>
+							{#if s.poster_path}
+								<img
+									src="{TMDB_IMG}/w92{s.poster_path}"
+									alt=""
+									class="h-9 w-6 shrink-0 rounded object-cover"
+								/>
+							{:else}
+								<div
+									class="flex h-9 w-6 shrink-0 items-center justify-center rounded bg-gray-200 text-xs dark:bg-gray-800"
+								>
+									{s.media_type === 'movie' ? '🎬' : '📺'}
+								</div>
+							{/if}
+							<span class="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">{s.title}</span
+							>
+							{#if s.year}
+								<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">{s.year}</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
 			{/if}
 		</div>
 		<button
@@ -147,109 +254,138 @@
 		</button>
 	</form>
 
+	{#snippet resultCard(result: SearchResult)}
+		<div
+			class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+		>
+			<!-- Poster (clickable) -->
+			<button
+				class="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800"
+				onclick={() => (detailItem = result)}
+				data-detail-trigger
+				aria-label="View details for {result.title}"
+			>
+				{#if result.poster_path}
+					<img
+						src="{TMDB_IMG}/w300{result.poster_path}"
+						alt={result.title}
+						class="h-full w-full object-cover"
+					/>
+				{:else}
+					<div
+						class="flex h-full w-full items-center justify-center text-5xl text-gray-400 dark:text-gray-700"
+					>
+						🎬
+					</div>
+				{/if}
+				{#if result.year}
+					<span
+						class="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs text-gray-200"
+					>
+						{result.year}
+					</span>
+				{/if}
+			</button>
+
+			<!-- Info -->
+			<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
+				<p class="line-clamp-2 text-sm font-medium leading-tight">{result.title}</p>
+
+				<!-- Runtime -->
+				{#if result.runtime_minutes}
+					<p class="text-xs text-gray-500">
+						🕐 {formatRuntime(result.runtime_minutes, result.media_type)}
+					</p>
+				{/if}
+
+				<!-- Type chip + providers -->
+				<div class="flex flex-wrap items-center gap-1">
+					<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
+						{result.media_type === 'movie' ? '🎬' : '📺'}
+					</span>
+					{#each result.providers.slice(0, 4) as p (p.provider_id)}
+						<img
+							src="{TMDB_IMG}/w92{p.logo_path}"
+							alt={p.provider_name}
+							title={p.provider_name}
+							class="h-5 w-5 rounded"
+						/>
+					{/each}
+					{#if result.providers.length > 4}
+						<span class="text-xs text-gray-500">+{result.providers.length - 4}</span>
+					{/if}
+					{#if !result.providers.length}
+						{#if result.rentable}
+							<span class="text-xs text-gray-400 dark:text-gray-500">💲 Rent/Buy</span>
+						{:else}
+							<span class="text-xs text-gray-400 dark:text-gray-600">🚫 Not streaming</span>
+						{/if}
+					{/if}
+				</div>
+
+				<!-- Release chip -->
+				{#if releaseChip(result.release)}
+					<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">
+						{releaseChip(result.release)}
+					</p>
+				{/if}
+
+				<div class="mt-auto">
+					<AddToListButton
+						busy={adding.has(result.id)}
+						done={added.has(result.id)}
+						{existingCollections}
+						{queueColors}
+						{sharedCollections}
+						{sharedListColors}
+						onAddToQueue={() => addToQueue(result)}
+						onAddToList={(target) => addToList(result, target)}
+					/>
+				</div>
+				{#if errors.has(result.id)}
+					<p class="text-[10px] text-red-500">{errors.get(result.id)}</p>
+				{/if}
+			</div>
+		</div>
+	{/snippet}
+
 	{#if searching}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
 			{#each { length: 8 } as _, i (i)}
 				<div class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>
 			{/each}
 		</div>
-	{:else if data.results.length > 0}
-		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
-			{#each data.results as result (result.id)}
-				<div
-					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
-				>
-					<!-- Poster (clickable) -->
-					<button
-						class="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800"
-						onclick={() => (detailItem = result)}
-						data-detail-trigger
-						aria-label="View details for {result.title}"
-					>
-						{#if result.poster_path}
-							<img
-								src="{TMDB_IMG}/w300{result.poster_path}"
-								alt={result.title}
-								class="h-full w-full object-cover"
-							/>
-						{:else}
-							<div
-								class="flex h-full w-full items-center justify-center text-5xl text-gray-400 dark:text-gray-700"
-							>
-								🎬
-							</div>
-						{/if}
-						{#if result.year}
-							<span
-								class="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs text-gray-200"
-							>
-								{result.year}
-							</span>
-						{/if}
-					</button>
-
-					<!-- Info -->
-					<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
-						<p class="line-clamp-2 text-sm font-medium leading-tight">{result.title}</p>
-
-						<!-- Runtime -->
-						{#if result.runtime_minutes}
-							<p class="text-xs text-gray-500">
-								🕐 {formatRuntime(result.runtime_minutes, result.media_type)}
-							</p>
-						{/if}
-
-						<!-- Type chip + providers -->
-						<div class="flex flex-wrap items-center gap-1">
-							<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
-								{result.media_type === 'movie' ? '🎬' : '📺'}
-							</span>
-							{#each result.providers.slice(0, 4) as p (p.provider_id)}
-								<img
-									src="{TMDB_IMG}/w92{p.logo_path}"
-									alt={p.provider_name}
-									title={p.provider_name}
-									class="h-5 w-5 rounded"
-								/>
-							{/each}
-							{#if result.providers.length > 4}
-								<span class="text-xs text-gray-500">+{result.providers.length - 4}</span>
-							{/if}
-							{#if !result.providers.length}
-								{#if result.rentable}
-									<span class="text-xs text-gray-400 dark:text-gray-500">💲 Rent/Buy</span>
-								{:else}
-									<span class="text-xs text-gray-400 dark:text-gray-600">🚫 Not streaming</span>
-								{/if}
-							{/if}
-						</div>
-
-						<!-- Release chip -->
-						{#if releaseChip(result.release)}
-							<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">
-								{releaseChip(result.release)}
-							</p>
-						{/if}
-
-						<div class="mt-auto">
-							<AddToListButton
-								busy={adding.has(result.id)}
-								done={added.has(result.id)}
-								{existingCollections}
-								{queueColors}
-								{sharedCollections}
-								{sharedListColors}
-								onAddToQueue={() => addToQueue(result)}
-								onAddToList={(target) => addToList(result, target)}
-							/>
-						</div>
-						{#if errors.has(result.id)}
-							<p class="text-[10px] text-red-500">{errors.get(result.id)}</p>
-						{/if}
-					</div>
+	{:else if data.results.length > 0 || data.person}
+		<!-- Cast/crew match (#62) — shown first: typing a person's name reads as
+		     "find things they're in", so that's the more useful interpretation to
+		     lead with. Only labeled when both sections are present, to keep the
+		     common title-only-match case looking exactly as it did before. -->
+		{#if data.person}
+			<div class="space-y-2">
+				{#if data.results.length > 0}
+					<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
+						Titles with {data.person.name}
+					</h2>
+				{/if}
+				<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
+					{#each data.person.results as result (result.id)}
+						{@render resultCard(result)}
+					{/each}
 				</div>
-			{/each}
-		</div>
+			</div>
+		{/if}
+		{#if data.results.length > 0}
+			{#if data.person}
+				<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
+					Search results
+				</h2>
+			{/if}
+			<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
+				{#each data.results as result (result.id)}
+					{@render resultCard(result)}
+				{/each}
+			</div>
+		{/if}
 	{:else if data.error}
 		<div class="py-12 text-center xs:py-20">
 			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">⚠️</p>

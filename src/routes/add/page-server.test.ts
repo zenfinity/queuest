@@ -8,6 +8,8 @@ vi.mock('$env/dynamic/private', () => ({ env: { TMDB_API_KEY: 'test-key' } }));
 const searchMulti = vi.fn();
 const getWatchProviders = vi.fn();
 const getRuntime = vi.fn();
+const searchPerson = vi.fn();
+const getPersonCombinedCredits = vi.fn();
 
 // augmentProviders is pure — use the real implementation instead of mocking it, so
 // this test actually exercises its Disney+/Hulu disambiguation and tier dedup.
@@ -17,6 +19,8 @@ vi.mock('$lib/tmdb', async (importOriginal) => {
 		searchMulti: (...args: unknown[]) => searchMulti(...args),
 		getWatchProviders: (...args: unknown[]) => getWatchProviders(...args),
 		getRuntime: (...args: unknown[]) => getRuntime(...args),
+		searchPerson: (...args: unknown[]) => searchPerson(...args),
+		getPersonCombinedCredits: (...args: unknown[]) => getPersonCombinedCredits(...args),
 		augmentProviders: actual.augmentProviders
 	};
 });
@@ -27,6 +31,7 @@ interface LoadResult {
 	results: Array<Record<string, unknown>>;
 	query: string;
 	error: string | null;
+	person: { name: string; results: Array<Record<string, unknown>> } | null;
 }
 
 // PageServerLoad's generated return type doesn't narrow to a concrete shape when the
@@ -46,12 +51,14 @@ beforeEach(() => {
 	searchMulti.mockReset();
 	getWatchProviders.mockReset();
 	getRuntime.mockReset();
+	searchPerson.mockReset().mockResolvedValue(null);
+	getPersonCombinedCredits.mockReset().mockResolvedValue([]);
 });
 
 describe('/add server load', () => {
 	it('returns an empty, error-free result when there is no query — and never calls TMDB', async () => {
 		const result = await runLoad('');
-		expect(result).toEqual({ results: [], query: '', error: null });
+		expect(result).toEqual({ results: [], query: '', error: null, person: null });
 		expect(searchMulti).not.toHaveBeenCalled();
 	});
 
@@ -144,5 +151,52 @@ describe('/add server load', () => {
 
 		const result = await runLoad('title');
 		expect(result.results).toHaveLength(8);
+	});
+
+	describe('cast/crew match (#62)', () => {
+		beforeEach(() => {
+			searchMulti.mockResolvedValue([]);
+			getWatchProviders.mockResolvedValue({ providers: [], rentable: false });
+			getRuntime.mockResolvedValue({
+				runtime_minutes: 90,
+				seasons: [],
+				networkIds: [],
+				companyIds: [],
+				release: null,
+				genres: [],
+				cast: [],
+				director: null,
+				creator: null
+			});
+		});
+
+		it('surfaces a person section for a confident match with credits', async () => {
+			searchPerson.mockResolvedValue({ id: 525, name: 'Christopher Nolan', popularity: 42 });
+			getPersonCombinedCredits.mockResolvedValue([
+				{ id: 27205, media_type: 'movie', title: 'Inception', release_date: '2010-07-16' }
+			]);
+
+			const result = await runLoad('nolan');
+			expect(result.person).not.toBeNull();
+			expect(result.person?.name).toBe('Christopher Nolan');
+			expect(result.person?.results).toHaveLength(1);
+			expect(result.person?.results[0]).toMatchObject({ id: 27205, title: 'Inception' });
+		});
+
+		it('drops a low-popularity person match instead of surfacing noise', async () => {
+			searchPerson.mockResolvedValue({ id: 1, name: 'Some Obscure Match', popularity: 0.4 });
+
+			const result = await runLoad('xyz');
+			expect(result.person).toBeNull();
+			expect(getPersonCombinedCredits).not.toHaveBeenCalled();
+		});
+
+		it('leaves person null when a confident match has no usable credits', async () => {
+			searchPerson.mockResolvedValue({ id: 525, name: 'Christopher Nolan', popularity: 42 });
+			getPersonCombinedCredits.mockResolvedValue([]);
+
+			const result = await runLoad('nolan');
+			expect(result.person).toBeNull();
+		});
 	});
 });
