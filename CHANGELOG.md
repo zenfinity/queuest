@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.1] — 2026-08-31
+
+### Notes on a title (#155)
+
+Add a free-text note to any item from its detail panel — a small 📝 badge shows on the card wherever one's saved. On a shared list, it's one note for the whole list, editable by the list's owner only (enforced in the UI, not the server — the same trust boundary every other item-level edit on a shared list already has, since the blob is end-to-end encrypted).
+
+### Shared list color: attribution border and bounding border (#236)
+
+The per-item colored border in a shared list now shows who added the title, not which list it's in — every item previously got the same color, which was redundant with the list's own boxed border. Full attribution (email) moved to a legend near the ranking UI and the detail view instead of being spelled out on every row. Separately, the list's own color now colors its bounding border instead of a small dot next to the title.
+
+### Cloudflare Web Analytics beacon allowed through CSP (#233)
+
+The site's Content-Security-Policy was blocking Cloudflare's own Web Analytics beacon script — a pre-existing, unrelated account setting colliding with this app's deliberately strict script-src. Allowed explicitly rather than turned off.
+
+### Gantt bars animate (#46)
+
+Bar widths now transition when the monthly budget changes, plus a subtle draw-in on first render.
+
 ## [1.3.0] — 2026-08-30
 
 ### IMDb links for cast and director names (#180)
