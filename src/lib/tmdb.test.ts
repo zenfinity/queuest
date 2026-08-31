@@ -143,7 +143,9 @@ describe('augmentProviders — Disney+/Hulu disambiguation', () => {
 	it('injects Disney+ for Disney-owned content missing from JustWatch entirely', () => {
 		const result = augmentProviders([NETFLIX], [2739], []);
 		expect(result).toContainEqual(DISNEY_PLUS_PROVIDER);
-		expect(result.map((p) => p.provider_id)).toEqual([337, 8]);
+		// Injected ahead of `named`, but sortProviders() then ranks both majors
+		// by MAJOR_PROVIDER_IDS order (Netflix before Disney+), not insertion order.
+		expect(result.map((p) => p.provider_id)).toEqual([8, 337]);
 	});
 
 	it('recognizes Disney ownership via production company id, not just network id', () => {
@@ -183,6 +185,30 @@ describe('augmentProviders — Apple TV+/Amazon Prime Video disambiguation (#179
 	it('leaves Apple TV+ content alone when Amazon Prime Video is not listed at all', () => {
 		const result = augmentProviders([APPLE_TV], [2552], []);
 		expect(result.map((p) => p.provider_id)).toEqual([350]);
+	});
+});
+
+describe('augmentProviders — sorts major services ahead of resellers/add-ons', () => {
+	const TNT = provider(363, 'TNT');
+	const YOUTUBE_TV = provider(2528, 'YouTube TV');
+	const MAX = provider(1899, 'Max');
+
+	it('moves a recognizable major service to the front even when TMDB lists it last', () => {
+		// Real-world shape this came from: Dune: Part Two's US flatrate listed
+		// TNT and YouTube TV ahead of Max — the card view's providers.slice(0, N)
+		// truncation then hid Max behind "+1" and picked TNT as the accent color.
+		const result = augmentProviders([TNT, YOUTUBE_TV, MAX], [], []);
+		expect(result.map((p) => p.provider_id)).toEqual([1899, 363, 2528]);
+	});
+
+	it('keeps relative order stable within the major group and within the rest', () => {
+		const result = augmentProviders([TNT, NETFLIX, YOUTUBE_TV, DISNEY], [], []);
+		expect(result.map((p) => p.provider_id)).toEqual([8, 337, 363, 2528]);
+	});
+
+	it('leaves order untouched when nothing in the list is a major provider', () => {
+		const result = augmentProviders([TNT, YOUTUBE_TV], [], []);
+		expect(result.map((p) => p.provider_id)).toEqual([363, 2528]);
 	});
 });
 

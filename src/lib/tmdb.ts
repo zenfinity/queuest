@@ -41,6 +41,16 @@ const APPLE_TV_NETWORK_ID = 2552;
 const APPLE_TV_PROVIDER_ID = 350;
 const AMAZON_PRIME_VIDEO_PROVIDER_ID = 9;
 
+// Netflix, Disney+, Prime Video, Max, Hulu, Paramount+, Peacock, Apple TV+ —
+// TMDB/JustWatch's flatrate order is not "primary service first" (e.g. a
+// lesser-known live-TV reseller can sort ahead of the actual home service).
+// Card views only render the first few providers before truncating to
+// "+N", so leaving raw TMDB order in place can bury the recognizable
+// service behind ones nobody's heard of. sortProviders() below fixes the
+// display order; getMajorProviders() (a separate "pick services to filter
+// by" list) shares the same id set so the two can't drift apart.
+const MAJOR_PROVIDER_IDS = [8, 337, 9, 1899, 15, 531, 386, 350];
+
 export function formatRuntime(minutes: number, mediaType: 'movie' | 'tv'): string {
 	if (mediaType === 'movie') {
 		const h = Math.floor(minutes / 60);
@@ -506,6 +516,21 @@ function dedupTiers(providers: Provider[]): Provider[] {
 }
 
 /**
+ * Puts recognizable major services ahead of everything else (regional
+ * add-ons, live-TV resellers, etc.), so the first few providers — the ones
+ * card views actually show before truncating to "+N" — are the ones a user
+ * would recognize. Stable sort: relative order within "major" and within
+ * "everything else" is left exactly as TMDB/augmentProviders produced it.
+ */
+function sortProviders(providers: Provider[]): Provider[] {
+	const rank = (p: Provider) => {
+		const i = MAJOR_PROVIDER_IDS.indexOf(p.provider_id);
+		return i === -1 ? MAJOR_PROVIDER_IDS.length : i;
+	};
+	return [...providers].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
  * Apply network-aware provider filtering on top of raw TMDB/JustWatch flatrate data.
  *
  * When Hulu (15) and Disney+ (337) both appear it means JustWatch is surfacing
@@ -552,29 +577,33 @@ export function augmentProviders(
 			// Disney+ native: Hulu appears only because bundle subscribers can
 			// access Disney+ via the Hulu interface. Strip Hulu.
 			const result = named.filter((p) => p.provider_id !== 15);
-			return dedupTiers(
-				result.some((p) => p.provider_id === 337) ? result : [DISNEY_PLUS_PROVIDER, ...result]
+			return sortProviders(
+				dedupTiers(
+					result.some((p) => p.provider_id === 337) ? result : [DISNEY_PLUS_PROVIDER, ...result]
+				)
 			);
 		} else {
 			// Hulu-native (FX originals, etc.): Disney+ appears only because
 			// Disney bundle subscribers can watch Hulu through the bundle. Strip Disney+.
-			return dedupTiers(named.filter((p) => p.provider_id !== 337));
+			return sortProviders(dedupTiers(named.filter((p) => p.provider_id !== 337)));
 		}
 	}
 
 	// Disney+ content absent from JustWatch entirely (Disney removed their catalogue)
 	if (isDisneyPlus) {
 		const without15 = named.filter((p) => p.provider_id !== 15);
-		return dedupTiers(
-			without15.some((p) => p.provider_id === 337)
-				? without15
-				: [DISNEY_PLUS_PROVIDER, ...without15]
+		return sortProviders(
+			dedupTiers(
+				without15.some((p) => p.provider_id === 337)
+					? without15
+					: [DISNEY_PLUS_PROVIDER, ...without15]
+			)
 		);
 	}
 
 	// No Disney+/Hulu conflict: tier dedup on top of `named` (already has the
 	// bundle-name filter and any Apple TV+/Amazon fix applied above).
-	return dedupTiers(named);
+	return sortProviders(dedupTiers(named));
 }
 
 export async function getWatchProviders(
@@ -601,10 +630,9 @@ export async function getMajorProviders(apiKey: string): Promise<Provider[]> {
 		results?: Array<{ provider_id: number; provider_name: string; logo_path: string }>;
 	};
 	const all = data.results ?? [];
-	const majorIds = [8, 337, 9, 1899, 15, 531, 386, 350]; // Netflix, Disney+, Prime, Max, Hulu, Paramount+, Peacock, Apple TV+
 	const byId = new Map(all.map((p) => [p.provider_id, p]));
 	const majors: Provider[] = [];
-	for (const id of majorIds) {
+	for (const id of MAJOR_PROVIDER_IDS) {
 		const p = byId.get(id);
 		if (p) majors.push(p);
 	}
