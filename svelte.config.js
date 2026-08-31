@@ -20,9 +20,13 @@ export default {
 			mode: 'hash',
 			directives: {
 				'default-src': ['self'],
+				// Explicit script-src (rather than relying on default-src's
+				// fallback) so Cloudflare's Web Analytics beacon is allowed
+				// alongside the per-build hash SvelteKit adds automatically (#233).
+				'script-src': ['self', 'https://static.cloudflareinsights.com'],
 				'style-src': ['self', 'unsafe-inline'],
 				'img-src': ['self', 'https://image.tmdb.org', 'https://www.themoviedb.org', 'data:'],
-				'connect-src': ['self', 'https://api.themoviedb.org'],
+				'connect-src': ['self', 'https://api.themoviedb.org', 'https://cloudflareinsights.com'],
 				'form-action': ['self'],
 				'object-src': ['none'],
 				'base-uri': ['self'],
