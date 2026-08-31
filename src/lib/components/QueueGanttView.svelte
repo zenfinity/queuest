@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { WatchlistItem } from '$lib/types';
@@ -141,6 +142,17 @@
 	let activeItem = $state<WatchlistItem | null>(null);
 	let ganttPopupAnchor = $state<{ x: number; y: number } | null>(null);
 
+	// Bars draw in from zero width on mount (#46), then the same
+	// `flex-basis` transition below carries every later width change (budget
+	// edits, filtering). Starts false so the first paint is at 0% — a rAF
+	// tick after that flips it, giving the browser a frame to commit the
+	// zero-width state before animating away from it.
+	let mounted = $state(false);
+	onMount(() => {
+		const raf = requestAnimationFrame(() => (mounted = true));
+		return () => cancelAnimationFrame(raf);
+	});
+
 	function openGanttPopup(e: MouseEvent, item: WatchlistItem) {
 		e.stopPropagation();
 		if (activeItem?.id === item.id) {
@@ -234,7 +246,9 @@
 						<div
 							animate:flip={{ duration: motion.reduced ? 0 : 250 }}
 							class="relative shrink-0"
-							style="flex: 0 0 {pct}%; min-width: 18px;"
+							style="flex: 0 0 {mounted ? pct : 0}%; min-width: 18px; transition: {motion.reduced
+								? 'none'
+								: 'flex-basis 400ms ease'};"
 							data-item
 						>
 							<button
