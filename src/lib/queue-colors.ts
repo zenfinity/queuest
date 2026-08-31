@@ -108,6 +108,16 @@ export function deleteCollectionColor(name: string): void {
 	}
 }
 
+/**
+ * Deterministic per-member color for shared-list attribution (#236) — who
+ * added a title, not which list it's in. Same palette/hash as list colors,
+ * but not persisted: unlike a list's color, a member's color isn't user-
+ * customizable, so there's nothing to save and no cross-device drift risk.
+ */
+export function memberColor(userId: string): string {
+	return autoColor(userId);
+}
+
 export function getSharedListColors(): Record<string, string> {
 	return readRecord(SHARED_COLORS_KEY, {});
 }

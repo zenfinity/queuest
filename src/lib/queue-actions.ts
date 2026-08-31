@@ -5,6 +5,7 @@ import {
 	setWatched,
 	updateShowProgress,
 	setQueueTag,
+	setNote,
 	setSortOrder,
 	gcTombstones
 } from './db';
@@ -183,6 +184,22 @@ export async function setItemCollection(
 		await reloadQueue(deps);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not update collection.');
+	} finally {
+		deps.setBusy(item.id, false);
+	}
+}
+
+export async function setItemNote(
+	item: WatchlistItem,
+	notes: string | null,
+	deps: QueueActionDeps
+): Promise<void> {
+	deps.setBusy(item.id, true);
+	try {
+		await setNote(item.id, notes);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not save that note.');
 	} finally {
 		deps.setBusy(item.id, false);
 	}

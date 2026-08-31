@@ -14,9 +14,10 @@ import { SESSION_COOKIE, getSession } from '$lib/server/auth';
 // hash that may not match the actual inline content.
 const FALLBACK_CSP =
 	"default-src 'self'; " +
+	"script-src 'self' https://static.cloudflareinsights.com; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' https://image.tmdb.org https://www.themoviedb.org data:; " +
-	"connect-src 'self' https://api.themoviedb.org; " +
+	"connect-src 'self' https://api.themoviedb.org https://cloudflareinsights.com; " +
 	"form-action 'self'; " +
 	"object-src 'none'; " +
 	"base-uri 'self'; " +

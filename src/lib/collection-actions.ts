@@ -438,6 +438,47 @@ export async function toggleCollectionWatched(
 }
 
 /**
+ * Sets the one shared note on an item (#155/#236) — a single string, not a
+ * per-account map like `watch`, so this replaces the whole field rather than
+ * merging one account's entry into it. Owner-only is enforced by which
+ * callers get offered this function (the UI only renders the edit control
+ * for `collection.role === 'owner'') — see the module-level note on
+ * removeItemFromSharedCollection for why that's a UI restriction, not a
+ * server one: the blob is opaque to the API either way — see the comment on
+ * removeItemFromSharedCollection below for the full reasoning.
+ */
+export async function setCollectionItemNote(
+	collection: SharedCollection,
+	current: CollectionItem[],
+	item: CollectionItem,
+	notes: string | null,
+	deps: CollectionActionDeps
+): Promise<CollectionItem[] | null> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const dekB64 = await openCollectionKey(collection.wrappedKey);
+		const dek = await importDek(dekB64, false);
+		return await syncCollectionItems(collection.id, dek, current, (merged) =>
+			merged.map((i) =>
+				i.tmdb_id !== item.tmdb_id || i.media_type !== item.media_type
+					? i
+					: // updated_at must move forward here — unlike `watch` (merged
+						// per-account, LWW-exempt), `notes` falls under mergeCollectionItem's
+						// generic whole-field LWW bucket. Without a fresh timestamp this
+						// edit could lose to a stale `updated_at` on the next merge.
+						{ ...i, notes: notes ?? undefined, updated_at: new Date().toISOString() }
+			)
+		);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not save that note.');
+		return null;
+	} finally {
+		deps.setBusy(false);
+	}
+}
+
+/**
  * Replaces this account's own ballot and pushes the change. Whole-ballot
  * replace, not a per-item edit — see mergeCollectionBallots for why a ranked
  * list can't be merged item-by-item the way `watch` marks are; a member's

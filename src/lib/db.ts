@@ -297,6 +297,35 @@ export async function getItemByTmdbId(
 	});
 }
 
+/** Character cap for a personal note (#155) — generous but bounded, same
+ * enforcement point as the other free-text-ish fields (see parseBackupItem). */
+export const NOTE_MAX_LENGTH = 2000;
+
+export async function setNote(id: number, notes: string | null): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const get = store.get(id);
+		get.onsuccess = () => {
+			const item = get.result as WatchlistItem | undefined;
+			if (!item) {
+				reject(new Error(`Item with id ${id} not found`));
+				return;
+			}
+			item.notes = notes ? notes.slice(0, NOTE_MAX_LENGTH) : undefined;
+			item.updated_at = nowIso();
+			const put = store.put(item);
+			put.onsuccess = () => {
+				notifyMutation();
+				resolve();
+			};
+			put.onerror = () => reject(put.error);
+		};
+		get.onerror = () => reject(get.error);
+	});
+}
+
 export async function setQueueTag(id: number, tag: string | null): Promise<void> {
 	const db = await open();
 	return new Promise((resolve, reject) => {

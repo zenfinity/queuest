@@ -10,6 +10,7 @@
 		toggleSeasonProgress,
 		listCollections,
 		setItemCollection,
+		setItemNote,
 		moveItem,
 		bulkSetCollection,
 		bulkSetWatched,
@@ -844,6 +845,10 @@
 		{existingCollections}
 		onSetCollection={async (tag) => {
 			await setItemCollection(di, tag, actionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
+		onSetNote={async (notes) => {
+			await setItemNote(di, notes, actionDeps);
 			detailItem = items.find((i) => i.id === di.id) ?? null;
 		}}
 		{sharedCollections}
