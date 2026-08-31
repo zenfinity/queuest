@@ -13,6 +13,7 @@ import {
 	promoteCollection,
 	loadCollectionItems,
 	toggleCollectionWatched,
+	setCollectionItemNote,
 	renameSharedCollection,
 	addItemsToSharedCollection,
 	removeItemFromSharedCollection,
@@ -232,7 +233,12 @@ describe('promoteCollection', () => {
 		const { gunzip } = await import('./gzip');
 		const plain = await decryptBytesWithDek(bytes, dek);
 		return JSON.parse(new TextDecoder().decode(await gunzip(plain))) as {
-			items: { tmdb_id: number; watch: Record<string, string>; added_by_account_id: string }[];
+			items: {
+				tmdb_id: number;
+				watch: Record<string, string>;
+				added_by_account_id: string;
+				notes?: string;
+			}[];
 		};
 	}
 
@@ -294,6 +300,23 @@ describe('promoteCollection', () => {
 		const { items: blob } = await decryptSeeded(seeded()!, created!.wrappedKey);
 		expect(blob[0].watch[ALICE]).toBeTruthy();
 	});
+
+	// #155: toCollectionItem() carries every WatchlistItem field through via
+	// object spread rather than an explicit allowlist, so a personal-queue
+	// note should survive promotion with zero extra plumbing. This guards
+	// against that silently regressing if toCollectionItem is ever rewritten.
+	it('carries a personal-queue note across when promoting to a shared collection', async () => {
+		const items = await seedLocal([{ tmdb_id: 40, queue_tag: 'Date night' }]);
+		const { setNote, getAll } = await dbMod();
+		await setNote(items[0].id, 'watch after the kids are asleep');
+
+		const { mock, seeded } = stubPromoteFetch();
+		vi.stubGlobal('fetch', mock);
+		const created = await promoteCollection('Date night', await getAll(), noop);
+
+		const { items: blob } = await decryptSeeded(seeded()!, created!.wrappedKey);
+		expect(blob[0].notes).toBe('watch after the kids are asleep');
+	});
 });
 
 describe('loadCollectionItems / toggleCollectionWatched', () => {
@@ -347,7 +370,8 @@ describe('loadCollectionItems / toggleCollectionWatched', () => {
 			watched_at: null,
 			updated_at: '2026-08-01T00:00:00.000Z',
 			watch: {},
-			added_by_account_id: ALICE
+			added_by_account_id: ALICE,
+			notes: undefined as string | undefined
 		};
 	}
 
@@ -381,6 +405,50 @@ describe('loadCollectionItems / toggleCollectionWatched', () => {
 
 		expect(result![0].watch?.[ALICE]).toBeUndefined();
 		expect(result![0].watch?.[BOB]).toBeTruthy();
+	});
+
+	it('sets the shared note and pushes it to the blob', async () => {
+		const { mock, stored } = stubViewFetch([seedItem(7)]);
+		vi.stubGlobal('fetch', mock);
+
+		const { items } = await loadCollectionItems(collection(), noop);
+		const result = await setCollectionItemNote(
+			collection(),
+			items,
+			items[0],
+			'watch after the kids are asleep',
+			noop
+		);
+
+		expect(result![0].notes).toBe('watch after the kids are asleep');
+		expect((stored()[0] as { notes: string }).notes).toBe('watch after the kids are asleep');
+	});
+
+	// Regression guard: notes falls under mergeCollectionItem's plain LWW
+	// bucket (unlike `watch`, which is merged per-account and exempt from
+	// LWW), so a note edit that doesn't advance updated_at could lose to a
+	// stale timestamp on the next merge.
+	it('advances updated_at when setting a note, unlike toggling watched', async () => {
+		const seeded = seedItem(8);
+		const { mock } = stubViewFetch([seeded]);
+		vi.stubGlobal('fetch', mock);
+
+		const { items } = await loadCollectionItems(collection(), noop);
+		const result = await setCollectionItemNote(collection(), items, items[0], 'a note', noop);
+
+		expect(result![0].updated_at).not.toBe(seeded.updated_at);
+	});
+
+	it('clears a note by passing null', async () => {
+		const seeded = seedItem(9);
+		seeded.notes = 'old note';
+		const { mock } = stubViewFetch([seeded]);
+		vi.stubGlobal('fetch', mock);
+
+		const { items } = await loadCollectionItems(collection(), noop);
+		const result = await setCollectionItemNote(collection(), items, items[0], null, noop);
+
+		expect(result![0].notes).toBeUndefined();
 	});
 });
 

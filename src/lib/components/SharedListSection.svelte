@@ -21,12 +21,14 @@
 		loadCollectionItems,
 		toggleCollectionWatched,
 		removeItemFromSharedCollection,
+		setCollectionItemNote,
 		setMyBallot,
 		type SharedCollection,
 		type CollectionMember
 	} from '$lib/collection-actions';
 	import { MAX_BALLOT_SIZE, type CollectionItem, type BallotEntry } from '$lib/collection-sync';
 	import { bordaTally } from '$lib/ranking';
+	import { memberColor } from '$lib/queue-colors';
 	import { getSyncStatus } from '$lib/sync';
 	import { getLastViewed, markViewed, hasNewActivity } from '$lib/collection-activity';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
@@ -92,6 +94,14 @@
 		return members.find((m) => m.userId === userId)?.email ?? 'A member';
 	}
 
+	// Per-item border color: who added it, not which list it's in (#236) —
+	// the list's own `color` is used elsewhere (bounding border, progress
+	// bars), not here. Falls back to the same neutral gray the list color
+	// itself falls back to when there's no id to hash.
+	function itemBorderColor(item: CollectionItem): string {
+		return item.added_by_account_id ? memberColor(item.added_by_account_id) : '#9ca3af';
+	}
+
 	function watchedByMe(item: CollectionItem): boolean {
 		return Boolean(myUserId && item.watch?.[myUserId]);
 	}
@@ -153,6 +163,11 @@
 		if (result) items = result;
 		removingKey = '';
 		removeArmedKey = null;
+	}
+
+	async function setNoteAction(item: CollectionItem, notes: string | null) {
+		const result = await setCollectionItemNote(collection, items, item, notes, noop);
+		if (result) items = result;
 	}
 
 	// ── Ranked voting (#210) ──────────────────────────────────────────────
@@ -255,7 +270,7 @@
 		class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 {isNew
 			? '!ring-2 !ring-orange-400/70'
 			: ''}"
-		style="border-left: 3px solid {color}"
+		style="border-left: 3px solid {itemBorderColor(item)}"
 	>
 		<button
 			class="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800"
@@ -312,6 +327,7 @@
 				<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
 					{item.media_type === 'movie' ? '🎬' : '📺'}
 				</span>
+				{#if item.notes}<span class="text-sm leading-none" title="Has a note">📝</span>{/if}
 				{#each item.providers.slice(0, 4) as p (p.provider_id)}
 					<img
 						src="{TMDB_IMG}/w92{p.logo_path}"
@@ -389,7 +405,7 @@
 	{@const pct = Math.min(100, (rt(item) / (budgetHours * 60)) * 100)}
 	<div
 		class="flex flex-col bg-white px-3 py-2.5 dark:bg-gray-900/40"
-		style="border-left: 3px solid {color}"
+		style="border-left: 3px solid {itemBorderColor(item)}"
 	>
 		<div class="flex items-center gap-3">
 			<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
@@ -467,6 +483,7 @@
 			>
 				{item.media_type === 'movie' ? '🎬' : '📺'}
 			</span>
+			{#if item.notes}<span class="shrink-0 text-xs leading-none" title="Has a note">📝</span>{/if}
 			{#if item.providers.length > 0}
 				<div class="flex shrink-0 gap-0.5">
 					{#each item.providers.slice(0, 3) as p (p.provider_id)}
@@ -543,6 +560,8 @@
 				data-detail-trigger
 			>
 				{item.title}
+				{#if item.notes}<span class="shrink-0 text-xs leading-none" title="Has a note">📝</span
+					>{/if}
 				{#if isNew}
 					<span
 						class="shrink-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
@@ -665,6 +684,24 @@
 				</ol>
 			{/if}
 		</div>
+		<div>
+			<p
+				class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+			>
+				Added by
+			</p>
+			<ul class="space-y-1">
+				{#each members as member (member.userId)}
+					<li class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+						<span
+							class="h-2.5 w-2.5 shrink-0 rounded-full"
+							style="background:{memberColor(member.userId)}"
+						></span>
+						<span class="min-w-0 flex-1 truncate">{member.email}</span>
+					</li>
+				{/each}
+			</ul>
+		</div>
 	</div>
 {/snippet}
 
@@ -719,7 +756,7 @@
 {#if inline}
 	{@render content()}
 {:else}
-	<div class="rounded-xl border border-gray-200 dark:border-gray-800">
+	<div class="rounded-xl border-2" style="border-color: {color}">
 		<button
 			onclick={toggleOpen}
 			class="flex w-full items-center gap-2 px-3 py-2.5 text-left"
@@ -729,7 +766,6 @@
 				class="text-gray-400 transition-transform dark:text-gray-500 {expanded ? 'rotate-90' : ''}"
 				>▸</span
 			>
-			<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{color}"></span>
 			<span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
 				{collection.name}
 			</span>
@@ -753,10 +789,18 @@
 {#if detailItem}
 	{@const di = detailItem}
 	<DetailPanel
-		item={{ ...di, id: syntheticId(di) }}
+		item={{
+			...di,
+			id: syntheticId(di),
+			addedByEmail: di.added_by_account_id
+				? (members.find((m) => m.userId === di.added_by_account_id)?.email ?? 'A member')
+				: null,
+			addedByColor: itemBorderColor(di)
+		}}
 		{budgetHours}
 		showSeasons={true}
 		onClose={() => (detailItem = null)}
+		onSetNote={collection.role === 'owner' ? (notes) => setNoteAction(di, notes) : undefined}
 	>
 		{#snippet footer()}
 			<button

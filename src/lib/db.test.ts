@@ -114,6 +114,29 @@ describe('db: watchlist items', () => {
 		await expect(db.setQueueTag(999, 'Favorites')).rejects.toThrow('Item with id 999 not found');
 	});
 
+	it('rejects setNote when id does not exist', async () => {
+		await expect(db.setNote(999, 'hello')).rejects.toThrow('Item with id 999 not found');
+	});
+
+	it('sets, updates, and clears a note', async () => {
+		await db.addItem(makeItem());
+		const [{ id }] = await db.getAll();
+
+		await db.setNote(id, 'watch with the group');
+		expect((await db.getAll())[0].notes).toBe('watch with the group');
+
+		await db.setNote(id, null);
+		expect((await db.getAll())[0].notes).toBeUndefined();
+	});
+
+	it('caps a note at NOTE_MAX_LENGTH', async () => {
+		await db.addItem(makeItem());
+		const [{ id }] = await db.getAll();
+
+		await db.setNote(id, 'x'.repeat(db.NOTE_MAX_LENGTH + 500));
+		expect((await db.getAll())[0].notes).toHaveLength(db.NOTE_MAX_LENGTH);
+	});
+
 	it('stamps updated_at on add', async () => {
 		await db.addItem(makeItem());
 		const item = (await db.getAll())[0];
@@ -133,6 +156,10 @@ describe('db: watchlist items', () => {
 		expect(typeof item.updated_at).toBe('string');
 
 		await db.setQueueTag(id, 'Favorites');
+		item = (await db.getAll())[0];
+		expect(typeof item.updated_at).toBe('string');
+
+		await db.setNote(id, 'a note');
 		item = (await db.getAll())[0];
 		expect(typeof item.updated_at).toBe('string');
 	});

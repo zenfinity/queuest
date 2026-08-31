@@ -7,6 +7,7 @@
 	import { trapFocus } from '$lib/focus-trap';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { NOTE_MAX_LENGTH } from '$lib/db';
 
 	// Structural subset shared by WatchlistItem (queue) and SearchResult (add) —
 	// both satisfy this without adapting, since Svelte/TS typing is structural.
@@ -34,6 +35,12 @@
 		year?: string | null;
 		watched_at?: string | null;
 		queue_tag?: string | null;
+		notes?: string;
+		// Shared-list attribution (#236) — who added this title, resolved to a
+		// display email + the same color used for its border in the list view.
+		// Left unset for personal-queue items, where there's no one to attribute to.
+		addedByEmail?: string | null;
+		addedByColor?: string | null;
 	}
 
 	let {
@@ -46,7 +53,8 @@
 		existingCollections = [],
 		onSetCollection,
 		sharedCollections = [],
-		onAssignShared
+		onAssignShared,
+		onSetNote
 	}: {
 		item: DetailPanelItem;
 		budgetHours: number;
@@ -58,12 +66,17 @@
 		onSetCollection?: (tag: string | null) => Promise<void>;
 		sharedCollections?: { id: string; name: string }[];
 		onAssignShared?: (collectionId: string) => Promise<void>;
+		// Omitted entirely for a shared item the viewer doesn't own (#155/#236)
+		// — the note still renders, read-only, from item.notes.
+		onSetNote?: (notes: string | null) => Promise<void>;
 	} = $props();
 
 	let overviewExpanded = $state(false);
 	let posterExpanded = $state(false);
 	let releasePopupOpen = $state(false);
 	let collectionBusy = $state(false);
+	let noteDraft = $state('');
+	let noteBusy = $state(false);
 
 	// IMDb person links (#180) — lazy-resolved on click, not batch-fetched for
 	// every cast member up front (same amplification concern as #66/#73: most
@@ -109,7 +122,20 @@
 		overviewExpanded = false;
 		posterExpanded = false;
 		releasePopupOpen = false;
+		noteDraft = item.notes ?? '';
 	});
+
+	async function saveNote() {
+		if (!onSetNote) return;
+		const trimmed = noteDraft.trim();
+		if (trimmed === (item.notes ?? '')) return;
+		noteBusy = true;
+		try {
+			await onSetNote(trimmed || null);
+		} finally {
+			noteBusy = false;
+		}
+	}
 
 	function close() {
 		onClose();
@@ -217,6 +243,15 @@
 						{/if}
 					{/if}
 					{#if item.creator}<span>Created by {item.creator}</span>{/if}
+					{#if item.addedByEmail}
+						<span class="inline-flex items-center gap-1">
+							<span
+								class="h-2 w-2 shrink-0 rounded-full"
+								style="background:{item.addedByColor ?? '#9ca3af'}"
+							></span>
+							Added by {item.addedByEmail}
+						</span>
+					{/if}
 					{#if item.imdb_id}
 						<a
 							href="https://www.imdb.com/title/{item.imdb_id}/"
@@ -288,6 +323,36 @@
 							<option value="__manage__">Manage lists…</option>
 						</select>
 					</div>
+				</div>
+			{/if}
+
+			<!-- Notes (#155) — editable when onSetNote is provided (personal queue,
+			     or the owner of a shared list); otherwise a read-only view of
+			     whatever note the owner already saved, if any. -->
+			{#if onSetNote || item.notes}
+				<div>
+					<span
+						class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+					>
+						Notes
+					</span>
+					{#if onSetNote}
+						<textarea
+							bind:value={noteDraft}
+							onblur={saveNote}
+							disabled={noteBusy}
+							maxlength={NOTE_MAX_LENGTH}
+							placeholder="Add a note…"
+							rows="3"
+							class="mt-1 w-full resize-none rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+						></textarea>
+					{:else if item.notes}
+						<p
+							class="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-gray-600 dark:text-gray-400"
+						>
+							{item.notes}
+						</p>
+					{/if}
 				</div>
 			{/if}
 

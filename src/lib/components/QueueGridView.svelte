@@ -136,6 +136,7 @@
 			<span class="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">
 				{item.media_type === 'movie' ? '🎬' : '📺'}
 			</span>
+			{#if item.notes}<span class="text-sm leading-none" title="Has a note">📝</span>{/if}
 			{#each item.providers.slice(0, 4) as p (p.provider_id)}
 				<img
 					src="{TMDB_IMG}/w92{p.logo_path}"

@@ -33,7 +33,7 @@
 // source tree for sq: string literals and fails if one exists in neither
 // (or both).
 import type { WatchlistItem, Provider, SeasonSummary, CastMember, ReleaseInfo } from './types';
-import { getAll, getAllIncludingDeleted, getServices } from './db';
+import { getAll, getAllIncludingDeleted, getServices, NOTE_MAX_LENGTH } from './db';
 import { getQueueName, getQueueColors, setQueueName } from './queue-colors';
 import {
 	coerceString,
@@ -321,6 +321,9 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		director_id: coerceNumber(item.director_id),
 		creator: typeof item.creator === 'string' ? item.creator.slice(0, 200) : null,
 		imdb_id: validateImdbId(item.imdb_id),
+		...(typeof item.notes === 'string' && item.notes
+			? { notes: item.notes.slice(0, NOTE_MAX_LENGTH) }
+			: {}),
 		...(parseWatch(item.watch) ? { watch: parseWatch(item.watch) } : {}),
 		...(typeof item.added_by_account_id === 'string' && ACCOUNT_ID_RE.test(item.added_by_account_id)
 			? { added_by_account_id: item.added_by_account_id }

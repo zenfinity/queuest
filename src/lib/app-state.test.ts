@@ -5,10 +5,19 @@ const getServices = vi.fn();
 const getQueueName = vi.fn();
 const getQueueColors = vi.fn();
 
-vi.mock('./db', () => ({
-	getAll: (...args: unknown[]) => getAll(...args),
-	getServices: (...args: unknown[]) => getServices(...args)
-}));
+// Spreads the real module rather than listing every export, so a new named
+// export from db.ts (e.g. NOTE_MAX_LENGTH) doesn't silently resolve to
+// `undefined` here — same bug class already hit once in page-server.test.ts's
+// $lib/tmdb mock (#200 era), where a missing export broke every test in the
+// file with a generic error instead of a clear one.
+vi.mock('./db', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('./db')>();
+	return {
+		...actual,
+		getAll: (...args: unknown[]) => getAll(...args),
+		getServices: (...args: unknown[]) => getServices(...args)
+	};
+});
 
 vi.mock('./queue-colors', () => ({
 	getQueueName: (...args: unknown[]) => getQueueName(...args),
@@ -455,5 +464,56 @@ describe('watch / added_by_account_id (#188 — collection blob fields)', () => 
 	it('rejects a malformed added_by_account_id rather than passing it through', () => {
 		const result = deserializeAppState(backupWith({ added_by_account_id: 'has spaces!' }));
 		expect(result.items[0].added_by_account_id).toBeUndefined();
+	});
+});
+
+describe('notes (#155)', () => {
+	function backupWith(itemOverrides: Record<string, unknown>) {
+		return {
+			version: 2,
+			items: [
+				{
+					tmdb_id: 1,
+					media_type: 'movie',
+					title: 'T',
+					poster_path: null,
+					overview: null,
+					providers: [],
+					runtime_minutes: 90,
+					seasons: [],
+					watched_seasons: [],
+					added_at: '2026-01-01T00:00:00Z',
+					watched_at: null,
+					...itemOverrides
+				}
+			],
+			prefs: {}
+		};
+	}
+
+	it('round-trips a note', () => {
+		const result = deserializeAppState(backupWith({ notes: 'watch with the group' }));
+		expect(result.items[0].notes).toBe('watch with the group');
+	});
+
+	it('omits notes when absent', () => {
+		const result = deserializeAppState(backupWith({}));
+		expect(result.items[0].notes).toBeUndefined();
+	});
+
+	it('drops an empty-string note rather than keeping it', () => {
+		const result = deserializeAppState(backupWith({ notes: '' }));
+		expect(result.items[0].notes).toBeUndefined();
+	});
+
+	it('ignores a non-string notes value rather than throwing', () => {
+		const result = deserializeAppState(backupWith({ notes: 12345 }));
+		expect(result.items[0].notes).toBeUndefined();
+	});
+
+	it('caps a note at NOTE_MAX_LENGTH', async () => {
+		const { NOTE_MAX_LENGTH } = await import('./db');
+		const result = deserializeAppState(backupWith({ notes: 'x'.repeat(NOTE_MAX_LENGTH + 500) }));
+		expect(result.items[0].notes).toHaveLength(NOTE_MAX_LENGTH);
 	});
 });
