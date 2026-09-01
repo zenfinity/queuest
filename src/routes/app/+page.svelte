@@ -50,6 +50,7 @@
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
 	import ListHint from '$lib/components/ListHint.svelte';
 	import SyncHint from '$lib/components/SyncHint.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	function loadPref<T extends string>(key: string, fallback: T): T {
@@ -598,11 +599,7 @@
 					class="text-xs text-orange-400 hover:text-orange-600 dark:hover:text-orange-200"
 					>Skip</button
 				>
-				<button
-					onclick={saveBudgetCallout}
-					class="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-400"
-					>Save</button
-				>
+				<Button onclick={saveBudgetCallout} class="px-3 py-1.5 text-xs">Save</Button>
 			</div>
 		</div>
 	{/if}

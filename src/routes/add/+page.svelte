@@ -20,6 +20,7 @@
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import NavHint from '$lib/components/NavHint.svelte';
 	import AddToListButton from '$lib/components/AddToListButton.svelte';
+	import Button from '$lib/components/Button.svelte';
 	import { addSearchResultToQueue, addSearchResultToList } from '$lib/add-actions';
 
 	let isOnboarding = $derived(page.url.searchParams.has('onboarding'));
@@ -153,7 +154,7 @@
 
 <div class="space-y-5 xs:space-y-8">
 	<div class="space-y-2">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Search</h2>
+		<h2 class="section-heading">Search</h2>
 		{#if isOnboarding}
 			<p class="text-xs text-gray-500 dark:text-gray-400">
 				Already have a watchlist elsewhere? Expand <strong>Import</strong> below to add titles from Letterboxd,
@@ -246,12 +247,7 @@
 				</div>
 			{/if}
 		</div>
-		<button
-			type="submit"
-			class="rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-		>
-			Search
-		</button>
+		<Button type="submit" class="px-5 py-2.5 text-sm">Search</Button>
 	</form>
 
 	{#snippet resultCard(result: SearchResult)}
@@ -363,7 +359,7 @@
 		{#if data.person}
 			<div class="space-y-2">
 				{#if data.results.length > 0}
-					<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
+					<h2 class="section-heading">
 						Titles with {data.person.name}
 					</h2>
 				{/if}
@@ -376,9 +372,7 @@
 		{/if}
 		{#if data.results.length > 0}
 			{#if data.person}
-				<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
-					Search results
-				</h2>
+				<h2 class="section-heading">Search results</h2>
 			{/if}
 			<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
 				{#each data.results as result (result.id)}
@@ -390,11 +384,7 @@
 		<div class="py-12 text-center xs:py-20">
 			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">⚠️</p>
 			<p class="text-base text-gray-700 dark:text-gray-300 xs:text-lg">{data.error}</p>
-			<button
-				onclick={() => invalidateAll()}
-				class="mt-3 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-				>Retry</button
-			>
+			<Button onclick={() => invalidateAll()} class="mt-3 px-4 py-2 text-sm">Retry</Button>
 		</div>
 	{:else if data.query}
 		<div class="py-12 text-center text-gray-500 xs:py-20">

@@ -697,7 +697,7 @@
 	</section>
 
 	<!-- ─── PAGE FOOTER ──────────────────────────────────────────────── -->
-	<div class="relative z-10 border-t border-gray-200 dark:border-gray-800">
+	<div class="relative z-10 divider">
 		<div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-6">
 			<span class="text-base font-extrabold tracking-[-0.4px]"
 				>Queu<span class="text-orange-500">est</span></span

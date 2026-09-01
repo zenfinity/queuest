@@ -36,6 +36,7 @@
 	} from '$lib/queue-colors';
 	import { listCollections } from '$lib/queue-actions';
 	import ShareHint from '$lib/components/ShareHint.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	let syncEnabled = $state(false);
 
@@ -427,8 +428,8 @@
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
 	<!-- Lists -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Lists</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Lists</h2>
+		<p class="body-text">
 			Organize your queue into lists, then assign items to them from the detail panel. Accepting a
 			read-only link automatically creates one.
 		</p>
@@ -446,13 +447,9 @@
 				bind:value={newCollectionInput}
 				class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
 			/>
-			<button
-				type="submit"
-				disabled={!newCollectionInput.trim()}
-				class="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-400 disabled:opacity-50"
-			>
+			<Button type="submit" disabled={!newCollectionInput.trim()} class="px-3 py-1.5 text-sm">
 				Create
-			</button>
+			</Button>
 		</form>
 		{#if collections.length === 0}
 			<p class="text-sm text-gray-400 dark:text-gray-600">No lists yet.</p>
@@ -751,13 +748,13 @@
 		{/if}
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Shared Lists -->
 	{#if syncEnabled}
 		<section class="space-y-3">
-			<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared Lists</h2>
-			<p class="text-sm text-gray-600 dark:text-gray-400">
+			<h2 class="section-heading">Shared Lists</h2>
+			<p class="body-text">
 				Lists you're watching through with other people. To start one, use
 				<span class="font-medium">Share</span> on a list above.
 			</p>

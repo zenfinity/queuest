@@ -178,11 +178,7 @@
 				{#if showRankings}
 					<div class="mt-2 space-y-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/40">
 						<div>
-							<p
-								class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-							>
-								Your ballot
-							</p>
+							<p class="mb-1.5 panel-label">Your ballot</p>
 							{#if myBallot.length === 0}
 								<p class="text-xs text-gray-400 dark:text-gray-600">
 									Tap ☆ Rank on a title below to rank up to {MAX_BALLOT_SIZE}.
@@ -204,11 +200,7 @@
 							{/if}
 						</div>
 						<div>
-							<p
-								class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-							>
-								Group ranking
-							</p>
+							<p class="mb-1.5 panel-label">Group ranking</p>
 							{#if tally.length === 0}
 								<p class="text-xs text-gray-400 dark:text-gray-600">
 									No one has ranked anything yet.

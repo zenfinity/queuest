@@ -5,6 +5,7 @@
 	import { theme } from '$lib/theme.svelte';
 	import type { SharedCollection } from '$lib/collection-actions';
 	import AddToListButton from '$lib/components/AddToListButton.svelte';
+	import Button from '$lib/components/Button.svelte';
 	import {
 		importRows,
 		restoreBackup,
@@ -202,8 +203,8 @@
 <div class="space-y-6">
 	<!-- Restore backup -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Restore backup</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Restore backup</h2>
+		<p class="body-text">
 			Restore from a <code class="text-orange-500">.queuest</code> file. Theme and budget
 			preferences are restored too.
 			<span class="font-medium text-red-500">This replaces your current queue.</span>
@@ -221,16 +222,16 @@
 				aria-label="Restore passphrase"
 				placeholder="Passphrase"
 				bind:value={restorePassphrase}
-				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				class="input-field flex-1 px-4 py-2"
 				onkeydown={(e) => e.key === 'Enter' && doRestore()}
 			/>
-			<button
-				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+			<Button
+				class="px-4 py-2 text-sm"
 				disabled={!restoreFile || !restorePassphrase || restoring}
 				onclick={doRestore}
 			>
 				{restoring ? 'Decrypting…' : 'Import'}
-			</button>
+			</Button>
 		</div>
 		{#if restoreError}<p class="text-xs text-red-500">{restoreError}</p>{/if}
 		{#if restoreDone}<p class="text-xs text-teal-600 dark:text-teal-400">
@@ -238,12 +239,12 @@
 			</p>{/if}
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Letterboxd — instructions paired with the file upload that handles them -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Letterboxd</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Letterboxd</h2>
+		<p class="body-text">
 			Go to
 			<a
 				href="https://letterboxd.com/settings/data/"
@@ -262,7 +263,7 @@
 		/>
 
 		{#if fileFormat && fileRows.length}
-			<p class="text-sm text-gray-600 dark:text-gray-400">
+			<p class="body-text">
 				Found <span class="font-medium text-gray-900 dark:text-white">{fileRows.length}</span>
 				title{fileRows.length === 1 ? '' : 's'} from {fileFormat}.
 			</p>
@@ -282,12 +283,12 @@
 		/>
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- IMDb — instructions paired with the link-paste that handles them -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">IMDb</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">IMDb</h2>
+		<p class="body-text">
 			Go to your
 			<a
 				href="https://www.imdb.com/list/watchlist"
@@ -305,7 +306,7 @@
 					placeholder="https://… (IMDb export link)"
 					bind:value={csvUrl}
 					onkeydown={(e) => e.key === 'Enter' && fetchCsvUrl()}
-					class="w-full rounded-lg bg-gray-100 px-3 py-2 pr-9 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-3 py-2 pr-9"
 				/>
 				{#if csvUrl}
 					<button
@@ -332,7 +333,7 @@
 		</div>
 
 		{#if urlFormat && urlRows.length}
-			<p class="text-sm text-gray-600 dark:text-gray-400">
+			<p class="body-text">
 				Found <span class="font-medium text-gray-900 dark:text-white">{urlRows.length}</span>
 				title{urlRows.length === 1 ? '' : 's'} from {urlFormat}.
 			</p>
@@ -352,12 +353,12 @@
 		/>
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Freeform text list -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Paste a list</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Paste a list</h2>
+		<p class="body-text">
 			One title per line — from Notes, Keep, Obsidian, or anywhere. Markdown bullets, numbers,
 			checkboxes, and years are stripped automatically.
 		</p>
@@ -374,8 +375,7 @@
 			}}
 			placeholder={'The Bear\n- Severance (2022)\n1. Andor\n• Slow Horses'}
 			rows="6"
-			class="w-full rounded-lg bg-gray-100 px-3 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
-		></textarea>
+			class="input-field px-3 py-2"></textarea>
 		<!-- eslint-enable svelte/no-useless-mustaches -->
 
 		{#if textParseError}
@@ -383,7 +383,7 @@
 		{/if}
 
 		{#if textRows.length > 0}
-			<p class="text-sm text-gray-600 dark:text-gray-400">
+			<p class="body-text">
 				<span class="font-medium text-gray-900 dark:text-white">{textRows.length}</span>
 				title{textRows.length === 1 ? '' : 's'} detected.
 			</p>
@@ -417,10 +417,10 @@
 
 	<!-- Missed titles -->
 	{#if missedTitles.length > 0 && !importing}
-		<div class="border-t border-gray-200 dark:border-gray-800"></div>
+		<div class="divider"></div>
 		<section class="space-y-2">
 			<div class="flex items-center justify-between">
-				<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
+				<h2 class="section-heading">
 					Not Found ({missedTitles.length})
 				</h2>
 				<button
