@@ -142,10 +142,7 @@
 						: 'absolute right-0 top-full mt-2'} z-[55] w-52 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-gray-900"
 				>
 					<div class="flex items-center justify-between px-2 py-1">
-						<span
-							class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-							>Sort by</span
-						>
+						<span class="panel-label">Sort by</span>
 						{#if queueControls.sortBy !== 'added' || queueControls.sortDir !== SORT_DEFAULT_DIR.added}
 							<button
 								onclick={clearSort}
@@ -181,11 +178,7 @@
 
 					<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
 
-					<p
-						class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-					>
-						Services
-					</p>
+					<p class="px-2 py-1 panel-label">Services</p>
 					{#each [['all', 'All'], ['subscribed', 'Subscribed'], ['not-subscribed', 'Not Subscribed']] as const as [key, label] (key)}
 						{@const isDisabled = key === 'subscribed' && services.ids.size === 0}
 						<button
@@ -212,11 +205,7 @@
 					{#if queueControls.viewMode === 'lanes' && queueControls.collectionNames.length > 0}
 						<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
 
-						<p
-							class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-						>
-							Group lanes by
-						</p>
+						<p class="px-2 py-1 panel-label">Group lanes by</p>
 						{#each [['provider', 'Provider'], ['collection', 'List']] as const as [key, label] (key)}
 							<button
 								onclick={() => (queueControls.ganttGroupBy = key)}
@@ -237,10 +226,7 @@
 						<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
 
 						<div class="flex items-center justify-between px-2 py-1">
-							<span
-								class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-								>List</span
-							>
+							<span class="panel-label">List</span>
 							{#if queueControls.collectionNames.length > 0}
 								<button
 									onclick={() =>
@@ -293,11 +279,7 @@
 						{/each}
 
 						{#if queueControls.sharedListOptions.length > 0}
-							<p
-								class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-							>
-								Shared
-							</p>
+							<p class="px-2 py-1 panel-label">Shared</p>
 							{#each queueControls.sharedListOptions as opt (opt.id)}
 								{@const filterValue = `shared:${opt.id}`}
 								<button

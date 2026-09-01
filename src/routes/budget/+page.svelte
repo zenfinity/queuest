@@ -10,6 +10,7 @@
 	import { readNumber } from '$lib/storage';
 	import { scrollToHashTarget } from '$lib/scroll-to-hash';
 	import type { Provider, Suggestion } from '$lib/types';
+	import Button from '$lib/components/Button.svelte';
 
 	// ── Onboarding ────────────────────────────────────────────────────────────
 	let isOnboarding = $state(false);
@@ -135,13 +136,13 @@
 <div class="mx-auto max-w-md space-y-8">
 	<!-- Viewing Budget -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Viewing Budget</h2>
+		<h2 class="section-heading">Viewing Budget</h2>
 		{#if isOnboarding}
-			<p class="text-sm text-gray-600 dark:text-gray-400">
+			<p class="body-text">
 				This calibrates how full your queue bars look. Set it now or adjust later on this page.
 			</p>
 		{:else}
-			<p class="text-sm text-gray-600 dark:text-gray-400">
+			<p class="body-text">
 				Your estimated monthly watch time. Used to normalise bar widths across all views.
 			</p>
 		{/if}
@@ -170,20 +171,18 @@
 		</div>
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Subscribed Services -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
-			Subscribed Services
-		</h2>
+		<h2 class="section-heading">Subscribed Services</h2>
 		{#if isOnboarding}
-			<p class="text-sm text-gray-600 dark:text-gray-400">
+			<p class="body-text">
 				Set this before adding titles — Queuest can flag what's actually available to you from the
 				first title you add, instead of only after the fact.
 			</p>
 		{:else}
-			<p class="text-sm text-gray-600 dark:text-gray-400">
+			<p class="body-text">
 				Mark which streaming services you subscribe to. Queuest uses this to surface relevant
 				suggestions.
 			</p>
@@ -242,13 +241,11 @@
 	     same empty state the onboarding CTA below already covers. Hidden
 	     entirely rather than shown-empty, so the two never render at once. -->
 	{#if !isOnboarding}
-		<div class="border-t border-gray-200 dark:border-gray-800"></div>
+		<div class="divider"></div>
 
 		<section id="suggest" class="space-y-3">
 			<div>
-				<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
-					What to Subscribe to Next
-				</h2>
+				<h2 class="section-heading">What to Subscribe to Next</h2>
 				<p class="mt-1 text-sm text-gray-500">
 					Based on your {totalUnwatched} unwatched title{totalUnwatched === 1 ? '' : 's'}
 				</p>
@@ -334,12 +331,9 @@
 	{/if}
 
 	{#if isOnboarding}
-		<div class="border-t border-gray-200 dark:border-gray-800"></div>
-		<button
-			onclick={() => goto(resolve('/add?onboarding=1'))}
-			class="w-full rounded-lg bg-orange-500 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-		>
+		<div class="divider"></div>
+		<Button onclick={() => goto(resolve('/add?onboarding=1'))} class="w-full px-4 py-3 text-sm">
 			Next: Add titles →
-		</button>
+		</Button>
 	{/if}
 </div>

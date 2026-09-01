@@ -15,6 +15,7 @@ const CREATE_LIMIT = { max: 20, windowSeconds: 300 };
 interface CollectionListRow {
 	id: string;
 	name: string;
+	color: string | null;
 	owner_user_id: string;
 	dek_version: number;
 	created_at: string;
@@ -50,6 +51,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 		.prepare(
 			`SELECT c.id            AS id,
 			        c.name          AS name,
+			        c.color         AS color,
 			        c.owner_user_id AS owner_user_id,
 			        c.dek_version   AS dek_version,
 			        c.created_at    AS created_at,
@@ -70,6 +72,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 		collections: rows.map((r) => ({
 			id: r.id,
 			name: r.name,
+			color: r.color,
 			ownerUserId: r.owner_user_id,
 			role: r.role,
 			wrappedKey: r.wrapped_key,
@@ -147,6 +150,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		{
 			id,
 			name: trimmedName,
+			color: null,
 			ownerUserId: user.id,
 			role: 'owner',
 			wrappedKey,

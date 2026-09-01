@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import Button from '$lib/components/Button.svelte';
 </script>
 
 <svelte:head>
@@ -30,11 +31,8 @@
 		<p class="mt-4 text-sm text-gray-500 dark:text-gray-500">
 			{page.error?.message || "Sorry, we couldn't process your request."}
 		</p>
-		<a
-			href={resolve('/app')}
-			class="mt-6 inline-block rounded-lg bg-orange-500 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-		>
+		<Button href={resolve('/app')} class="mt-6 inline-block px-6 py-3 text-sm">
 			Return to Queue
-		</a>
+		</Button>
 	</div>
 </div>

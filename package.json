@@ -1,6 +1,6 @@
 {
   "name": "queuest",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": true,
   "license": "AGPL-3.0",
   "type": "module",
@@ -46,6 +46,7 @@
     "wrangler": "^4.90.0"
   },
   "dependencies": {
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "svelte-dnd-action": "^0.9.79"
   }
 }

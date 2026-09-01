@@ -401,11 +401,7 @@
 			<!-- Cast -->
 			{#if item.cast?.length}
 				<div>
-					<p
-						class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-					>
-						Cast
-					</p>
+					<p class="mb-2 panel-label">Cast</p>
 					<div class="flex gap-2 overflow-x-auto pb-1">
 						{#each item.cast as c (c.name)}
 							<div class="flex shrink-0 flex-col items-center gap-1 w-14">
@@ -457,11 +453,7 @@
 
 			<!-- Where to watch -->
 			<div>
-				<p
-					class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-				>
-					Where to watch
-				</p>
+				<p class="mb-2 panel-label">Where to watch</p>
 				{#if item.providers.length}
 					<div class="flex flex-wrap gap-2">
 						{#each item.providers as p (p.provider_id)}
@@ -502,11 +494,7 @@
 				<!-- Seasons with episode counts -->
 				{#if item.media_type === 'tv' && (item.seasons?.length || chip)}
 					<div>
-						<p
-							class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-						>
-							Seasons
-						</p>
+						<p class="mb-2 panel-label">Seasons</p>
 						<div class="space-y-1">
 							{#each (item.seasons ?? []).filter((s) => s.episode_count > 0 && (!chip || item.release?.next_season == null || s.season_number < item.release.next_season)) as season (season.season_number)}
 								{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}

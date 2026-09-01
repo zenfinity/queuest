@@ -27,6 +27,7 @@
 	} from '$lib/sync-account-actions';
 	import { getQueueName, setQueueName } from '$lib/queue-colors';
 	import { takePendingInvite } from '$lib/pending-invite';
+	import Button from '$lib/components/Button.svelte';
 	import pkg from '../../../package.json';
 
 	const VERSION = pkg.version;
@@ -358,9 +359,9 @@
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
 	<!-- Appearance -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Appearance</h2>
+		<h2 class="section-heading">Appearance</h2>
 		<div class="flex items-center justify-between">
-			<span class="text-sm text-gray-600 dark:text-gray-400">Theme</span>
+			<span class="body-text">Theme</span>
 			<button
 				onclick={toggleTheme}
 				class="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
@@ -370,19 +371,17 @@
 		</div>
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Cancel alerts -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">
-			Cancellation Alerts
-		</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Cancellation Alerts</h2>
+		<p class="body-text">
 			When enabled, a banner appears on your queue when you've nearly cleared a streaming service —
 			a nudge to consider pausing your subscription.
 		</p>
 		<div class="flex items-center justify-between">
-			<span class="text-sm text-gray-600 dark:text-gray-400">Show cancellation alerts</span>
+			<span class="body-text">Show cancellation alerts</span>
 			<button
 				role="switch"
 				aria-checked={cancelAlertsEnabled}
@@ -400,17 +399,17 @@
 		</div>
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Onboarding tips (#191) -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Onboarding Tips</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Onboarding Tips</h2>
+		<p class="body-text">
 			Brief nudges toward features you haven't tried yet — lists, sync, sharing, ranking. Each one
 			only shows once; turn this off to silence all of them, seen or not.
 		</p>
 		<div class="flex items-center justify-between">
-			<span class="text-sm text-gray-600 dark:text-gray-400">Show onboarding tips</span>
+			<span class="body-text">Show onboarding tips</span>
 			<button
 				role="switch"
 				aria-checked={!hintsDisabled}
@@ -428,12 +427,12 @@
 		</div>
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Sync -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Sync</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Sync</h2>
+		<p class="body-text">
 			Keep your queue in sync across devices. End-to-end encrypted — Queuest never sees your data,
 			only ciphertext. <span class="font-medium text-teal-600 dark:text-teal-400"
 				>Free during beta.</span
@@ -442,15 +441,15 @@
 
 		{#if syncView === 'choose'}
 			<div class="flex flex-wrap gap-2">
-				<button
+				<Button
 					onclick={() => {
 						syncError = '';
 						syncView = 'signup';
 					}}
-					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+					class="px-4 py-2 text-sm"
 				>
 					Enable sync
-				</button>
+				</Button>
 				<button
 					onclick={() => {
 						syncError = '';
@@ -475,14 +474,14 @@
 					aria-label="Email"
 					placeholder="Email"
 					bind:value={syncEmail}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2"
 				/>
 				<input
 					type="password"
 					aria-label="Passphrase"
 					placeholder="Passphrase (min. 8 characters)"
 					bind:value={syncPassphrase}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2"
 				/>
 				<input
 					type="password"
@@ -490,17 +489,17 @@
 					placeholder="Confirm passphrase"
 					bind:value={syncPassphraseConfirm}
 					onkeydown={(e) => e.key === 'Enter' && submitSyncSignup()}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2"
 				/>
 				{#if syncError}<p class="text-xs text-red-500">{syncError}</p>{/if}
 				<div class="flex gap-2">
-					<button
+					<Button
 						onclick={submitSyncSignup}
 						disabled={!syncEmail || !syncPassphrase || syncBusy}
-						class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+						class="px-4 py-2 text-sm"
 					>
 						{syncBusy ? 'Creating…' : 'Create account'}
-					</button>
+					</Button>
 					<button
 						onclick={backToSyncChoose}
 						class="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
@@ -516,7 +515,7 @@
 					aria-label="Email"
 					placeholder="Email"
 					bind:value={syncEmail}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2"
 				/>
 				<input
 					type="password"
@@ -524,17 +523,17 @@
 					placeholder="Passphrase"
 					bind:value={syncPassphrase}
 					onkeydown={(e) => e.key === 'Enter' && submitSyncSignin()}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2"
 				/>
 				{#if syncError}<p class="text-xs text-red-500">{syncError}</p>{/if}
 				<div class="flex flex-wrap items-center gap-2">
-					<button
+					<Button
 						onclick={submitSyncSignin}
 						disabled={!syncEmail || !syncPassphrase || syncBusy}
-						class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+						class="px-4 py-2 text-sm"
 					>
 						{syncBusy ? 'Signing in…' : 'Sign in'}
-					</button>
+					</Button>
 					<button
 						onclick={backToSyncChoose}
 						class="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
@@ -563,7 +562,7 @@
 					aria-label="Email"
 					placeholder="Email"
 					bind:value={syncEmail}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2"
 				/>
 				<input
 					type="text"
@@ -571,17 +570,17 @@
 					placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
 					bind:value={syncRecoveryCodeInput}
 					onkeydown={(e) => e.key === 'Enter' && submitSyncRecover()}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 font-mono text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2 font-mono"
 				/>
 				{#if syncError}<p class="text-xs text-red-500">{syncError}</p>{/if}
 				<div class="flex gap-2">
-					<button
+					<Button
 						onclick={submitSyncRecover}
 						disabled={!syncEmail || !syncRecoveryCodeInput || syncBusy}
-						class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+						class="px-4 py-2 text-sm"
 					>
 						{syncBusy ? 'Verifying…' : 'Continue'}
-					</button>
+					</Button>
 					<button
 						onclick={backToSyncChoose}
 						class="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
@@ -600,7 +599,7 @@
 					aria-label="New passphrase"
 					placeholder="New passphrase (min. 8 characters)"
 					bind:value={syncNewPassphrase}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2"
 				/>
 				<input
 					type="password"
@@ -608,16 +607,16 @@
 					placeholder="Confirm new passphrase"
 					bind:value={syncPassphraseConfirm}
 					onkeydown={(e) => e.key === 'Enter' && submitSyncNewPassphrase()}
-					class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+					class="input-field px-4 py-2"
 				/>
 				{#if syncError}<p class="text-xs text-red-500">{syncError}</p>{/if}
-				<button
+				<Button
 					onclick={submitSyncNewPassphrase}
 					disabled={!syncNewPassphrase || syncBusy}
-					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					class="px-4 py-2 text-sm"
 				>
 					{syncBusy ? 'Saving…' : 'Set new passphrase'}
-				</button>
+				</Button>
 			</div>
 		{:else if syncView === 'recovery-code'}
 			<div class="space-y-3">
@@ -641,17 +640,17 @@
 				>
 					Copy to clipboard
 				</button>
-				<label class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+				<label class="flex items-start gap-2 body-text">
 					<input type="checkbox" bind:checked={recoveryCodeSaved} class="mt-0.5" />
 					I've saved this recovery code somewhere safe.
 				</label>
-				<button
+				<Button
 					onclick={confirmRecoveryCodeSaved}
 					disabled={!recoveryCodeSaved}
-					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					class="px-4 py-2 text-sm"
 				>
 					Continue
-				</button>
+				</Button>
 			</div>
 		{:else if syncView === 'status'}
 			<div class="space-y-3">
@@ -705,12 +704,12 @@
 		{/if}
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Export -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Export Watchlist</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Export Watchlist</h2>
+		<p class="body-text">
 			Downloads your personal queue and preferences as an encrypted <code class="text-orange-500"
 				>.queuest</code
 			> file. The passphrase is required to import — keep it somewhere safe. Shared lists aren't included
@@ -730,7 +729,7 @@
 				bind:value={myQueueName}
 				oninput={saveQueueName}
 				maxlength="40"
-				class="w-full rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				class="input-field px-4 py-2"
 			/>
 		</div>
 		<div class="flex gap-2">
@@ -739,16 +738,16 @@
 				aria-label="Export passphrase"
 				placeholder="Passphrase"
 				bind:value={exportPassphrase}
-				class="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700"
+				class="input-field flex-1 px-4 py-2"
 				onkeydown={(e) => e.key === 'Enter' && doExport()}
 			/>
-			<button
-				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+			<Button
+				class="px-4 py-2 text-sm"
 				disabled={!exportPassphrase || exporting}
 				onclick={doExport}
 			>
 				{exporting ? 'Encrypting…' : 'Download'}
-			</button>
+			</Button>
 		</div>
 		{#if exportDone}
 			<p class="text-xs text-teal-600 dark:text-teal-400">✓ File downloaded.</p>
@@ -758,12 +757,12 @@
 		{/if}
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Refresh providers -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Refresh Data</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Refresh Data</h2>
+		<p class="body-text">
 			Re-fetches streaming providers, cast, release dates, and season info for every title in your
 			queue. Useful if providers look wrong, a title has moved services, or detail info is missing.
 		</p>
@@ -788,12 +787,12 @@
 		{/if}
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- Reset -->
 	<section class="space-y-3">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Danger Zone</h2>
-		<p class="text-sm text-gray-600 dark:text-gray-400">
+		<h2 class="section-heading">Danger Zone</h2>
+		<p class="body-text">
 			Wipes your entire queue and resets all preferences. The app will restart as if you're a new
 			user.
 			<span class="font-medium text-red-500">This cannot be undone.</span>
@@ -837,7 +836,7 @@
 
 		{#if syncEnabled}
 			<div class="border-t border-red-100 pt-3 dark:border-red-900/30">
-				<p class="text-sm text-gray-600 dark:text-gray-400">
+				<p class="body-text">
 					Permanently deletes your account and everything synced to it — the encrypted blob, both
 					recovery credentials, all of it.
 					<span class="font-medium text-red-500">This cannot be undone.</span> Local data on this device
@@ -881,11 +880,11 @@
 		{/if}
 	</section>
 
-	<div class="border-t border-gray-200 dark:border-gray-800"></div>
+	<div class="divider"></div>
 
 	<!-- About -->
 	<section class="space-y-4">
-		<h2 class="text-sm font-semibold uppercase tracking-widest text-gray-500">About</h2>
+		<h2 class="section-heading">About</h2>
 
 		<div class="flex items-center justify-between">
 			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -913,12 +912,7 @@
 				GitHub
 			</a>
 
-			<button
-				onclick={openFeedback}
-				class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-			>
-				Send feedback
-			</button>
+			<Button onclick={openFeedback} class="px-4 py-2 text-sm">Send feedback</Button>
 		</div>
 	</section>
 </div>
@@ -996,13 +990,13 @@
 				>
 					Cancel
 				</button>
-				<button
+				<Button
 					onclick={submitFeedback}
 					disabled={!feedbackTitle.trim() || feedbackSending}
-					class="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+					class="flex-1 py-2 text-sm"
 				>
 					{feedbackSending ? 'Submitting…' : feedbackIssueUrl ? 'Send another' : 'Submit'}
-				</button>
+				</Button>
 			</div>
 		</div>
 	</div>

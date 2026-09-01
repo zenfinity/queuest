@@ -15,6 +15,7 @@ import {
 	toggleCollectionWatched,
 	setCollectionItemNote,
 	renameSharedCollection,
+	setSharedCollectionColor,
 	addItemsToSharedCollection,
 	removeItemFromSharedCollection,
 	setMyBallot
@@ -55,6 +56,7 @@ function collection(over = {}) {
 	return {
 		id: COLL,
 		name: 'Date night',
+		color: null as string | null,
 		ownerUserId: ALICE,
 		role: 'owner' as const,
 		wrappedKey: aliceWrapped,
@@ -479,6 +481,39 @@ describe('renameSharedCollection', () => {
 
 		const c = capture();
 		const result = await renameSharedCollection(collection(), 'New name', c.deps);
+
+		expect(result).toBeNull();
+		expect(c.err()).toBeTruthy();
+	});
+});
+
+describe('setSharedCollectionColor', () => {
+	it('PATCHes the collection and returns it with the new color', async () => {
+		const fetchMock = vi.fn(async (..._args: unknown[]) =>
+			Response.json({ id: COLL, color: '#22c55e' })
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		const result = await setSharedCollectionColor(collection(), '#22c55e', noop);
+
+		expect(result?.color).toBe('#22c55e');
+		expect(result?.id).toBe(COLL);
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe(`/api/collections/${COLL}`);
+		expect((init as RequestInit).method).toBe('PATCH');
+		expect(JSON.parse(String((init as RequestInit).body))).toEqual({ color: '#22c55e' });
+	});
+
+	it('surfaces a server error instead of throwing', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				Response.json({ error: 'Only the owner can change this list' }, { status: 403 })
+			)
+		);
+
+		const c = capture();
+		const result = await setSharedCollectionColor(collection(), '#22c55e', c.deps);
 
 		expect(result).toBeNull();
 		expect(c.err()).toBeTruthy();

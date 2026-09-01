@@ -160,3 +160,47 @@ describe('PATCH collection (rename)', () => {
 		expect(res.status).toBe(400);
 	});
 });
+
+describe('PATCH collection (color, #237)', () => {
+	it('recolors as the owner and returns the new color', async () => {
+		const { db, updates } = makeFakeDb({ members: MEMBERS });
+		const res = await PATCH(event(db, ALICE, { color: '#3b82f6' }));
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ id: COLL, color: '#3b82f6' });
+		expect(updates).toHaveLength(1);
+		expect(updates[0].sql).toContain('UPDATE collections SET color');
+		expect(updates[0].args).toEqual(['#3b82f6', COLL]);
+	});
+
+	it('403s a member who is not the owner', async () => {
+		const { db } = makeFakeDb({ members: MEMBERS });
+		const res = await PATCH(event(db, BOB, { color: '#3b82f6' }));
+		expect(res.status).toBe(403);
+	});
+
+	it('rejects a non-hex color', async () => {
+		const { db, updates } = makeFakeDb({ members: MEMBERS });
+		for (const color of ['blue', '#zzzzzz', '#fff', 'rgb(0,0,0)', '']) {
+			const res = await PATCH(event(db, ALICE, { color }));
+			expect(res.status).toBe(400);
+		}
+		expect(updates).toHaveLength(0);
+	});
+
+	it('rejects a request with neither name nor color', async () => {
+		const { db, updates } = makeFakeDb({ members: MEMBERS });
+		const res = await PATCH(event(db, ALICE, {}));
+		expect(res.status).toBe(400);
+		expect(updates).toHaveLength(0);
+	});
+
+	it('sets both name and color in one statement when both are given', async () => {
+		const { db, updates } = makeFakeDb({ members: MEMBERS });
+		const res = await PATCH(event(db, ALICE, { name: 'Movie Night', color: '#22c55e' }));
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ id: COLL, name: 'Movie Night', color: '#22c55e' });
+		expect(updates).toHaveLength(1);
+		expect(updates[0].sql).toContain('UPDATE collections SET name = ?, color = ?');
+		expect(updates[0].args).toEqual(['Movie Night', '#22c55e', COLL]);
+	});
+});

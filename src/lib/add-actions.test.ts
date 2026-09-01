@@ -73,6 +73,7 @@ beforeEach(() => {
 const COLLECTION = {
 	id: 'coll-1',
 	name: 'Movie Night',
+	color: null,
 	ownerUserId: 'owner-1',
 	role: 'owner' as const,
 	wrappedKey: 'wrapped',

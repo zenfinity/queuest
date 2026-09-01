@@ -10,6 +10,7 @@
 		addAllToQueue as addAllToQueueAction,
 		type DuplicateSkip
 	} from '$lib/share-token-actions';
+	import Button from '$lib/components/Button.svelte';
 
 	let { data }: { data: { token: string } } = $props();
 
@@ -140,12 +141,7 @@
 						</button>
 					{/if}
 				{/if}
-				<a
-					href={resolve('/app')}
-					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
-				>
-					Build your own queue →
-				</a>
+				<Button href={resolve('/app')} class="px-4 py-2 text-sm">Build your own queue →</Button>
 			</div>
 		</div>
 	</div>

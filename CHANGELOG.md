@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.0] — 2026-09-01
+
+### Drag-and-drop reordering for Rank sort and shared-list ballots (#231)
+
+The personal queue's "Rank" sort and a shared list's ballot panel now support dragging a title into place via a small handle, alongside the existing move up/down buttons — those stay as the accessible fallback, since a screen reader or keyboard-only user shouldn't have to depend on how well a third-party drag library's own keyboard mode works.
+
+### Shared list color synced across devices and members (#237)
+
+A shared list's color used to live only in per-device localStorage — a color picked on one device, or by one member, never reached anyone else's view of the same list. It's now stored on the collection itself and read by everyone; changing it is owner-only, same as renaming a list.
+
+### chore: extract repeated Tailwind class strings app-wide (#194)
+
+Presentational patterns (section headings, body text, dividers, panel labels, input/textarea chrome) collapsed into shared Tailwind utility classes; the app-wide primary-action button became a real component. Purely internal — nothing here should look different.
+
+### Remove redundant per-item "Added by" text on shared list cards (#240)
+
+Follow-up to #236 — once a title's border color (and the ranking panel's legend) already show who added it, repeating that as text on every card was just noise. A hover tooltip on the card keeps it discoverable.
+
 ## [1.3.1] — 2026-08-31
 
 ### Notes on a title (#155)

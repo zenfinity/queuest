@@ -12,6 +12,7 @@
 		setItemCollection,
 		setItemNote,
 		moveItem,
+		reorderItems,
 		bulkSetCollection,
 		bulkSetWatched,
 		bulkRemove,
@@ -26,7 +27,7 @@
 		saveBudgetPrefs,
 		DEFAULT_BUDGET_HOURS
 	} from '$lib/progress';
-	import { getQueueColors, getOrAssignSharedListColor } from '$lib/queue-colors';
+	import { getQueueColors, sharedListColor } from '$lib/queue-colors';
 	import {
 		listCollections as listSharedCollections,
 		addItemsToSharedCollection,
@@ -50,6 +51,7 @@
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
 	import ListHint from '$lib/components/ListHint.svelte';
 	import SyncHint from '$lib/components/SyncHint.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
 	function loadPref<T extends string>(key: string, fallback: T): T {
@@ -294,6 +296,9 @@
 	async function moveDown(item: WatchlistItem) {
 		await moveItem(item, 'down', flatItems, actionDeps);
 	}
+	async function reorderRankedItems(newOrder: WatchlistItem[]) {
+		await reorderItems(newOrder, actionDeps);
+	}
 
 	const collectionActionDeps: CollectionActionDeps = {
 		setBusy: () => {},
@@ -304,10 +309,8 @@
 
 	async function loadSharedCollections() {
 		sharedCollections = await listSharedCollections({ setBusy: () => {}, setError: () => {} });
-		const updated = { ...sharedListColors };
-		for (const coll of sharedCollections) {
-			if (!updated[coll.id]) updated[coll.id] = getOrAssignSharedListColor(coll.id);
-		}
+		const updated: Record<string, string> = {};
+		for (const coll of sharedCollections) updated[coll.id] = sharedListColor(coll);
 		sharedListColors = updated;
 	}
 
@@ -598,11 +601,7 @@
 					class="text-xs text-orange-400 hover:text-orange-600 dark:hover:text-orange-200"
 					>Skip</button
 				>
-				<button
-					onclick={saveBudgetCallout}
-					class="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-400"
-					>Save</button
-				>
+				<Button onclick={saveBudgetCallout} class="px-3 py-1.5 text-xs">Save</Button>
 			</div>
 		</div>
 	{/if}
@@ -781,6 +780,7 @@
 			onToggleSelect={toggleSelected}
 			onMoveUp={moveUp}
 			onMoveDown={moveDown}
+			onReorder={reorderRankedItems}
 			{seasonPicker}
 		/>
 
@@ -801,6 +801,7 @@
 			onToggleSelect={toggleSelected}
 			onMoveUp={moveUp}
 			onMoveDown={moveDown}
+			onReorder={reorderRankedItems}
 			{seasonPicker}
 		/>
 

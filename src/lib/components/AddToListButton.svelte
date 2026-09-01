@@ -113,11 +113,7 @@
 				{/if}
 				{#if sharedCollections.length > 0}
 					<div class="my-1 h-px bg-gray-100 dark:bg-gray-800"></div>
-					<p
-						class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-					>
-						Shared
-					</p>
+					<p class="px-2 py-1 panel-label">Shared</p>
 					{#each sharedCollections as coll (coll.id)}
 						<button
 							onclick={() => {

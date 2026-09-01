@@ -10,6 +10,7 @@
 	import { joinCollection } from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
 	import { setPendingInvite } from '$lib/pending-invite';
+	import Button from '$lib/components/Button.svelte';
 
 	const token = page.params.token ?? '';
 
@@ -70,7 +71,7 @@
 <svelte:head><title>Queuest — Join a list</title></svelte:head>
 
 <div class="mx-auto max-w-md space-y-6 py-10">
-	<h1 class="text-sm font-semibold uppercase tracking-widest text-gray-500">Shared list</h1>
+	<h1 class="section-heading">Shared list</h1>
 
 	{#if loading}
 		<div class="space-y-3">
@@ -94,7 +95,7 @@
 			class="space-y-4 rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
 		>
 			<div>
-				<p class="text-sm text-gray-600 dark:text-gray-400">
+				<p class="body-text">
 					<span class="font-medium text-gray-900 dark:text-white">{preview.invitedBy}</span>
 					invited you to
 				</p>
@@ -116,20 +117,14 @@
 					<p class="mt-1 leading-relaxed">
 						Shared lists need an account so your copy of the key can be stored securely.
 					</p>
-					<a
-						href={resolve('/settings#sync')}
-						class="mt-3 inline-block rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white"
-						>Set up sync</a
-					>
+					<Button href={resolve('/settings#sync')} class="mt-3 inline-block px-4 py-2 text-sm">
+						Set up sync
+					</Button>
 				</div>
 			{:else}
-				<button
-					onclick={accept}
-					disabled={busy || joined}
-					class="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
-				>
+				<Button onclick={accept} disabled={busy || joined} class="w-full px-4 py-2.5 text-sm">
 					{busy ? 'Joining…' : `Join ${preview.collectionName}`}
-				</button>
+				</Button>
 			{/if}
 
 			{#if joinError}

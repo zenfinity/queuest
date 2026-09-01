@@ -5,6 +5,36 @@
 	--breakpoint-xs: 375px;
 }
 
+/* Repeated presentational patterns (#194), collapsed with Tailwind v4's
+   @utility directive rather than @apply on a plain class — @utility
+   registers a real utility, so it composes correctly with variants
+   (hover:, dark:, sm:) at the call site the way core utilities do. */
+@utility section-heading {
+	@apply text-sm font-semibold uppercase tracking-widest text-gray-500;
+}
+
+@utility body-text {
+	@apply text-sm text-gray-600 dark:text-gray-400;
+}
+
+@utility divider {
+	@apply border-t border-gray-200 dark:border-gray-800;
+}
+
+@utility panel-label {
+	@apply text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500;
+}
+
+/* Shared input/textarea chrome — deliberately just the class string, not a
+   wrapped component: type, aria-label, value binding, and event handlers
+   are all per-instance and don't benefit from indirection, and one call
+   site (ImportPanel's paste box) is a <textarea>, which a component typed
+   around <input> couldn't cover anyway. Padding stays per call site since
+   it varies (px-3 vs px-4, optional pr-9 for an inline icon). */
+@utility input-field {
+	@apply w-full rounded-lg bg-gray-100 text-base text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 focus:ring-orange-500 sm:text-sm dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:ring-gray-700;
+}
+
 /* overflow-x:clip is a true hard clip (no scroll container created), unlike
    overflow-x:hidden which iOS Safari can still pan into. max-width:100vw ensures
    the root elements never exceed the viewport, which is the root cause of the
