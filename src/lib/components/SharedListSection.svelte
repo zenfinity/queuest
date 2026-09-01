@@ -271,6 +271,7 @@
 			? '!ring-2 !ring-orange-400/70'
 			: ''}"
 		style="border-left: 3px solid {itemBorderColor(item)}"
+		title="Added by {memberLabel(item.added_by_account_id ?? null)}"
 	>
 		<button
 			class="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800"
@@ -352,9 +353,6 @@
 					{releaseChip(item.release)}
 				</p>
 			{/if}
-			<p class="text-[10px] text-gray-400 dark:text-gray-500">
-				Added by {memberLabel(item.added_by_account_id ?? null)}
-			</p>
 			<div class="mt-auto flex gap-1.5 pt-1">
 				<button
 					class="shrink-0 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-40 {rankOf(
@@ -406,6 +404,7 @@
 	<div
 		class="flex flex-col bg-white px-3 py-2.5 dark:bg-gray-900/40"
 		style="border-left: 3px solid {itemBorderColor(item)}"
+		title="Added by {memberLabel(item.added_by_account_id ?? null)}"
 	>
 		<div class="flex items-center gap-3">
 			<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
@@ -528,10 +527,6 @@
 				{releaseChip(item.release)}
 			</p>
 		{/if}
-
-		<p class="ml-11 mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
-			Added by {memberLabel(item.added_by_account_id ?? null)}
-		</p>
 	</div>
 {/snippet}
 
@@ -543,6 +538,7 @@
 		class="flex gap-3 rounded-lg bg-gray-50 p-2.5 dark:bg-gray-800/60 {isNew
 			? 'ring-1 ring-orange-400/60'
 			: ''}"
+		title="Added by {memberLabel(item.added_by_account_id ?? null)}"
 	>
 		{#if item.poster_path}
 			<img
@@ -571,8 +567,7 @@
 				{/if}
 			</button>
 			<p class="text-xs text-gray-500 dark:text-gray-400">
-				{item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '—'} · Added by
-				{memberLabel(item.added_by_account_id ?? null)}
+				{item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '—'}
 			</p>
 			<div class="mt-1.5 flex gap-1.5">
 				<button
@@ -619,11 +614,7 @@
 {#snippet rankingsPanel()}
 	<div class="mt-2 space-y-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/40">
 		<div>
-			<p
-				class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-			>
-				Your ballot
-			</p>
+			<p class="mb-1.5 panel-label">Your ballot</p>
 			{#if myBallot.length === 0}
 				<p class="text-xs text-gray-400 dark:text-gray-600">
 					Tap ☆ on a title below to rank up to {MAX_BALLOT_SIZE}.
@@ -661,11 +652,7 @@
 			{/if}
 		</div>
 		<div>
-			<p
-				class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-			>
-				Group ranking
-			</p>
+			<p class="mb-1.5 panel-label">Group ranking</p>
 			{#if tally.length === 0}
 				<p class="text-xs text-gray-400 dark:text-gray-600">No one has ranked anything yet.</p>
 			{:else}
@@ -685,11 +672,7 @@
 			{/if}
 		</div>
 		<div>
-			<p
-				class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
-			>
-				Added by
-			</p>
+			<p class="mb-1.5 panel-label">Added by</p>
 			<ul class="space-y-1">
 				{#each members as member (member.userId)}
 					<li class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
