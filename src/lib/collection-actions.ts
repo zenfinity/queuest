@@ -33,6 +33,10 @@ export interface CollectionActionDeps {
 export interface SharedCollection {
 	id: string;
 	name: string;
+	/** Manually-picked override, synced across every member/device (#237).
+	 *  Null means no override — see queue-colors.ts's sharedListColor for the
+	 *  deterministic-hash fallback used in that case. */
+	color: string | null;
 	ownerUserId: string;
 	role: 'owner' | 'member';
 	wrappedKey: string;
@@ -536,6 +540,35 @@ export async function renameSharedCollection(
 		return { ...collection, name: savedName };
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not rename this list.');
+		return null;
+	} finally {
+		deps.setBusy(false);
+	}
+}
+
+/**
+ * Sets a shared collection's color. Owner-only, same reasoning as
+ * renameSharedCollection — every member sees this color, so it isn't a
+ * personal preference any member should be able to change unilaterally.
+ */
+export async function setSharedCollectionColor(
+	collection: SharedCollection,
+	color: string,
+	deps: CollectionActionDeps
+): Promise<SharedCollection | null> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const res = await fetch(`/api/collections/${collection.id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ color })
+		});
+		await throwIfNotOk(res);
+		const { color: savedColor } = (await res.json()) as { id: string; color: string };
+		return { ...collection, color: savedColor };
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not change the list color.');
 		return null;
 	} finally {
 		deps.setBusy(false);

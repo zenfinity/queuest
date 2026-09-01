@@ -5,13 +5,16 @@ import { requireMembership } from '$lib/server/collections';
 
 const MAX_NAME_LEN = 100;
 const RENAME_LIMIT = { max: 20, windowSeconds: 300 };
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
 /**
- * Renames a collection. Owner-only — the name is plaintext, shown to every
- * member and to an invite's unauthenticated preview, so letting any member
- * change what everyone else sees would be an odd asymmetry with every other
- * collection-level action (invite, remove member, promote) already being
- * owner-gated.
+ * Renames and/or recolors a collection. Owner-only for both — the name and
+ * color are shown to every member (the name to an invite's unauthenticated
+ * preview too), so letting any member change what everyone else sees would
+ * be an odd asymmetry with every other collection-level action (invite,
+ * remove member, promote) already being owner-gated. Color synced here
+ * (#237) rather than living in per-device localStorage the way it used to,
+ * which is why a manual pick never used to reach a member's other devices.
  */
 export const PATCH: RequestHandler = async ({ request, params, platform, locals }) => {
 	const originError = checkSameOrigin(request);
@@ -43,16 +46,40 @@ export const PATCH: RequestHandler = async ({ request, params, platform, locals 
 		return apiError(400, 'Invalid JSON');
 	}
 
-	const { name } = (body ?? {}) as Record<string, unknown>;
-	const trimmedName = typeof name === 'string' ? name.trim() : '';
-	if (!trimmedName || trimmedName.length > MAX_NAME_LEN) {
-		return apiError(400, 'A list name is required');
+	const { name, color } = (body ?? {}) as Record<string, unknown>;
+	const hasName = name !== undefined;
+	const hasColor = color !== undefined;
+	if (!hasName && !hasColor) {
+		return apiError(400, 'Nothing to update');
+	}
+
+	const sets: string[] = [];
+	const args: string[] = [];
+	const responseBody: Record<string, string> = { id: params.id };
+
+	if (hasName) {
+		const trimmedName = typeof name === 'string' ? name.trim() : '';
+		if (!trimmedName || trimmedName.length > MAX_NAME_LEN) {
+			return apiError(400, 'A list name is required');
+		}
+		sets.push('name = ?');
+		args.push(trimmedName);
+		responseBody.name = trimmedName;
+	}
+
+	if (hasColor) {
+		if (typeof color !== 'string' || !HEX_COLOR_RE.test(color)) {
+			return apiError(400, 'Invalid color');
+		}
+		sets.push('color = ?');
+		args.push(color);
+		responseBody.color = color;
 	}
 
 	await db
-		.prepare('UPDATE collections SET name = ? WHERE id = ?')
-		.bind(trimmedName, params.id)
+		.prepare(`UPDATE collections SET ${sets.join(', ')} WHERE id = ?`)
+		.bind(...args, params.id)
 		.run();
 
-	return Response.json({ id: params.id, name: trimmedName });
+	return Response.json(responseBody);
 };

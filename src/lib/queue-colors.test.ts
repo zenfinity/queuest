@@ -18,8 +18,13 @@ const localStorageMock = (() => {
 
 vi.stubGlobal('localStorage', localStorageMock);
 
-const { getQueueColors, setQueueColor, renameCollectionColor, deleteCollectionColor } =
-	await import('./queue-colors');
+const {
+	getQueueColors,
+	setQueueColor,
+	renameCollectionColor,
+	deleteCollectionColor,
+	sharedListColor
+} = await import('./queue-colors');
 
 beforeEach(() => {
 	localStorageMock.clear();
@@ -94,6 +99,26 @@ describe('queue-colors', () => {
 				deleteCollectionColor('Action');
 			}).not.toThrow();
 
+			setItemSpy.mockRestore();
+		});
+	});
+
+	describe('sharedListColor (#237)', () => {
+		it('uses the stored override when one is set', () => {
+			expect(sharedListColor({ id: 'coll-1', color: '#22c55e' })).toBe('#22c55e');
+		});
+
+		it('falls back to a deterministic hash of the id when unset', () => {
+			const a = sharedListColor({ id: 'coll-1', color: null });
+			const b = sharedListColor({ id: 'coll-1', color: null });
+			expect(a).toBe(b);
+			expect(a).toMatch(/^#[0-9a-f]{6}$/);
+		});
+
+		it('is not read from or written to localStorage', () => {
+			const setItemSpy = vi.spyOn(localStorageMock, 'setItem');
+			sharedListColor({ id: 'coll-2', color: null });
+			expect(setItemSpy).not.toHaveBeenCalled();
 			setItemSpy.mockRestore();
 		});
 	});

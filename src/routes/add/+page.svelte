@@ -10,7 +10,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { getAll } from '$lib/db';
 	import { listCollections } from '$lib/queue-actions';
-	import { getQueueColors, getOrAssignSharedListColor } from '$lib/queue-colors';
+	import { getQueueColors, sharedListColor } from '$lib/queue-colors';
 	import {
 		listCollections as listSharedCollections,
 		type SharedCollection
@@ -109,7 +109,7 @@
 			listSharedCollections({ setBusy: () => {}, setError: () => {} }).then((colls) => {
 				sharedCollections = colls;
 				const colors: Record<string, string> = {};
-				for (const c of colls) colors[c.id] = getOrAssignSharedListColor(c.id);
+				for (const c of colls) colors[c.id] = sharedListColor(c);
 				sharedListColors = colors;
 			});
 		});

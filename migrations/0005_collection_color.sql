@@ -1,0 +1,12 @@
+-- Shared list color synced across devices/members (#237). It previously
+-- lived only in per-device localStorage (sq:shared-list-colors), so a color
+-- someone manually picked on one device never reached that same member's
+-- other devices, let alone other members' — this column is the single
+-- canonical value everyone reads instead.
+--
+-- NULL means "no manual override" — clients fall back to a deterministic
+-- hash of the collection id (queue-colors.ts's autoColor), which is already
+-- identical on every device with nothing to cache or go stale, so there is
+-- no backfill to do here: existing rows are simply "unset" and immediately
+-- correct.
+ALTER TABLE collections ADD COLUMN color TEXT;

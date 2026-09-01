@@ -19,6 +19,7 @@
 		createInvite,
 		removeMemberAndRotate,
 		renameSharedCollection,
+		setSharedCollectionColor,
 		listMembers,
 		loadCollectionItems,
 		type SharedCollection,
@@ -31,8 +32,7 @@
 		setQueueColor,
 		renameCollectionColor,
 		deleteCollectionColor,
-		getOrAssignSharedListColor,
-		setSharedListColor
+		sharedListColor
 	} from '$lib/queue-colors';
 	import { listCollections } from '$lib/queue-actions';
 	import ShareHint from '$lib/components/ShareHint.svelte';
@@ -77,23 +77,23 @@
 		for (const coll of sharedCollections) {
 			loadActivityCount(coll);
 		}
-		// Color is a local, per-device preference — not part of the collection's
-		// own synced state. Auto-assigned on first view so the swatch is never
-		// just gray.
-		const updated = { ...sharedListColors };
-		let changed = false;
-		for (const coll of sharedCollections) {
-			if (!updated[coll.id]) {
-				updated[coll.id] = getOrAssignSharedListColor(coll.id);
-				changed = true;
-			}
-		}
-		if (changed) sharedListColors = updated;
+		const updated: Record<string, string> = {};
+		for (const coll of sharedCollections) updated[coll.id] = sharedListColor(coll);
+		sharedListColors = updated;
 	}
 
-	function updateSharedListColor(id: string, color: string) {
-		setSharedListColor(id, color);
-		sharedListColors = { ...sharedListColors, [id]: color };
+	// Owner-only (#237) — server-enforced too, so this is UX, not the real
+	// gate. The color is now the same for every member/device, so letting
+	// any member repaint it would be the same odd asymmetry rename already
+	// avoids by being owner-only.
+	async function updateSharedListColor(coll: SharedCollection, color: string) {
+		const result = await setSharedCollectionColor(coll, color, {
+			setBusy: () => {},
+			setError: () => {}
+		});
+		if (!result) return;
+		sharedCollections = sharedCollections.map((c) => (c.id === result.id ? result : c));
+		sharedListColors = { ...sharedListColors, [result.id]: color };
 	}
 
 	async function loadActivityCount(coll: SharedCollection) {
@@ -121,7 +121,10 @@
 			if (created) {
 				sharedCollections = [...sharedCollections, created];
 				promoteArmed = null;
-				if (oldColor) updateSharedListColor(created.id, oldColor);
+				// Best-effort: a failure here shouldn't read as the promotion
+				// itself having failed — the list already exists at this point,
+				// just without its carried-over color.
+				if (oldColor) await updateSharedListColor(created, oldColor);
 				// Drop the personal list's color entry too. A name with no items
 				// still "exists" as a palette key (see listCollections's
 				// extraNames), so without this the promoted name keeps showing up
@@ -768,20 +771,28 @@
 						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
 							<div class="flex items-center justify-between gap-2">
 								<div class="min-w-0 flex items-center gap-2">
-									<label class="relative shrink-0 cursor-pointer" title="Change color">
+									{#if coll.role === 'owner'}
+										<label class="relative shrink-0 cursor-pointer" title="Change color">
+											<span
+												class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+												style="background:{sharedListColors[coll.id] ?? '#888888'};"
+											></span>
+											<input
+												type="color"
+												aria-label="List color"
+												value={sharedListColors[coll.id] ?? '#888888'}
+												oninput={(e) =>
+													updateSharedListColor(coll, (e.currentTarget as HTMLInputElement).value)}
+												class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+											/>
+										</label>
+									{:else}
 										<span
-											class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+											class="block h-4 w-4 shrink-0 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
 											style="background:{sharedListColors[coll.id] ?? '#888888'};"
+											title="List color — only the owner can change this"
 										></span>
-										<input
-											type="color"
-											aria-label="List color"
-											value={sharedListColors[coll.id] ?? '#888888'}
-											oninput={(e) =>
-												updateSharedListColor(coll.id, (e.currentTarget as HTMLInputElement).value)}
-											class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-										/>
-									</label>
+									{/if}
 									{#if isRenamingShared}
 										<!-- svelte-ignore a11y_autofocus -->
 										<input

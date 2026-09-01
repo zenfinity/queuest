@@ -27,7 +27,7 @@
 		saveBudgetPrefs,
 		DEFAULT_BUDGET_HOURS
 	} from '$lib/progress';
-	import { getQueueColors, getOrAssignSharedListColor } from '$lib/queue-colors';
+	import { getQueueColors, sharedListColor } from '$lib/queue-colors';
 	import {
 		listCollections as listSharedCollections,
 		addItemsToSharedCollection,
@@ -309,10 +309,8 @@
 
 	async function loadSharedCollections() {
 		sharedCollections = await listSharedCollections({ setBusy: () => {}, setError: () => {} });
-		const updated = { ...sharedListColors };
-		for (const coll of sharedCollections) {
-			if (!updated[coll.id]) updated[coll.id] = getOrAssignSharedListColor(coll.id);
-		}
+		const updated: Record<string, string> = {};
+		for (const coll of sharedCollections) updated[coll.id] = sharedListColor(coll);
 		sharedListColors = updated;
 	}
 

@@ -38,6 +38,7 @@ const COLL_B = '22222222-2222-4222-9222-222222222222';
 interface Row {
 	id: string;
 	name: string;
+	color: string | null;
 	owner_user_id: string;
 	dek_version: number;
 	created_at: string;
@@ -83,6 +84,7 @@ function row(over: Partial<Row> = {}): Row {
 	return {
 		id: COLL_A,
 		name: 'Date night',
+		color: null,
 		owner_user_id: ALICE,
 		dek_version: 1,
 		created_at: '2026-08-21',
@@ -146,6 +148,17 @@ describe('GET /api/collections', () => {
 		});
 		// Nothing belonging to Bob leaks into Alice's listing.
 		expect(JSON.stringify(mine)).not.toContain(COLL_B);
+	});
+
+	it('passes a stored color through, and null when unset (#237)', async () => {
+		const { db } = makeFakeDb({
+			rows: { [ALICE]: [row({ color: '#3b82f6' }), row({ id: COLL_B, color: null })] },
+			entitled: new Set([ALICE])
+		});
+
+		const mine = await (await GET(getEvent(db, ALICE))).json();
+		expect(mine.collections[0].color).toBe('#3b82f6');
+		expect(mine.collections[1].color).toBeNull();
 	});
 
 	it('returns an empty list rather than erroring for a user with none', async () => {
