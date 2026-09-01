@@ -29,6 +29,7 @@ const {
 	groupIntoCollections,
 	setItemCollection,
 	moveItem,
+	reorderItems,
 	bulkSetCollection,
 	bulkSetWatched,
 	bulkRemove
@@ -380,6 +381,34 @@ describe('moveItem', () => {
 
 		expect(state.error).toBe('write failed');
 		expect(state.busy.has(2)).toBe(false);
+	});
+});
+
+describe('reorderItems', () => {
+	it('persists the full settled order from a drag and reloads', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2 });
+		const c = makeItem({ id: 3 });
+		setSortOrder.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([c, a, b]);
+
+		await reorderItems([c, a, b], deps);
+
+		expect(setSortOrder).toHaveBeenCalledWith([3, 1, 2]);
+		expect(getAll).toHaveBeenCalledOnce();
+	});
+
+	it('surfaces an error without touching per-item busy state', async () => {
+		const { state, deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2 });
+		setSortOrder.mockRejectedValue(new Error('write failed'));
+
+		await reorderItems([b, a], deps);
+
+		expect(state.error).toBe('write failed');
+		expect(state.busy.size).toBe(0);
 	});
 });
 

@@ -12,6 +12,7 @@
 		setItemCollection,
 		setItemNote,
 		moveItem,
+		reorderItems,
 		bulkSetCollection,
 		bulkSetWatched,
 		bulkRemove,
@@ -294,6 +295,9 @@
 	}
 	async function moveDown(item: WatchlistItem) {
 		await moveItem(item, 'down', flatItems, actionDeps);
+	}
+	async function reorderRankedItems(newOrder: WatchlistItem[]) {
+		await reorderItems(newOrder, actionDeps);
 	}
 
 	const collectionActionDeps: CollectionActionDeps = {
@@ -778,6 +782,7 @@
 			onToggleSelect={toggleSelected}
 			onMoveUp={moveUp}
 			onMoveDown={moveDown}
+			onReorder={reorderRankedItems}
 			{seasonPicker}
 		/>
 
@@ -798,6 +803,7 @@
 			onToggleSelect={toggleSelected}
 			onMoveUp={moveUp}
 			onMoveDown={moveDown}
+			onReorder={reorderRankedItems}
 			{seasonPicker}
 		/>
 

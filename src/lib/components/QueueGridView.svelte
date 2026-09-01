@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
+	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
 	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
@@ -24,6 +25,7 @@
 		onToggleSelect,
 		onMoveUp,
 		onMoveDown,
+		onReorder,
 		seasonPicker
 	}: {
 		items: WatchlistItem[];
@@ -33,7 +35,10 @@
 		groupByCollection?: boolean;
 		selectMode?: boolean;
 		selected?: Set<number>;
-		/** Custom "Rank" sort is active (#216) — shows move up/down instead of relying on drag. */
+		/** Custom "Rank" sort is active (#216) — shows move up/down (always) and
+		 * a drag handle (#231) for reordering. Only ever true when ungrouped —
+		 * see rankMode's derivation in +page.svelte — so drag is wired only on
+		 * the ungrouped branch below. */
 		rankMode?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
@@ -41,10 +46,30 @@
 		onToggleSelect?: (item: WatchlistItem) => void;
 		onMoveUp?: (item: WatchlistItem) => void;
 		onMoveDown?: (item: WatchlistItem) => void;
+		/** Fires once a drag gesture settles, with the full new order — the
+		 * accessible move up/down buttons call onMoveUp/onMoveDown instead and
+		 * never touch this. */
+		onReorder?: (newOrder: WatchlistItem[]) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
 	let libraryPopupId: number | null = $state(null);
+
+	// Local mirror for the drag zone (#231) — svelte-dnd-action needs a plain
+	// array it can reorder live during a drag via onconsider, before anything
+	// is actually persisted. A writable $derived: reassigning it during a
+	// drag holds until `items` itself changes again (filtering, a completed
+	// reorder reloading the queue, ...), which only happens between drags,
+	// so it never fights the live reorder mid-gesture.
+	let dndItems = $derived(items);
+	const flipDurationMs = $derived(motion.reduced ? 0 : 250);
+	function handleDndConsider(e: CustomEvent<{ items: WatchlistItem[] }>) {
+		dndItems = e.detail.items;
+	}
+	function handleDndFinalize(e: CustomEvent<{ items: WatchlistItem[] }>) {
+		dndItems = e.detail.items;
+		onReorder?.(dndItems);
+	}
 
 	// Svelte requires an animate:-directive element to be the sole direct child
 	// of its keyed #each block, so a section header can't be interleaved into
@@ -199,6 +224,25 @@
 		{#if !selectMode}
 			<div class="mt-auto flex gap-1.5 pt-1">
 				{#if rankMode}
+					<!-- svelte-dnd-action's dragHandle action makes this a real
+					     role="button" tabindex="0" element unconditionally (it has
+					     its own keyboard mode — pick up with space/enter, move with
+					     arrow keys, drop with space/enter), so it's given a proper
+					     label rather than hidden — the move up/down buttons beside
+					     it remain a second, simpler accessible path (#231). The
+					     role/tabindex/keydown handling the linter wants are all
+					     supplied at runtime by the action, invisible to static
+					     analysis. -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						use:dragHandle
+						aria-label="Drag to reorder {item.title}"
+						class="touch-none cursor-grab rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 select-none active:cursor-grabbing dark:bg-gray-800 dark:text-gray-400"
+						onclick={(e) => e.stopPropagation()}
+					>
+						⠿
+					</div>
 					<button
 						class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
 						disabled={isFirst}
@@ -284,26 +328,41 @@
 			{/each}
 		{/each}
 	{:else}
-		{#each items as item, i (item.id)}
-			{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
-			<!-- Card click is a convenience only — see the grouped branch above. -->
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-				class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
-				selected.has(item.id)
-					? '!ring-2 !ring-orange-500'
-					: ''}"
-				style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
-				onclick={(e) => {
-					e.stopPropagation();
-					if (selectMode) onToggleSelect?.(item);
-					else onOpenDetail(item);
-				}}
-			>
-				{@render cardContent(item, i === 0, i === items.length - 1)}
-			</div>
-		{/each}
+		<!-- class="contents" keeps this wrapper out of the CSS grid layout (#231)
+		     so cards still lay out as direct grid children, while giving
+		     svelte-dnd-action a single element to own as the drag zone. -->
+		<div
+			class="contents"
+			use:dragHandleZone={{
+				items: dndItems,
+				flipDurationMs,
+				dragDisabled: !rankMode,
+				dropTargetStyle: {}
+			}}
+			onconsider={handleDndConsider}
+			onfinalize={handleDndFinalize}
+		>
+			{#each dndItems as item, i (item.id)}
+				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				<!-- Card click is a convenience only — see the grouped branch above. -->
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					animate:flip={{ duration: flipDurationMs }}
+					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
+					selected.has(item.id)
+						? '!ring-2 !ring-orange-500'
+						: ''}"
+					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
+					onclick={(e) => {
+						e.stopPropagation();
+						if (selectMode) onToggleSelect?.(item);
+						else onOpenDetail(item);
+					}}
+				>
+					{@render cardContent(item, i === 0, i === dndItems.length - 1)}
+				</div>
+			{/each}
+		</div>
 	{/if}
 </div>

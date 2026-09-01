@@ -12,10 +12,13 @@
 	// bigger, riskier change than duplicating the card shell here. Season-level
 	// toggling and select-mode aren't offered — neither is wired up for shared
 	// items yet.
+	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
+	import { flip } from 'svelte/animate';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { remainingRuntime, releaseChip, DEFAULT_RUNTIME } from '$lib/progress';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import { services } from '$lib/services.svelte';
+	import { motion } from '$lib/motion.svelte';
 	import {
 		listMembers,
 		loadCollectionItems,
@@ -210,6 +213,21 @@
 		const next = [...myBallot];
 		[next[index], next[swapIndex]] = [next[swapIndex], next[index]];
 		await pushBallot(next);
+	}
+
+	// Drag-and-drop for the ballot (#231) — svelte-dnd-action needs objects
+	// with an `id`, so myBallot's keys (already unique) are wrapped rather
+	// than reordering the derived string[] directly. A writable $derived —
+	// see QueueGridView.svelte for why reassigning it during a drag doesn't
+	// fight the resync once myBallot itself changes.
+	let dndBallot = $derived(myBallot.map((key) => ({ id: key })));
+	const flipDurationMs = $derived(motion.reduced ? 0 : 250);
+	function handleBallotConsider(e: CustomEvent<{ items: { id: string }[] }>) {
+		dndBallot = e.detail.items;
+	}
+	async function handleBallotFinalize(e: CustomEvent<{ items: { id: string }[] }>) {
+		dndBallot = e.detail.items;
+		await pushBallot(dndBallot.map((entry) => entry.id));
 	}
 
 	let tally = $derived(bordaTally(items, ballots));
@@ -620,33 +638,64 @@
 					Tap ☆ on a title below to rank up to {MAX_BALLOT_SIZE}.
 				</p>
 			{:else}
-				<ol class="space-y-1">
-					{#each myBallot as key, i (key)}
-						{@const bItem = items.find((it) => itemKey(it) === key)}
-						{#if bItem}
-							<li class="flex items-center gap-2 text-xs">
-								<span class="w-4 shrink-0 text-right font-semibold text-orange-500">{i + 1}</span>
-								<span class="min-w-0 flex-1 truncate">{bItem.title}</span>
-								<button
-									class="rounded bg-gray-200 px-1.5 py-0.5 text-gray-500 disabled:opacity-30 dark:bg-gray-700 dark:text-gray-400"
-									disabled={rankingBusy || i === 0}
-									onclick={() => moveBallotEntry(i, 'up')}
-									aria-label="Move {bItem.title} up">↑</button
-								>
-								<button
-									class="rounded bg-gray-200 px-1.5 py-0.5 text-gray-500 disabled:opacity-30 dark:bg-gray-700 dark:text-gray-400"
-									disabled={rankingBusy || i === myBallot.length - 1}
-									onclick={() => moveBallotEntry(i, 'down')}
-									aria-label="Move {bItem.title} down">↓</button
-								>
-								<button
-									class="rounded bg-gray-200 px-1.5 py-0.5 text-red-500 disabled:opacity-30 dark:bg-gray-700"
-									disabled={rankingBusy}
-									onclick={() => toggleRank(bItem)}
-									aria-label="Remove {bItem.title} from your ranking">✕</button
-								>
-							</li>
-						{/if}
+				<ol
+					class="space-y-1"
+					use:dragHandleZone={{
+						items: dndBallot,
+						flipDurationMs,
+						dragDisabled: rankingBusy,
+						dropTargetStyle: {}
+					}}
+					onconsider={handleBallotConsider}
+					onfinalize={handleBallotFinalize}
+				>
+					{#each dndBallot as entry, i (entry.id)}
+						{@const bItem = items.find((it) => itemKey(it) === entry.id)}
+						<!-- myBallot (and so dndBallot, its mirror) is pre-filtered to keys
+						     with a current matching item, so bItem is always present here —
+						     the `?? ''`/guards below are only to satisfy bItem's optional
+						     type, not a real fallback path. -->
+						<li animate:flip={{ duration: flipDurationMs }} class="flex items-center gap-2 text-xs">
+							<!-- svelte-dnd-action's dragHandle action makes this a real
+							     role="button" tabindex="0" element unconditionally (it
+							     has its own keyboard mode — pick up with space/enter,
+							     move with arrow keys, drop with space/enter), so it's
+							     given a proper label rather than hidden — the ↑/↓
+							     buttons beside it remain a second, simpler accessible
+							     path (#231). The role/tabindex/keydown handling the
+							     linter wants are all supplied at runtime by the
+							     action, invisible to static analysis. -->
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								use:dragHandle
+								aria-label="Drag to reorder {bItem?.title}"
+								class="touch-none cursor-grab select-none active:cursor-grabbing"
+								onclick={(e) => e.stopPropagation()}
+							>
+								⠿
+							</div>
+							<span class="w-4 shrink-0 text-right font-semibold text-orange-500">{i + 1}</span>
+							<span class="min-w-0 flex-1 truncate">{bItem?.title ?? ''}</span>
+							<button
+								class="rounded bg-gray-200 px-1.5 py-0.5 text-gray-500 disabled:opacity-30 dark:bg-gray-700 dark:text-gray-400"
+								disabled={rankingBusy || i === 0}
+								onclick={() => moveBallotEntry(i, 'up')}
+								aria-label="Move {bItem?.title} up">↑</button
+							>
+							<button
+								class="rounded bg-gray-200 px-1.5 py-0.5 text-gray-500 disabled:opacity-30 dark:bg-gray-700 dark:text-gray-400"
+								disabled={rankingBusy || i === dndBallot.length - 1}
+								onclick={() => moveBallotEntry(i, 'down')}
+								aria-label="Move {bItem?.title} down">↓</button
+							>
+							<button
+								class="rounded bg-gray-200 px-1.5 py-0.5 text-red-500 disabled:opacity-30 dark:bg-gray-700"
+								disabled={rankingBusy}
+								onclick={() => bItem && toggleRank(bItem)}
+								aria-label="Remove {bItem?.title} from your ranking">✕</button
+							>
+						</li>
 					{/each}
 				</ol>
 			{/if}

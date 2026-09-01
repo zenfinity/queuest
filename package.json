@@ -46,6 +46,7 @@
     "wrangler": "^4.90.0"
   },
   "dependencies": {
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "svelte-dnd-action": "^0.9.79"
   }
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
+	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
 	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
@@ -24,6 +25,7 @@
 		onToggleSelect,
 		onMoveUp,
 		onMoveDown,
+		onReorder,
 		seasonPicker
 	}: {
 		items: WatchlistItem[];
@@ -33,7 +35,9 @@
 		groupByCollection?: boolean;
 		selectMode?: boolean;
 		selected?: Set<number>;
-		/** Custom "Rank" sort is active (#216) — shows move up/down instead of relying on drag. */
+		/** Custom "Rank" sort is active (#216) — shows move up/down (always) and
+		 * a drag handle (#231). Only ever true when ungrouped — see rankMode's
+		 * derivation in +page.svelte — so drag is wired only on that branch. */
 		rankMode?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
@@ -41,6 +45,10 @@
 		onToggleSelect?: (item: WatchlistItem) => void;
 		onMoveUp?: (item: WatchlistItem) => void;
 		onMoveDown?: (item: WatchlistItem) => void;
+		/** Fires once a drag gesture settles, with the full new order — the
+		 * accessible move up/down buttons call onMoveUp/onMoveDown instead and
+		 * never touch this. */
+		onReorder?: (newOrder: WatchlistItem[]) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -51,6 +59,18 @@
 	let sections = $derived<CollectionSection[]>(
 		groupByCollection ? groupIntoCollections(items, queueColors) : []
 	);
+
+	// See QueueGridView.svelte for why this is a writable $derived rather
+	// than plain $state.
+	let dndItems = $derived(items);
+	const flipDurationMs = $derived(motion.reduced ? 0 : 250);
+	function handleDndConsider(e: CustomEvent<{ items: WatchlistItem[] }>) {
+		dndItems = e.detail.items;
+	}
+	function handleDndFinalize(e: CustomEvent<{ items: WatchlistItem[] }>) {
+		dndItems = e.detail.items;
+		onReorder?.(dndItems);
+	}
 </script>
 
 <svelte:document
@@ -111,6 +131,25 @@
 		{#if !selectMode}
 			<div class="flex shrink-0 gap-1">
 				{#if rankMode}
+					<!-- svelte-dnd-action's dragHandle action makes this a real
+					     role="button" tabindex="0" element unconditionally (it has
+					     its own keyboard mode — pick up with space/enter, move with
+					     arrow keys, drop with space/enter), so it's given a proper
+					     label rather than hidden — the move up/down buttons beside
+					     it remain a second, simpler accessible path (#231). The
+					     role/tabindex/keydown handling the linter wants are all
+					     supplied at runtime by the action, invisible to static
+					     analysis. -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						use:dragHandle
+						aria-label="Drag to reorder {item.title}"
+						class="touch-none cursor-grab rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-500 select-none active:cursor-grabbing dark:bg-gray-800 dark:text-gray-400"
+						onclick={(e) => e.stopPropagation()}
+					>
+						⠿
+					</div>
 					<button
 						class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
 						disabled={isFirst}
@@ -301,14 +340,24 @@
 		{/each}
 	</div>
 {:else}
-	<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
-		{#each items as item, i (item.id)}
+	<div
+		class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60"
+		use:dragHandleZone={{
+			items: dndItems,
+			flipDurationMs,
+			dragDisabled: !rankMode,
+			dropTargetStyle: {}
+		}}
+		onconsider={handleDndConsider}
+		onfinalize={handleDndFinalize}
+	>
+		{#each dndItems as item, i (item.id)}
 			{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
 			<!-- Row click is a convenience only — see the grouped branch above. -->
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
-				animate:flip={{ duration: motion.reduced ? 0 : 250 }}
+				animate:flip={{ duration: flipDurationMs }}
 				class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer {selectMode &&
 				selected.has(item.id)
 					? '!bg-orange-50 dark:!bg-orange-950/30'
@@ -320,7 +369,7 @@
 					else onOpenDetail(item);
 				}}
 			>
-				{@render rowContent(item, i === 0, i === items.length - 1)}
+				{@render rowContent(item, i === 0, i === dndItems.length - 1)}
 			</div>
 		{/each}
 	</div>

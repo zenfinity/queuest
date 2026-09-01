@@ -173,6 +173,25 @@ export async function moveItem(
 	}
 }
 
+/**
+ * Drag-and-drop's counterpart to moveItem (#231) — takes the whole settled
+ * order from the drag gesture instead of a single up/down swap, but persists
+ * through the same setSortOrder call so both reorder paths share one merge
+ * rule. No per-item busy state: a drag already has its own "settled" moment
+ * (drop), unlike the buttons where each click is its own request.
+ */
+export async function reorderItems(
+	newOrder: WatchlistItem[],
+	deps: QueueActionDeps
+): Promise<void> {
+	try {
+		await setSortOrder(newOrder.map((i) => i.id));
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not reorder your queue.');
+	}
+}
+
 export async function setItemCollection(
 	item: WatchlistItem,
 	tag: string | null,
