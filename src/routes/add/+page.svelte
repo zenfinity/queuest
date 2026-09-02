@@ -97,12 +97,16 @@
 	let formEl: HTMLFormElement | undefined = $state();
 	let suggestions: SearchSuggestion[] = $state([]);
 	let showSuggestions = $state(false);
+	// Which option the ArrowDown/ArrowUp keyboard path has moved to; -1 means
+	// none, so Enter still falls through to a normal form submit (#255).
+	let highlightedIndex = $state(-1);
 	let suggestAbort: AbortController | null = null;
 	let suggestTimer: ReturnType<typeof setTimeout> | undefined;
 	const SUGGEST_DEBOUNCE_MS = 300;
 
 	function handleQueryInput() {
 		clearTimeout(suggestTimer);
+		highlightedIndex = -1;
 		const q = query.trim();
 		if (!q) {
 			showSuggestions = false;
@@ -127,6 +131,7 @@
 			if (controller.signal.aborted) return;
 			suggestions = results;
 			showSuggestions = results.length > 0;
+			highlightedIndex = -1;
 		} catch {
 			// Aborted, or a network hiccup on a suggestions call — not worth surfacing as an error.
 		}
@@ -135,7 +140,30 @@
 	function selectSuggestion(s: SearchSuggestion) {
 		query = s.title;
 		showSuggestions = false;
+		highlightedIndex = -1;
 		formEl?.requestSubmit();
+	}
+
+	/** ArrowDown/ArrowUp move the highlight (wrapping), Enter picks the
+	 *  highlighted option when one is active and otherwise falls through to
+	 *  the normal form submit, Escape closes the dropdown (#255). */
+	function handleSearchKeydown(e: KeyboardEvent) {
+		if (!showSuggestions || suggestions.length === 0) return;
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			highlightedIndex = (highlightedIndex + 1) % suggestions.length;
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			highlightedIndex = highlightedIndex <= 0 ? suggestions.length - 1 : highlightedIndex - 1;
+		} else if (e.key === 'Enter') {
+			if (highlightedIndex >= 0) {
+				e.preventDefault();
+				selectSuggestion(suggestions[highlightedIndex]);
+			}
+		} else if (e.key === 'Escape') {
+			showSuggestions = false;
+			highlightedIndex = -1;
+		}
 	}
 
 	let adding = new SvelteSet<number>();
@@ -338,17 +366,22 @@
 				type="search"
 				bind:value={query}
 				oninput={handleQueryInput}
+				onkeydown={handleSearchKeydown}
 				onfocus={() => (showSuggestions = suggestions.length > 0)}
 				onblur={() => {
 					// Delay so a click on a suggestion (a blur-triggering mousedown)
 					// still registers before the dropdown disappears out from under it.
-					setTimeout(() => (showSuggestions = false), 150);
+					setTimeout(() => {
+						showSuggestions = false;
+						highlightedIndex = -1;
+					}, 150);
 				}}
 				placeholder="Search movies and TV shows…"
 				autocomplete="off"
 				role="combobox"
 				aria-expanded={showSuggestions}
 				aria-controls="search-suggestions"
+				aria-activedescendant={highlightedIndex >= 0 ? `suggestion-${highlightedIndex}` : undefined}
 				class="w-full rounded-lg bg-gray-100 px-4 py-2.5 pr-9 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 transition-shadow focus:ring-orange-500 [&::-webkit-search-cancel-button]:hidden dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:ring-gray-800 dark:focus:ring-orange-500"
 			/>
 			{#if query}
@@ -375,13 +408,17 @@
 					role="listbox"
 					class="absolute top-full left-0 z-20 mt-1 w-full overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-700"
 				>
-					{#each suggestions as s (s.id)}
+					{#each suggestions as s, i (s.id)}
 						<button
 							type="button"
 							role="option"
-							aria-selected="false"
+							id="suggestion-{i}"
+							aria-selected={i === highlightedIndex}
 							onclick={() => selectSuggestion(s)}
-							class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+							class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800 {i ===
+							highlightedIndex
+								? 'bg-gray-100 dark:bg-gray-800'
+								: ''}"
 						>
 							{#if s.poster_path}
 								<img

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.0] — 2026-09-02
+
+### Fix: search suggestions dropdown had no keyboard navigation (#255)
+
+The Add page's search suggestions declared full combobox/listbox ARIA semantics without implementing the keyboard behavior that comes with them — a screen reader would announce an expanded combobox with options, then leave a keyboard user with no way to reach any of them. `ArrowDown`/`ArrowUp` now move a highlight through the list (wrapping at either end), `Enter` picks the highlighted option and otherwise falls through to a normal search submit, and `Escape` closes the dropdown. `aria-activedescendant` and per-option `aria-selected` now track the real highlight instead of a hardcoded `false`. The existing mouse/click path (and its 150ms blur delay) is unchanged.
+
 ## [1.10.0] — 2026-09-02
 
 ### Fix: invite revocation was unreachable from the UI (#248)
