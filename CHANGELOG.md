@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0] — 2026-09-02
+
+### Onboarding: combined setup screen (#242)
+
+First of three pieces from the onboarding redesign — replaces the two-step Budget-then-Add first-run flow with a single screen: how much you watch (a slider with a live "~N hours, about N films" preview), what you're paying for (service chips), then the existing search to add your first title. Landing's CTA now reads "Start a queue — No account. Stays in your browser."
+
+Subscribed-services data now actually does something: cancellation alerts only flag a service you've marked as subscribed (not just any thin queue), the Gantt view labels each lane Keep/Start/Cancel, and "What to Subscribe to Next" stops suggesting something you already pay for.
+
 ## [1.5.0] — 2026-09-02
 
 ### Fix: shared-list full-page view was a frozen duplicate, missing 8 features (#243)
