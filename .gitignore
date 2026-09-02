@@ -149,6 +149,12 @@ vite.config.ts.timestamp-*
 .wrangler/
 .env.local
 
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # Claude Code / internal tooling — not meant for the public repo
 .claude/
 .design-sync/

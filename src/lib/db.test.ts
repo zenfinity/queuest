@@ -48,6 +48,58 @@ describe('db: watchlist items', () => {
 		expect(await db.getItemByTmdbId(999, 'movie')).toBeUndefined();
 	});
 
+	// #221 — uniqueness moved from global to per-list.
+	describe('per-list uniqueness (#221)', () => {
+		it('allows the same title under two different lists', async () => {
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie', queue_tag: 'Horror' }));
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie', queue_tag: 'Comedy' }));
+
+			const all = await db.getAll();
+			expect(all).toHaveLength(2);
+			expect(all.map((i) => i.queue_tag).sort()).toEqual(['Comedy', 'Horror']);
+		});
+
+		it('allows the same title both untagged and under a list', async () => {
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie' }));
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie', queue_tag: 'Horror' }));
+
+			expect(await db.getAll()).toHaveLength(2);
+		});
+
+		it('still rejects a duplicate within the same list', async () => {
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie', queue_tag: 'Horror' }));
+			await expect(
+				db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie', queue_tag: 'Horror' }))
+			).rejects.toThrow();
+		});
+
+		it('still rejects a duplicate when both are untagged', async () => {
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie' }));
+			await expect(db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie' }))).rejects.toThrow();
+		});
+
+		it('never surfaces the internal "no list" sentinel — untagged items round-trip as undefined', async () => {
+			const created = await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie' }));
+			expect(created.queue_tag).toBeUndefined();
+
+			const [read] = await db.getAll();
+			expect(read.queue_tag).toBeUndefined();
+		});
+
+		it('getItemByTmdbId disambiguates by list when the title exists under more than one', async () => {
+			await db.addItem(
+				makeItem({ tmdb_id: 1, media_type: 'movie', title: 'A', queue_tag: 'Horror' })
+			);
+			await db.addItem(
+				makeItem({ tmdb_id: 1, media_type: 'movie', title: 'B', queue_tag: 'Comedy' })
+			);
+
+			expect((await db.getItemByTmdbId(1, 'movie', 'Horror'))?.title).toBe('A');
+			expect((await db.getItemByTmdbId(1, 'movie', 'Comedy'))?.title).toBe('B');
+			expect(await db.getItemByTmdbId(1, 'movie')).toBeUndefined(); // untagged: no match
+		});
+	});
+
 	it('removes an item by id', async () => {
 		await db.addItem(makeItem());
 		const [{ id }] = await db.getAll();
@@ -354,6 +406,39 @@ describe('db: collection tag bulk updates', () => {
 		await db.clearCollectionTag('Action');
 
 		expect(await db.getAllIncludingDeleted()).toHaveLength(2);
+	});
+
+	// #221 — a title can now live under more than one list at once, which
+	// means a bulk rename/clear can collide with a copy already sitting
+	// under the target. Before #221 this was structurally impossible (global
+	// uniqueness meant no title could occupy two tags at the same time).
+	it('renameCollectionTag skips a row that would collide with an existing one in the target list, without failing the rest', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'Only in Action', queue_tag: 'Action' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'In both', queue_tag: 'Action' }));
+		await db.addItem(
+			makeItem({ tmdb_id: 2, title: 'In both (already Thrillers)', queue_tag: 'Thrillers' })
+		);
+
+		await expect(db.renameCollectionTag('Action', 'Thrillers')).resolves.toBeUndefined();
+
+		const after = await db.getAll();
+		// The non-colliding row renamed normally.
+		expect(after.find((i) => i.title === 'Only in Action')!.queue_tag).toBe('Thrillers');
+		// The colliding row stayed on its original tag rather than being lost
+		// or aborting the whole rename.
+		expect(after.find((i) => i.title === 'In both')!.queue_tag).toBe('Action');
+	});
+
+	it('clearCollectionTag skips a row that would collide with an existing untagged copy, without failing the rest', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, title: 'Only in Action', queue_tag: 'Action' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'In both', queue_tag: 'Action' }));
+		await db.addItem(makeItem({ tmdb_id: 2, title: 'In both (already untagged)' }));
+
+		await expect(db.clearCollectionTag('Action')).resolves.toBeUndefined();
+
+		const after = await db.getAll();
+		expect(after.find((i) => i.title === 'Only in Action')!.queue_tag).toBeUndefined();
+		expect(after.find((i) => i.title === 'In both')!.queue_tag).toBe('Action');
 	});
 });
 

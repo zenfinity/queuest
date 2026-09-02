@@ -61,12 +61,17 @@ export async function addAllToQueue(
 				added++;
 			} catch (err) {
 				if (isConstraintError(err)) {
-					// A tombstoned row (previously removed) matches the same unique
-					// index but isn't "in" any list — fall back to no tag rather
-					// than misreporting where it lives.
-					const existing = await getItemByTmdbId(item.tmdb_id, item.media_type);
-					const existingTag =
-						existing && !existing.deleted_at ? (existing.queue_tag ?? null) : null;
+					// #221 — the store's uniqueness is per list now, so a
+					// conflict here specifically means this title already
+					// occupies *this* target list (a different list it's also
+					// in, if any, is no longer a conflict at all — that add
+					// just succeeds as a second row). The one remaining
+					// ambiguity: a tombstoned row (previously removed) still
+					// occupies the same index slot without really being "in"
+					// the list — check deleted_at before reporting where it
+					// lives, same reasoning as before this loosened.
+					const existing = await getItemByTmdbId(item.tmdb_id, item.media_type, tag);
+					const existingTag = existing && !existing.deleted_at ? tag : null;
 					skips.push({ title: item.title, existingTag });
 				} else {
 					const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
