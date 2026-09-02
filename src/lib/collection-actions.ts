@@ -22,7 +22,7 @@ import {
 	type CollectionItem,
 	type BallotEntry
 } from './collection-sync';
-import type { WatchlistItem } from './types';
+import { itemKey, type WatchlistItem } from './types';
 import { getSyncStatus } from './sync';
 
 export interface CollectionActionDeps {
@@ -609,9 +609,9 @@ export async function addItemsToSharedCollection(
 		const dek = await importDek(dekB64, false);
 
 		await syncCollectionItems(collection.id, dek, [], (merged) => {
-			const existingKeys = new Set(merged.map((i) => `${i.media_type}:${i.tmdb_id}`));
+			const existingKeys = new Set(merged.map((i) => itemKey(i)));
 			const additions = items
-				.filter((item) => !existingKeys.has(`${item.media_type}:${item.tmdb_id}`))
+				.filter((item) => !existingKeys.has(itemKey(item)))
 				.map((item) => toCollectionItem(item, me));
 			return [...merged, ...additions];
 		});

@@ -6,15 +6,12 @@
 // formal election, and a summed score is far easier to show and explain in
 // the UI than elimination rounds.
 import { MAX_BALLOT_SIZE, type BallotEntry, type CollectionItem } from './collection-sync';
+import { itemKey } from './types';
 
 export interface TallyRow {
 	item: CollectionItem;
 	score: number;
 	voters: number;
-}
-
-function itemKey(item: CollectionItem): string {
-	return `${item.media_type}:${item.tmdb_id}`;
 }
 
 /**

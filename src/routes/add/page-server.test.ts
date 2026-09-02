@@ -6,8 +6,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('$env/dynamic/private', () => ({ env: { TMDB_API_KEY: 'test-key' } }));
 
 const searchMulti = vi.fn();
-const getWatchProviders = vi.fn();
-const getRuntime = vi.fn();
+// hydrateMedia (#244) wraps getWatchProviders+getRuntime+augmentProviders in
+// one call *within* tmdb.ts — mocking those two lower-level functions here
+// wouldn't reach it, since vi.mock replaces this module's exports, not the
+// same-module call hydrateMedia itself makes to them. Mock it directly.
+const hydrateMedia = vi.fn();
 const searchPerson = vi.fn();
 const getPersonCombinedCredits = vi.fn();
 
@@ -24,8 +27,7 @@ vi.mock('$lib/tmdb', async (importOriginal) => {
 	return {
 		...actual,
 		searchMulti: (...args: unknown[]) => searchMulti(...args),
-		getWatchProviders: (...args: unknown[]) => getWatchProviders(...args),
-		getRuntime: (...args: unknown[]) => getRuntime(...args),
+		hydrateMedia: (...args: unknown[]) => hydrateMedia(...args),
 		searchPerson: (...args: unknown[]) => searchPerson(...args),
 		getPersonCombinedCredits: (...args: unknown[]) => getPersonCombinedCredits(...args)
 	};
@@ -55,8 +57,7 @@ function urlFor(q: string): URL {
 
 beforeEach(() => {
 	searchMulti.mockReset();
-	getWatchProviders.mockReset();
-	getRuntime.mockReset();
+	hydrateMedia.mockReset();
 	searchPerson.mockReset().mockResolvedValue(null);
 	getPersonCombinedCredits.mockReset().mockResolvedValue([]);
 });
@@ -80,18 +81,7 @@ describe('/add server load', () => {
 		searchMulti.mockResolvedValue([
 			{ id: 27205, media_type: 'movie', title: 'Inception', release_date: '2010-07-16' }
 		]);
-		getWatchProviders.mockRejectedValue(new Error('boom'));
-		getRuntime.mockResolvedValue({
-			runtime_minutes: 148,
-			seasons: [],
-			networkIds: [],
-			companyIds: [],
-			release: null,
-			genres: [],
-			cast: [],
-			director: null,
-			creator: null
-		});
+		hydrateMedia.mockRejectedValue(new Error('boom'));
 
 		const result = await runLoad('inception');
 		expect(result.error).toBe('Could not reach TMDB. Please try again.');
@@ -109,20 +99,18 @@ describe('/add server load', () => {
 				release_date: '2010-07-16'
 			}
 		]);
-		getWatchProviders.mockResolvedValue({
+		hydrateMedia.mockResolvedValue({
 			providers: [{ provider_id: 8, provider_name: 'Netflix', logo_path: '/n.png' }],
-			rentable: false
-		});
-		getRuntime.mockResolvedValue({
+			rentable: false,
 			runtime_minutes: 148,
 			seasons: [],
-			networkIds: [],
-			companyIds: [],
 			release: null,
 			genres: ['Sci-Fi'],
 			cast: [],
 			director: 'Christopher Nolan',
-			creator: null
+			director_id: null,
+			creator: null,
+			imdb_id: null
 		});
 
 		const result = await runLoad('inception');
@@ -142,17 +130,18 @@ describe('/add server load', () => {
 		searchMulti.mockResolvedValue(
 			Array.from({ length: 12 }, (_, i) => ({ id: i, media_type: 'movie', title: `Title ${i}` }))
 		);
-		getWatchProviders.mockResolvedValue({ providers: [], rentable: false });
-		getRuntime.mockResolvedValue({
+		hydrateMedia.mockResolvedValue({
+			providers: [],
+			rentable: false,
 			runtime_minutes: 90,
 			seasons: [],
-			networkIds: [],
-			companyIds: [],
 			release: null,
 			genres: [],
 			cast: [],
 			director: null,
-			creator: null
+			director_id: null,
+			creator: null,
+			imdb_id: null
 		});
 
 		const result = await runLoad('title');
@@ -162,17 +151,18 @@ describe('/add server load', () => {
 	describe('cast/crew match (#62)', () => {
 		beforeEach(() => {
 			searchMulti.mockResolvedValue([]);
-			getWatchProviders.mockResolvedValue({ providers: [], rentable: false });
-			getRuntime.mockResolvedValue({
+			hydrateMedia.mockResolvedValue({
+				providers: [],
+				rentable: false,
 				runtime_minutes: 90,
 				seasons: [],
-				networkIds: [],
-				companyIds: [],
 				release: null,
 				genres: [],
 				cast: [],
 				director: null,
-				creator: null
+				director_id: null,
+				creator: null,
+				imdb_id: null
 			});
 		});
 

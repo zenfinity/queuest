@@ -14,6 +14,7 @@
 	// items yet.
 	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
 	import { flip } from 'svelte/animate';
+	import { itemKey } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { remainingRuntime, releaseChip, DEFAULT_RUNTIME } from '$lib/progress';
 	import { queueControls } from '$lib/queue-controls.svelte';
@@ -86,10 +87,6 @@
 	}
 
 	const noop = { setBusy: () => {}, setError: (e: string) => (error = e) };
-
-	function itemKey(i: CollectionItem): string {
-		return `${i.media_type}:${i.tmdb_id}`;
-	}
 
 	function memberLabel(userId: string | null): string {
 		if (!userId) return 'Someone';

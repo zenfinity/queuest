@@ -2,7 +2,7 @@
 // encrypted-blob API in a merge-then-push loop that keeps this device's
 // IndexedDB and the server's opaque blob converged, without ever letting the
 // server see plaintext or this device's local (autoIncrement) ids.
-import type { WatchlistItem, Provider } from './types';
+import { itemKey, type WatchlistItem, type Provider } from './types';
 import {
 	getAllIncludingDeleted,
 	replaceAll,
@@ -141,10 +141,6 @@ export async function restoreSyncState(): Promise<void> {
 // `watched_seasons`. Folding every other field into one "newer wins" bundle
 // is equivalent for the fields that actually exist, and simpler.)
 
-function itemKey(tmdb_id: number, media_type: string): string {
-	return `${media_type}:${tmdb_id}`;
-}
-
 type LocalItem = WatchlistItem;
 type MergeCandidate = Omit<WatchlistItem, 'id'> & { id?: number };
 
@@ -176,10 +172,10 @@ function mergeOne(local: LocalItem | undefined, remote: BackupItem | undefined):
  */
 export function mergeItems(local: LocalItem[], remote: BackupItem[]): MergeCandidate[] {
 	const localByKey = new Map<string, LocalItem>();
-	for (const item of local) localByKey.set(itemKey(item.tmdb_id, item.media_type), item);
+	for (const item of local) localByKey.set(itemKey(item), item);
 
 	const remoteByKey = new Map<string, BackupItem>();
-	for (const item of remote) remoteByKey.set(itemKey(item.tmdb_id, item.media_type), item);
+	for (const item of remote) remoteByKey.set(itemKey(item), item);
 
 	const keys = new Set([...localByKey.keys(), ...remoteByKey.keys()]);
 	const merged: MergeCandidate[] = [];

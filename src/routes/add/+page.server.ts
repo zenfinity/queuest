@@ -4,9 +4,7 @@ import {
 	searchMulti,
 	searchPerson,
 	getPersonCombinedCredits,
-	getWatchProviders,
-	getRuntime,
-	augmentProviders,
+	hydrateMedia,
 	SEARCH_RESULTS_CAP
 } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
@@ -29,26 +27,7 @@ export interface PersonResults {
 async function hydrate(item: Record<string, unknown>, apiKey: string): Promise<SearchResult> {
 	const id = item.id as number;
 	const mediaType = item.media_type as 'movie' | 'tv';
-	const [
-		{ providers: rawProviders, rentable },
-		{
-			runtime_minutes,
-			seasons,
-			networkIds,
-			companyIds,
-			release,
-			genres,
-			cast,
-			director,
-			director_id,
-			creator,
-			imdb_id
-		}
-	] = await Promise.all([
-		getWatchProviders(id, mediaType, apiKey),
-		getRuntime(id, mediaType, apiKey)
-	]);
-	const providers = augmentProviders(rawProviders, networkIds, companyIds);
+	const media = await hydrateMedia(id, mediaType, apiKey);
 	const dateStr = (item.release_date ?? item.first_air_date ?? '') as string;
 	return {
 		id,
@@ -57,17 +36,7 @@ async function hydrate(item: Record<string, unknown>, apiKey: string): Promise<S
 		poster_path: (item.poster_path as string) ?? null,
 		overview: (item.overview as string) ?? '',
 		year: dateStr.slice(0, 4) || null,
-		providers,
-		rentable: providers.length > 0 ? false : rentable,
-		runtime_minutes,
-		seasons,
-		release,
-		genres,
-		cast,
-		director,
-		director_id,
-		creator,
-		imdb_id
+		...media
 	};
 }
 

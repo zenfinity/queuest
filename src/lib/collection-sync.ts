@@ -11,7 +11,7 @@
 // second tombstone-and-replace machinery to keep in sync with sync.ts's, and
 // merge correctness that's easy to state because there is no local cache to
 // go stale. Worth revisiting if offline collection editing is ever wanted.
-import type { WatchlistItem } from './types';
+import { itemKey, type WatchlistItem } from './types';
 import { parseBackupItemPublic, type BackupItem } from './app-state';
 import { decryptBytesWithDek, encryptBytesWithDek } from './crypto';
 import { gzip, gunzip } from './gzip';
@@ -22,10 +22,6 @@ const BASE_BACKOFF_MS = 200;
 
 function collectionBlobUrl(collectionId: string): string {
 	return `/api/collections/${encodeURIComponent(collectionId)}/blob`;
-}
-
-function itemKey(tmdb_id: number, media_type: string): string {
-	return `${media_type}:${tmdb_id}`;
 }
 
 // ── Merge (the reviewable core) ─────────────────────────────────────────
@@ -100,10 +96,10 @@ export function mergeCollectionItems(
 	remote: MergeCandidate[]
 ): MergeCandidate[] {
 	const localByKey = new Map<string, MergeCandidate>();
-	for (const item of local) localByKey.set(itemKey(item.tmdb_id, item.media_type), item);
+	for (const item of local) localByKey.set(itemKey(item), item);
 
 	const remoteByKey = new Map<string, MergeCandidate>();
-	for (const item of remote) remoteByKey.set(itemKey(item.tmdb_id, item.media_type), item);
+	for (const item of remote) remoteByKey.set(itemKey(item), item);
 
 	const keys = new Set([...localByKey.keys(), ...remoteByKey.keys()]);
 	const merged: MergeCandidate[] = [];
