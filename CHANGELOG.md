@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.10.0] — 2026-09-02
+
+### Fix: invite revocation was unreachable from the UI (#248)
+
+Revoking an invite link was fully built server-side — endpoint, schema, resolution guard, rejection message — but nothing in the app ever called it, so a leaked or misdirected invite link had no kill switch. The Lists page now lists a shared list's outstanding invites (owner-only), each with a two-tap Revoke, using the same arm/confirm pattern as remove-member and delete-list. Added an E2E test (#253) covering the real path end to end: mint an invite through the UI, revoke it through the UI, then confirm the link is actually dead server-side, not just hidden from the owner's own screen.
+
 ## [1.9.0] — 2026-09-02
 
 ### Allow the same title queued under multiple lists (#221)

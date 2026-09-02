@@ -17,13 +17,16 @@
 		listCollections as listSharedCollections,
 		promoteCollection,
 		createInvite,
+		listInvites,
+		revokeInvite,
 		removeMemberAndRotate,
 		renameSharedCollection,
 		setSharedCollectionColor,
 		listMembers,
 		loadCollectionItems,
 		type SharedCollection,
-		type CollectionMember
+		type CollectionMember,
+		type OutstandingInvite
 	} from '$lib/collection-actions';
 	import { getLastViewed, countNewActivity } from '$lib/collection-activity';
 	import { createShareLink } from '$lib/share-create-actions';
@@ -55,6 +58,10 @@
 	let removalError = $state('');
 	let openMembers: CollectionMember[] = $state([]);
 	let loadingMembers = $state(false);
+	let outstandingInvites: OutstandingInvite[] = $state([]);
+	let loadingInvites = $state(false);
+	let revokingInviteId: string | null = $state(null);
+	let revokeError = $state('');
 	let newActivityCounts: Record<string, number> = $state({});
 	let renamingSharedId: string | null = $state(null);
 	let sharedRenameInput = $state('');
@@ -153,6 +160,33 @@
 		});
 		if (link) {
 			inviteLink = link;
+			await loadOutstandingInvites();
+		}
+	}
+
+	async function loadOutstandingInvites() {
+		if (!openCollection) return;
+		loadingInvites = true;
+		outstandingInvites = await listInvites(openCollection.id, {
+			setBusy: () => {},
+			setError: () => {}
+		});
+		loadingInvites = false;
+	}
+
+	async function doRevokeInvite(invite: OutstandingInvite) {
+		if (revokingInviteId !== invite.id) {
+			revokingInviteId = invite.id;
+			revokeError = '';
+			return;
+		}
+		const ok = await revokeInvite(openCollection!.id, invite.id, {
+			setBusy: () => {},
+			setError: (e) => (revokeError = e)
+		});
+		if (ok) {
+			outstandingInvites = outstandingInvites.filter((i) => i.id !== invite.id);
+			revokingInviteId = null;
 		}
 	}
 
@@ -876,7 +910,11 @@
 											} else {
 												openCollection = coll;
 												openMembers = [];
+												outstandingInvites = [];
+												revokingInviteId = null;
+												revokeError = '';
 												loadOpenMembers();
+												loadOutstandingInvites();
 											}
 										}}
 										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
@@ -924,6 +962,52 @@
 								{/if}
 								{#if inviteError}
 									<p class="text-red-600 dark:text-red-400">{inviteError}</p>
+								{/if}
+								{#if coll.role === 'owner'}
+									{#if loadingInvites}
+										<p>Loading invites…</p>
+									{:else if outstandingInvites.length > 0}
+										<div>
+											<p class="font-medium text-gray-500 dark:text-gray-400">Pending invites</p>
+											<ul class="mt-1 space-y-1">
+												{#each outstandingInvites as invite (invite.id)}
+													<li class="flex items-center justify-between gap-2">
+														<span class="truncate">
+															Sent {new Date(invite.createdAt).toLocaleDateString()}, expires {new Date(
+																invite.expiresAt
+															).toLocaleDateString()}
+														</span>
+														{#if revokingInviteId === invite.id}
+															<span class="shrink-0 flex items-center gap-1">
+																<button
+																	onclick={() => doRevokeInvite(invite)}
+																	class="text-red-500 hover:underline"
+																>
+																	Confirm
+																</button>
+																<button
+																	onclick={() => (revokingInviteId = null)}
+																	class="text-gray-500 hover:underline"
+																>
+																	Cancel
+																</button>
+															</span>
+														{:else}
+															<button
+																onclick={() => doRevokeInvite(invite)}
+																class="shrink-0 text-red-500 hover:underline"
+															>
+																Revoke
+															</button>
+														{/if}
+													</li>
+												{/each}
+											</ul>
+											{#if revokeError}
+												<p class="mt-1 text-red-600 dark:text-red-400">{revokeError}</p>
+											{/if}
+										</div>
+									{/if}
 								{/if}
 								{#if loadingMembers}
 									<p>Loading members…</p>
