@@ -1,30 +1,13 @@
 import { json } from '@sveltejs/kit';
-import { getWatchProviders, getRuntime, augmentProviders } from '$lib/tmdb';
+import { hydrateMedia, type HydratedMedia } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
 import { apiError, checkSameOrigin } from '$lib/server/api';
 import type { RequestHandler } from './$types';
-import type { Provider, ReleaseInfo, CastMember } from '$lib/types';
 
 const MAX_ITEMS = 100;
 
-export interface RefreshResult {
+export interface RefreshResult extends HydratedMedia {
 	id: number;
-	providers: Provider[];
-	rentable: boolean;
-	release: ReleaseInfo | null;
-	seasons: {
-		season_number: number;
-		episode_count: number;
-		name: string;
-		runtime_minutes: number;
-	}[];
-	runtime_minutes: number | null;
-	genres: string[];
-	cast: CastMember[];
-	director: string | null;
-	director_id: number | null;
-	creator: string | null;
-	imdb_id: string | null;
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -60,40 +43,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	await Promise.all(
 		batch.map(async ({ id, tmdb_id, media_type }) => {
 			try {
-				const [
-					{ providers: rawProviders, rentable },
-					{
-						runtime_minutes,
-						seasons,
-						networkIds,
-						companyIds,
-						release,
-						genres,
-						cast,
-						director,
-						director_id,
-						creator,
-						imdb_id
-					}
-				] = await Promise.all([
-					getWatchProviders(tmdb_id, media_type, apiKey),
-					getRuntime(tmdb_id, media_type, apiKey)
-				]);
-				const providers = augmentProviders(rawProviders, networkIds, companyIds);
-				results.push({
-					id,
-					providers,
-					rentable: providers.length > 0 ? false : rentable,
-					release: release ?? null,
-					seasons,
-					runtime_minutes,
-					genres,
-					cast,
-					director,
-					director_id,
-					creator,
-					imdb_id
-				});
+				const media = await hydrateMedia(tmdb_id, media_type, apiKey);
+				results.push({ id, ...media });
 			} catch {
 				// Omit failed items; never return empty-but-successful records that would overwrite good data
 			}

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { searchMulti, getWatchProviders, getRuntime, augmentProviders } from '$lib/tmdb';
+import { searchMulti, hydrateMedia } from '$lib/tmdb';
 import { env } from '$env/dynamic/private';
 import type { WatchlistItem } from '$lib/types';
 import { apiError, checkSameOrigin } from '$lib/server/api';
@@ -57,17 +57,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 			const id = best.id as number;
 			const mediaType = best.media_type as 'movie' | 'tv';
-
-			const [{ providers: rawProviders, rentable }, runtimeData] = await Promise.all([
-				getWatchProviders(id, mediaType, apiKey),
-				getRuntime(id, mediaType, apiKey)
-			]);
-
-			const providers = augmentProviders(
-				rawProviders,
-				runtimeData.networkIds,
-				runtimeData.companyIds
-			);
+			const media = await hydrateMedia(id, mediaType, apiKey);
 
 			const result: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at'> = {
 				tmdb_id: id,
@@ -75,18 +65,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				title: (best.title ?? best.name) as string,
 				poster_path: (best.poster_path as string | null) ?? null,
 				overview: (best.overview as string | null) ?? null,
-				providers,
-				rentable: providers.length > 0 ? false : rentable,
-				runtime_minutes: runtimeData.runtime_minutes,
-				seasons: runtimeData.seasons,
 				watched_seasons: [],
-				release: runtimeData.release,
-				genres: runtimeData.genres,
-				cast: runtimeData.cast,
-				director: runtimeData.director,
-				director_id: runtimeData.director_id,
-				creator: runtimeData.creator,
-				imdb_id: runtimeData.imdb_id
+				...media
 			};
 
 			return { title, result };

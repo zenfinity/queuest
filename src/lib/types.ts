@@ -83,6 +83,17 @@ export interface WatchlistItem {
 	added_by_account_id?: string | null;
 }
 
+/**
+ * The identity key the whole collections/sync merge system runs on — a
+ * title's (media_type, tmdb_id) pair is unique within one queue or shared
+ * list, and every merge/lookup keys off it. One definition so a drifted copy
+ * (different separator, reversed field order) can't silently stop items from
+ * matching during a merge instead of failing loudly.
+ */
+export function itemKey(item: { tmdb_id: number; media_type: 'movie' | 'tv' }): string {
+	return `${item.media_type}:${item.tmdb_id}`;
+}
+
 export interface SearchResult {
 	id: number;
 	media_type: 'movie' | 'tv';

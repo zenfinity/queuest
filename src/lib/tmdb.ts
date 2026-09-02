@@ -1,4 +1,4 @@
-import type { Provider, SeasonSummary } from './types';
+import type { Provider, SeasonSummary, ReleaseInfo, CastMember } from './types';
 
 export const TMDB_IMG = 'https://image.tmdb.org/t/p';
 const BASE = 'https://api.themoviedb.org/3';
@@ -621,6 +621,57 @@ export async function getWatchProviders(
 	const rentable = (us.rent?.length ?? 0) > 0 || (us.buy?.length ?? 0) > 0;
 	// Return raw flatrate — augmentProviders() applies all filtering with network context
 	return { providers: flatrate, rentable };
+}
+
+export interface HydratedMedia {
+	providers: Provider[];
+	rentable: boolean;
+	runtime_minutes: number | null;
+	seasons: SeasonSummary[];
+	release: ReleaseInfo | null;
+	genres: string[];
+	cast: CastMember[];
+	director: string | null;
+	director_id: number | null;
+	creator: string | null;
+	imdb_id: string | null;
+}
+
+/**
+ * The fetch+augment step every "look up a TMDB title's current details" call
+ * site needs (add's search, import matching, provider refresh) — providers
+ * and runtime/credits both require their own TMDB request, so this fires
+ * them concurrently and folds the raw provider list through augmentProviders
+ * before handing back the common bundle. Callers each map this into their
+ * own response shape; add a new TMDB-derived field here once, not at every
+ * call site (imdb_id/#142 and director_id/#180 both had to be threaded
+ * through three places by hand before this existed).
+ */
+export async function hydrateMedia(
+	id: number,
+	mediaType: 'movie' | 'tv',
+	apiKey: string
+): Promise<HydratedMedia> {
+	const [{ providers: rawProviders, rentable }, runtime] = await Promise.all([
+		getWatchProviders(id, mediaType, apiKey),
+		getRuntime(id, mediaType, apiKey)
+	]);
+	const providers = augmentProviders(rawProviders, runtime.networkIds, runtime.companyIds);
+	return {
+		providers,
+		// A title with confirmed flatrate providers isn't "rentable-only" even
+		// if TMDB also lists a rent/buy option alongside them.
+		rentable: providers.length > 0 ? false : rentable,
+		runtime_minutes: runtime.runtime_minutes,
+		seasons: runtime.seasons,
+		release: runtime.release,
+		genres: runtime.genres,
+		cast: runtime.cast,
+		director: runtime.director,
+		director_id: runtime.director_id,
+		creator: runtime.creator,
+		imdb_id: runtime.imdb_id
+	};
 }
 
 export async function getMajorProviders(apiKey: string): Promise<Provider[]> {

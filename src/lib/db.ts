@@ -248,7 +248,20 @@ export async function gcTombstones(now: Date = new Date()): Promise<number> {
 	});
 }
 
-export async function setWatched(id: number, watched: boolean): Promise<void> {
+/**
+ * Shared get→mutate→put transaction for the single-item write paths below —
+ * they differ only in which 1-3 fields they touch. `now` is threaded into
+ * `mutate` so a field that should carry the exact same instant as
+ * `updated_at` (e.g. setWatched's watched_at) doesn't need a second
+ * `nowIso()` call. Pass `stampUpdatedAt: false` for a write that must not
+ * win a sync LWW merge against a real edit — see patchProviders.
+ */
+async function mutateItem(
+	id: number,
+	mutate: (item: WatchlistItem, now: string) => void,
+	opts: { stampUpdatedAt?: boolean } = {}
+): Promise<void> {
+	const { stampUpdatedAt = true } = opts;
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, 'readwrite');
@@ -261,8 +274,8 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 				return;
 			}
 			const now = nowIso();
-			item.watched_at = watched ? now : null;
-			item.updated_at = now;
+			mutate(item, now);
+			if (stampUpdatedAt) item.updated_at = now;
 			const put = store.put(item);
 			put.onsuccess = () => {
 				notifyMutation();
@@ -271,6 +284,12 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 			put.onerror = () => reject(put.error);
 		};
 		get.onerror = () => reject(get.error);
+	});
+}
+
+export async function setWatched(id: number, watched: boolean): Promise<void> {
+	return mutateItem(id, (item, now) => {
+		item.watched_at = watched ? now : null;
 	});
 }
 
@@ -302,52 +321,14 @@ export async function getItemByTmdbId(
 export const NOTE_MAX_LENGTH = 2000;
 
 export async function setNote(id: number, notes: string | null): Promise<void> {
-	const db = await open();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(STORE, 'readwrite');
-		const store = tx.objectStore(STORE);
-		const get = store.get(id);
-		get.onsuccess = () => {
-			const item = get.result as WatchlistItem | undefined;
-			if (!item) {
-				reject(new Error(`Item with id ${id} not found`));
-				return;
-			}
-			item.notes = notes ? notes.slice(0, NOTE_MAX_LENGTH) : undefined;
-			item.updated_at = nowIso();
-			const put = store.put(item);
-			put.onsuccess = () => {
-				notifyMutation();
-				resolve();
-			};
-			put.onerror = () => reject(put.error);
-		};
-		get.onerror = () => reject(get.error);
+	return mutateItem(id, (item) => {
+		item.notes = notes ? notes.slice(0, NOTE_MAX_LENGTH) : undefined;
 	});
 }
 
 export async function setQueueTag(id: number, tag: string | null): Promise<void> {
-	const db = await open();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(STORE, 'readwrite');
-		const store = tx.objectStore(STORE);
-		const get = store.get(id);
-		get.onsuccess = () => {
-			const item = get.result as WatchlistItem | undefined;
-			if (!item) {
-				reject(new Error(`Item with id ${id} not found`));
-				return;
-			}
-			item.queue_tag = tag ?? undefined;
-			item.updated_at = nowIso();
-			const put = store.put(item);
-			put.onsuccess = () => {
-				notifyMutation();
-				resolve();
-			};
-			put.onerror = () => reject(put.error);
-		};
-		get.onerror = () => reject(get.error);
+	return mutateItem(id, (item) => {
+		item.queue_tag = tag ?? undefined;
 	});
 }
 
@@ -384,27 +365,8 @@ export async function setSortOrder(orderedIds: number[]): Promise<void> {
 }
 
 export async function updateShowProgress(id: number, watchedSeasons: number[]): Promise<void> {
-	const db = await open();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(STORE, 'readwrite');
-		const store = tx.objectStore(STORE);
-		const get = store.get(id);
-		get.onsuccess = () => {
-			const item = get.result as WatchlistItem | undefined;
-			if (!item) {
-				reject(new Error(`Item with id ${id} not found`));
-				return;
-			}
-			item.watched_seasons = watchedSeasons;
-			item.updated_at = nowIso();
-			const put = store.put(item);
-			put.onsuccess = () => {
-				notifyMutation();
-				resolve();
-			};
-			put.onerror = () => reject(put.error);
-		};
-		get.onerror = () => reject(get.error);
+	return mutateItem(id, (item) => {
+		item.watched_seasons = watchedSeasons;
 	});
 }
 
@@ -422,17 +384,9 @@ export async function patchProviders(
 	creator?: string | null,
 	imdb_id?: string | null
 ): Promise<void> {
-	const db = await open();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(STORE, 'readwrite');
-		const store = tx.objectStore(STORE);
-		const get = store.get(id);
-		get.onsuccess = () => {
-			const item = get.result as WatchlistItem | undefined;
-			if (!item) {
-				reject(new Error(`Item with id ${id} not found`));
-				return;
-			}
+	return mutateItem(
+		id,
+		(item) => {
 			item.providers = providers;
 			item.rentable = rentable;
 			item.release = release;
@@ -444,15 +398,12 @@ export async function patchProviders(
 			if (director_id !== undefined) item.director_id = director_id;
 			if (creator !== undefined) item.creator = creator;
 			if (imdb_id !== undefined) item.imdb_id = imdb_id;
-			const put = store.put(item);
-			put.onsuccess = () => {
-				notifyMutation();
-				resolve();
-			};
-			put.onerror = () => reject(put.error);
-		};
-		get.onerror = () => reject(get.error);
-	});
+		},
+		// Refreshed TMDB metadata is regenerable, not a user edit, so it must
+		// not stamp updated_at — doing so would let it win a sync LWW merge
+		// against a real edit made on another device in the meantime.
+		{ stampUpdatedAt: false }
+	);
 }
 
 /**
