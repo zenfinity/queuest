@@ -102,26 +102,39 @@
 				<p class="mt-1 text-xl font-bold tracking-tight">{preview.collectionName}</p>
 			</div>
 
-			<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-				You'll both be able to add titles and track what you've watched. Everything in the list is
-				encrypted — we can't read it.
-			</p>
-
 			{#if needsSync}
 				<!-- Joining stores a copy of the collection key wrapped under this
-				     account's own key, so there has to be an account first. -->
-				<div
-					class="rounded-lg bg-orange-50 p-4 text-sm text-orange-800 dark:bg-orange-950/20 dark:text-orange-300"
-				>
-					<p class="font-medium">You'll need sync turned on first</p>
-					<p class="mt-1 leading-relaxed">
-						Shared lists need an account so your copy of the key can be stored securely.
+				     account's own key, so there has to be an account first (#242:
+				     framed as the next step of joining this specific list, not a
+				     generic "set up sync" detour — the "why" moves into a disclosure
+				     so it's available without competing with the one thing to do). -->
+				<div>
+					<p class="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+						Create your account to see <span class="font-medium">{preview.collectionName}</span>.
 					</p>
-					<Button href={resolve('/settings#sync')} class="mt-3 inline-block px-4 py-2 text-sm">
-						Set up sync
+					<p class="mt-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+						One step: create your free account.
+					</p>
+					<Button href={resolve('/settings#sync')} class="mt-1.5 w-full px-4 py-2.5 text-sm">
+						Create account
 					</Button>
+					<details class="mt-3">
+						<summary
+							class="cursor-pointer select-none text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+						>
+							Why do I need an account?
+						</summary>
+						<p class="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+							{preview.collectionName} is end-to-end encrypted — Queuest can't read it either — so joining
+							needs a key that's yours. That's what the account is for.
+						</p>
+					</details>
 				</div>
 			{:else}
+				<p class="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+					You'll both be able to add titles and track what you've watched. Everything in the list is
+					encrypted — we can't read it.
+				</p>
 				<Button onclick={accept} disabled={busy || joined} class="w-full px-4 py-2.5 text-sm">
 					{busy ? 'Joining…' : `Join ${preview.collectionName}`}
 				</Button>
