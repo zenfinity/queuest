@@ -179,6 +179,19 @@
 		// triggers unconditionally here just means enabling sync later doesn't
 		// also require wiring app-load/visibilitychange/debounce from scratch.
 		initSyncTriggers();
+		// E2E test seam (#253) — exposes addItem/syncNow on `window`, gated
+		// behind a URL param a real visitor would never carry, so Playwright
+		// can seed a queue item and force a sync cycle without a live TMDB
+		// key. Writes only ever land in the caller's own local IndexedDB —
+		// same blast radius as a user poking at devtools themselves.
+		if (page.url.searchParams.has('__e2e')) {
+			Promise.all([import('$lib/db'), import('$lib/sync')]).then(([db, sync]) => {
+				(window as unknown as Record<string, unknown>).__e2e = {
+					addItem: db.addItem,
+					syncNow: sync.syncNow
+				};
+			});
+		}
 		// iOS Safari misreports viewport width during keyboard animation (and after
 		// native pickers dismiss), making sm: breakpoints fire on narrow screens.
 		// Re-stamping the viewport meta on every resize corrects it.
