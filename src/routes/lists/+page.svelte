@@ -424,8 +424,6 @@
 
 <svelte:head><title>Queuest — Lists</title></svelte:head>
 
-<ShareHint show={syncEnabled && collections.length > 0} />
-
 <h1 class="sr-only">Lists</h1>
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
@@ -436,6 +434,7 @@
 			Organize your queue into lists, then assign items to them from the detail panel. Accepting a
 			read-only link automatically creates one.
 		</p>
+		<ShareHint show={syncEnabled} />
 		<form
 			class="flex gap-2"
 			onsubmit={(e) => {

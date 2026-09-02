@@ -486,11 +486,6 @@
 	{/if}
 {/snippet}
 
-<ListHint show={loaded && items.length >= 3 && existingCollections.length === 0} />
-<SyncHint
-	show={loaded && !syncEnabled && (items.length >= 20 || items.some((i) => i.watched_at))}
-/>
-
 <h1 class="sr-only">My Queue</h1>
 
 <div
@@ -819,6 +814,8 @@
 	{/if}
 </div>
 
+<ListHint show={loaded && items.length >= 5 && existingCollections.length === 0} />
+
 {#if otherSharedCollections.length > 0}
 	<div class="mt-6 space-y-2 xs:mt-8">
 		<h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
@@ -833,6 +830,8 @@
 		{/each}
 	</div>
 {/if}
+
+<SyncHint show={loaded && !syncEnabled && items.length > 0} count={items.length} />
 
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->
 {#if detailItem}

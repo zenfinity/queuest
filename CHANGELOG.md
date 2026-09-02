@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.0] — 2026-09-02
+
+### Onboarding hints move in-flow (#242, fixes #239)
+
+Second of three pieces from the onboarding redesign — the five floating "hint" pills (nav tabs, Lists, sharing, ranking, sync) are gone, replaced with permanent or state-driven copy living right where each one is relevant: a small dot on the Queue tab for tab-switching gestures, in-flow captions under the queue grid and above a shared list's ballot, a permanent line explaining Read-only vs. Share, and a permanent sync line at the foot of the queue. Nothing to dismiss or time out — most of them just stop being relevant once you've done the thing they were pointing at. Settings' "Show onboarding tips" toggle is gone with them.
+
 ## [1.6.0] — 2026-09-02
 
 ### Onboarding: combined setup screen (#242)

@@ -94,6 +94,16 @@
 		return members.find((m) => m.userId === userId)?.email ?? 'A member';
 	}
 
+	// RankingHint's "Sam's stars combine with yours" copy names the real
+	// collaborator when there's exactly one other member — the common case
+	// for a shared list — and falls back to a plain "The group" for a solo
+	// list (no one else to name yet) or 3+ members (naming just one would be
+	// arbitrary and naming all of them would crowd out the actual point).
+	let collaboratorLabel = $derived.by(() => {
+		const others = members.filter((m) => m.userId !== myUserId);
+		return others.length === 1 ? others[0].email : 'The group';
+	});
+
 	// Ported from the old /lists/[id] page (#243) — first-letter avatar for
 	// the "who's watched this" stack, same lookup as memberLabel.
 	function memberInitial(userId: string): string {
@@ -655,6 +665,9 @@
 	<div class="mt-2 space-y-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/40">
 		<div>
 			<p class="mb-1.5 panel-label">Your ballot</p>
+			{#if items.length >= 2 && myBallot.length === 0}
+				<RankingHint collaborator={collaboratorLabel} maxSize={MAX_BALLOT_SIZE} />
+			{/if}
 			{#if myBallot.length === 0}
 				<p class="text-xs text-gray-400 dark:text-gray-600">
 					Tap ☆ on a title below to rank up to {MAX_BALLOT_SIZE}.
@@ -837,8 +850,6 @@
 		{/if}
 	</div>
 {/if}
-
-<RankingHint show={(inline || expanded) && loaded && items.length >= 2 && myBallot.length === 0} />
 
 {#if detailItem}
 	{@const di = detailItem}

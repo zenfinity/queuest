@@ -41,8 +41,8 @@ describe('the synced/local key partition', () => {
 		expect(overlap).toEqual([]);
 	});
 
-	it('covers exactly the 21 real sq: keys', () => {
-		expect(SYNCED_KEYS.length + LOCAL_KEYS.length).toBe(21);
+	it('covers exactly the 16 real sq: keys', () => {
+		expect(SYNCED_KEYS.length + LOCAL_KEYS.length).toBe(16);
 	});
 
 	it('every sq: string literal in the source tree belongs to exactly one set', () => {
@@ -96,7 +96,6 @@ describe('serializeAppState', () => {
 		expect(snapshot.prefs.sortDir).toBe('desc');
 		expect(snapshot.prefs.view).toBe('grid');
 		expect(snapshot.prefs.cancelAlerts).toBe(false);
-		expect(snapshot.prefs.hintsDisabled).toBe(false);
 		expect(snapshot.prefs.theme).toBe('dark');
 	});
 
@@ -112,8 +111,7 @@ describe('serializeAppState', () => {
 			'sq:view': 'list',
 			'sq:budget:weekly': '15',
 			'sq:budget:weeks': '3',
-			'sq:cancel-alerts': 'true',
-			'sq:hints-disabled': 'true'
+			'sq:cancel-alerts': 'true'
 		};
 		vi.stubGlobal('localStorage', {
 			getItem: (k: string) => store[k] ?? null,
@@ -131,7 +129,6 @@ describe('serializeAppState', () => {
 		expect(snapshot.prefs.weeksPerMonth).toBe(3);
 		expect(snapshot.prefs.budget).toBe(45);
 		expect(snapshot.prefs.cancelAlerts).toBe(true);
-		expect(snapshot.prefs.hintsDisabled).toBe(true);
 	});
 });
 
@@ -185,6 +182,9 @@ describe('deserializeAppState', () => {
 				sortDir: 'desc',
 				view: 'grid',
 				cancelAlerts: true,
+				// #242 — a pre-#242 backup/synced client can still carry this
+				// field; deserializeAppState should silently drop it rather
+				// than error or resurrect the removed Settings toggle.
 				hintsDisabled: true
 			},
 			services: [{ provider_id: 8, provider_name: 'Netflix', logo_path: '/netflix.png' }]
@@ -195,7 +195,7 @@ describe('deserializeAppState', () => {
 		expect(result.prefs?.weeklyHours).toBe(15);
 		expect(result.prefs?.sortDir).toBe('desc');
 		expect(result.prefs?.cancelAlerts).toBe(true);
-		expect(result.prefs?.hintsDisabled).toBe(true);
+		expect(result.prefs).not.toHaveProperty('hintsDisabled');
 		expect(result.services).toHaveLength(1);
 	});
 
