@@ -1,8 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
 	import { getAll, getServices, toggleService } from '$lib/db';
 	import { services, setSubscribedIds } from '$lib/services.svelte';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
@@ -10,10 +8,6 @@
 	import { readNumber } from '$lib/storage';
 	import { scrollToHashTarget } from '$lib/scroll-to-hash';
 	import type { Provider, Suggestion } from '$lib/types';
-	import Button from '$lib/components/Button.svelte';
-
-	// ── Onboarding ────────────────────────────────────────────────────────────
-	let isOnboarding = $state(false);
 
 	// ── Budget ────────────────────────────────────────────────────────────────
 	// Read synchronously at init (this route is ssr=false, so localStorage is
@@ -80,8 +74,6 @@
 	}
 
 	onMount(async () => {
-		isOnboarding = page.url.searchParams.has('onboarding');
-
 		const [items, svcs] = await Promise.all([getAll(), getServices()]);
 		setSubscribedIds(new Set(svcs.map((s) => s.provider_id)));
 
@@ -93,13 +85,15 @@
 			}))
 			.sort((a, b) => a.provider_name.localeCompare(b.provider_name));
 
-		// Fetch majors for empty-queue onboarding state
+		// Fetch majors when the queue has no providers of its own to offer —
+		// an empty queue (new account, or everything's been removed) shouldn't
+		// leave this section with nothing to toggle.
 		if (queueProviders.length === 0) {
 			try {
 				const res = await fetch('/api/major-providers');
 				if (res.ok) majorProviders = await res.json();
 			} catch {
-				// Best-effort fetch for onboarding suggestions; page works without them
+				// Best-effort fetch; page works without them
 			}
 		}
 
@@ -118,6 +112,11 @@
 				runtime_minutes: agg.totalMins,
 				title_count: agg.count
 			}))
+			// "Subscribe to next" doesn't make sense for something already
+			// subscribed to (#242) — only filters once there's subscription data
+			// to filter by, same "don't guess without a signal" rule the Gantt
+			// keep/start/cancel labels follow.
+			.filter((s) => services.ids.size === 0 || !services.ids.has(s.provider_id))
 			.sort((a, b) => b.runtime_minutes - a.runtime_minutes);
 		suggestionsLoaded = true;
 
@@ -137,15 +136,9 @@
 	<!-- Viewing Budget -->
 	<section class="space-y-3">
 		<h2 class="section-heading">Viewing Budget</h2>
-		{#if isOnboarding}
-			<p class="body-text">
-				This calibrates how full your queue bars look. Set it now or adjust later on this page.
-			</p>
-		{:else}
-			<p class="body-text">
-				Your estimated monthly watch time. Used to normalise bar widths across all views.
-			</p>
-		{/if}
+		<p class="body-text">
+			Your estimated monthly watch time. Used to normalise bar widths across all views.
+		</p>
 		<div class="flex flex-wrap items-center gap-2 text-sm">
 			<input
 				type="number"
@@ -176,17 +169,10 @@
 	<!-- Subscribed Services -->
 	<section class="space-y-3">
 		<h2 class="section-heading">Subscribed Services</h2>
-		{#if isOnboarding}
-			<p class="body-text">
-				Set this before adding titles — Queuest can flag what's actually available to you from the
-				first title you add, instead of only after the fact.
-			</p>
-		{:else}
-			<p class="body-text">
-				Mark which streaming services you subscribe to. Queuest uses this to surface relevant
-				suggestions.
-			</p>
-		{/if}
+		<p class="body-text">
+			Mark which streaming services you subscribe to. Queuest uses this to surface relevant
+			suggestions.
+		</p>
 
 		{#if !loaded}
 			<p class="text-sm text-gray-400 dark:text-gray-600">Loading…</p>
@@ -236,104 +222,89 @@
 		{/if}
 	</section>
 
-	<!-- Suggest — a brand-new onboarding user has an empty queue by definition
-	     (Add is the next step after Budget), so this would only ever show the
-	     same empty state the onboarding CTA below already covers. Hidden
-	     entirely rather than shown-empty, so the two never render at once. -->
-	{#if !isOnboarding}
-		<div class="divider"></div>
+	<div class="divider"></div>
 
-		<section id="suggest" class="space-y-3">
-			<div>
-				<h2 class="section-heading">What to Subscribe to Next</h2>
+	<section id="suggest" class="space-y-3">
+		<div>
+			<h2 class="section-heading">What to Subscribe to Next</h2>
+			<p class="mt-1 text-sm text-gray-500">
+				Based on your {totalUnwatched} unwatched title{totalUnwatched === 1 ? '' : 's'}
+			</p>
+		</div>
+
+		{#if !suggestionsLoaded}
+			<div class="space-y-3">
+				{#each { length: 4 } as _, i (i)}
+					<div class="h-[72px] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>
+				{/each}
+			</div>
+		{:else if suggestions.length === 0}
+			<div class="flex flex-col items-center justify-center py-12 text-center">
+				<p class="mb-4 text-5xl">📺</p>
+				<p class="text-lg font-medium text-gray-700 dark:text-gray-300">No suggestions yet</p>
 				<p class="mt-1 text-sm text-gray-500">
-					Based on your {totalUnwatched} unwatched title{totalUnwatched === 1 ? '' : 's'}
+					<a class="text-orange-500 hover:underline" href={resolve('/add')}
+						>Add titles to your queue</a
+					>
+					to get streaming recommendations
 				</p>
 			</div>
-
-			{#if !suggestionsLoaded}
-				<div class="space-y-3">
-					{#each { length: 4 } as _, i (i)}
-						<div class="h-[72px] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"></div>
-					{/each}
-				</div>
-			{:else if suggestions.length === 0}
-				<div class="flex flex-col items-center justify-center py-12 text-center">
-					<p class="mb-4 text-5xl">📺</p>
-					<p class="text-lg font-medium text-gray-700 dark:text-gray-300">No suggestions yet</p>
-					<p class="mt-1 text-sm text-gray-500">
-						<a class="text-orange-500 hover:underline" href={resolve('/add')}
-							>Add titles to your queue</a
-						>
-						to get streaming recommendations
-					</p>
-				</div>
-			{:else}
-				<div class="space-y-3">
-					{#each suggestions as suggestion, i (suggestion.provider_id)}
+		{:else}
+			<div class="space-y-3">
+				{#each suggestions as suggestion, i (suggestion.provider_id)}
+					<div
+						class="flex items-center gap-4 rounded-xl bg-white p-4 ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+					>
+						<!-- Rank -->
 						<div
-							class="flex items-center gap-4 rounded-xl bg-white p-4 ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0"
+							class="w-6 text-center text-lg font-bold {i === 0
+								? 'text-orange-400'
+								: i === 1
+									? 'text-gray-400 dark:text-gray-300'
+									: i === 2
+										? 'text-amber-700'
+										: 'text-gray-400 dark:text-gray-600'}"
 						>
-							<!-- Rank -->
-							<div
-								class="w-6 text-center text-lg font-bold {i === 0
-									? 'text-orange-400'
-									: i === 1
-										? 'text-gray-400 dark:text-gray-300'
-										: i === 2
-											? 'text-amber-700'
-											: 'text-gray-400 dark:text-gray-600'}"
-							>
-								{i + 1}
-							</div>
+							{i + 1}
+						</div>
 
-							<!-- Logo -->
-							<img
-								src="{TMDB_IMG}/w92{suggestion.logo_path}"
-								alt={suggestion.name}
-								class="h-10 w-10 rounded-lg object-cover"
-							/>
+						<!-- Logo -->
+						<img
+							src="{TMDB_IMG}/w92{suggestion.logo_path}"
+							alt={suggestion.name}
+							class="h-10 w-10 rounded-lg object-cover"
+						/>
 
-							<!-- Name + runtime -->
-							<div class="flex-1">
-								<p class="font-medium">{suggestion.name}</p>
-								<p class="text-sm text-gray-500">
-									{formatRuntime(suggestion.runtime_minutes, 'tv')} remaining · {suggestion.title_count}
-									{suggestion.title_count === 1 ? 'title' : 'titles'}
+						<!-- Name + runtime -->
+						<div class="flex-1">
+							<p class="font-medium">{suggestion.name}</p>
+							<p class="text-sm text-gray-500">
+								{formatRuntime(suggestion.runtime_minutes, 'tv')} remaining · {suggestion.title_count}
+								{suggestion.title_count === 1 ? 'title' : 'titles'}
+							</p>
+							{#if budgetHours > 0}
+								<p class="text-xs text-gray-400">
+									≈ {formatMonthsEquivalent(suggestion.runtime_minutes, budgetHours)} of your budget
 								</p>
-								{#if budgetHours > 0}
-									<p class="text-xs text-gray-400">
-										≈ {formatMonthsEquivalent(suggestion.runtime_minutes, budgetHours)} of your budget
-									</p>
-								{/if}
-							</div>
-
-							<!-- Bar — only meaningful with 3+ providers -->
-							{#if suggestions.length >= 3}
-								<div class="hidden w-36 sm:block">
-									<div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
-										<div
-											class="h-full rounded-full bg-orange-500 transition-all"
-											style="width: {Math.round((suggestion.runtime_minutes / topRuntime) * 100)}%"
-										></div>
-									</div>
-								</div>
 							{/if}
 						</div>
-					{/each}
-				</div>
 
-				<p class="text-center text-xs text-gray-400">
-					Streaming data via TMDB / JustWatch · US only
-				</p>
-			{/if}
-		</section>
-	{/if}
+						<!-- Bar — only meaningful with 3+ providers -->
+						{#if suggestions.length >= 3}
+							<div class="hidden w-36 sm:block">
+								<div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+									<div
+										class="h-full rounded-full bg-orange-500 transition-all"
+										style="width: {Math.round((suggestion.runtime_minutes / topRuntime) * 100)}%"
+									></div>
+								</div>
+							</div>
+						{/if}
+					</div>
+				{/each}
+			</div>
 
-	{#if isOnboarding}
-		<div class="divider"></div>
-		<Button onclick={() => goto(resolve('/add?onboarding=1'))} class="w-full px-4 py-3 text-sm">
-			Next: Add titles →
-		</Button>
-	{/if}
+			<p class="text-center text-xs text-gray-400">Streaming data via TMDB / JustWatch · US only</p>
+		{/if}
+	</section>
 </div>

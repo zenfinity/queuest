@@ -200,7 +200,7 @@
 
 	let cancelAlert = $derived.by(() => {
 		if (!loaded || !cancelAlertsEnabled) return null;
-		const candidates = cancelCandidates(queued, budgetHours, dismissedAlerts);
+		const candidates = cancelCandidates(queued, budgetHours, dismissedAlerts, services.ids);
 		return candidates[0] ?? null;
 	});
 
