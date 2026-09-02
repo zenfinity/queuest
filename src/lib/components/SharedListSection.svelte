@@ -97,6 +97,13 @@
 		return members.find((m) => m.userId === userId)?.email ?? 'A member';
 	}
 
+	// Ported from the old /lists/[id] page (#243) — first-letter avatar for
+	// the "who's watched this" stack, same lookup as memberLabel.
+	function memberInitial(userId: string): string {
+		if (userId === myUserId) return 'Y';
+		return (members.find((m) => m.userId === userId)?.email ?? '?').charAt(0).toUpperCase();
+	}
+
 	// Per-item border color: who added it, not which list it's in (#236) —
 	// the list's own `color` is used elsewhere (bounding border, progress
 	// bars), not here. Falls back to the same neutral gray the list color
@@ -279,6 +286,21 @@
 	});
 </script>
 
+{#snippet watcherAvatars(item: CollectionItem, ringClass: string, wrapClass: string = '')}
+	{@const watcherIds = Object.keys(item.watch ?? {})}
+	{#if watcherIds.length > 0}
+		<div class="flex -space-x-1.5 {wrapClass}" title="Watched by">
+			{#each watcherIds as w (w)}
+				<span
+					class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-200 text-[9px] font-semibold text-orange-800 {ringClass} dark:bg-orange-900/50 dark:text-orange-300"
+				>
+					{memberInitial(w)}
+				</span>
+			{/each}
+		</div>
+	{/if}
+{/snippet}
+
 {#snippet gridCard(item: CollectionItem)}
 	{@const key = itemKey(item)}
 	{@const myWatch = watchedByMe(item)}
@@ -365,6 +387,7 @@
 						<span class="text-sm leading-none" title="Not on streaming services">🚫</span>
 					{/if}
 				{/if}
+				{@render watcherAvatars(item, 'ring-2 ring-white dark:ring-gray-900')}
 			</div>
 			{#if item.media_type === 'movie' && releaseChip(item.release)}
 				<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">
@@ -522,6 +545,7 @@
 			{:else}
 				<span class="shrink-0 text-xs leading-none" title="Not on streaming services">🚫</span>
 			{/if}
+			{@render watcherAvatars(item, 'ring-2 ring-white dark:ring-gray-900')}
 			<div class="relative min-w-0 flex-1">
 				<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
 				<div
@@ -587,6 +611,7 @@
 			<p class="text-xs text-gray-500 dark:text-gray-400">
 				{item.runtime_minutes ? formatRuntime(item.runtime_minutes, item.media_type) : '—'}
 			</p>
+			{@render watcherAvatars(item, 'ring-2 ring-gray-50 dark:ring-gray-800', 'mt-1')}
 			<div class="mt-1.5 flex gap-1.5">
 				<button
 					disabled={rankingBusy || (!rankOf(item) && myBallot.length >= MAX_BALLOT_SIZE)}
