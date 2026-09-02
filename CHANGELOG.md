@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.0] — 2026-09-02
+
+### Allow the same title queued under multiple lists (#221)
+
+A title can now live in more than one list at once — queue it untagged and add it to as many named lists as you like, instead of the first placement blocking every other one. This is also what makes importing a shared list that overlaps one of your own lists actually add the title, instead of silently skipping it. Behind the scenes: the queue's uniqueness moved from global to per-list (an IndexedDB schema migration), and the sync engine's merge logic was reworked specifically so that an ordinary list move on one device never gets mistaken for a new duplicate on another.
+
+### chore: E2E test infrastructure (#253, scoped)
+
+Added Playwright and one test — two browser contexts on the same synced account, confirming an item added on one shows up on the other — as a regression tripwire for the sync-merge work above. Not part of the required PR checks yet; runs on demand via a manual GitHub Actions workflow until it's proven stable.
+
 ## [1.8.0] — 2026-09-02
 
 ### Invite-flow copy rewrite (#242, final piece)
