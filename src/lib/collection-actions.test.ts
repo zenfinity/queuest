@@ -8,6 +8,8 @@ vi.mock('./keypair', () => ({ ensureKeypair: vi.fn() }));
 import { ensureKeypair } from './keypair';
 import {
 	createInvite,
+	listInvites,
+	revokeInvite,
 	removeMemberAndRotate,
 	joinCollection,
 	promoteCollection,
@@ -86,6 +88,61 @@ describe('createInvite', () => {
 		// And it must not have been in the POST body either.
 		const body = fetchMock.mock.calls[0]?.[1];
 		expect(JSON.stringify(body ?? {})).not.toContain(collectionDek);
+	});
+});
+
+describe('listInvites', () => {
+	it('GETs the collection invites endpoint and returns the outstanding invites', async () => {
+		const invites = [
+			{ id: 'h1', createdAt: '2026-01-01T00:00:00.000Z', expiresAt: '2026-01-08T00:00:00.000Z' }
+		];
+		const fetchMock = vi.fn(async (..._args: unknown[]) => Response.json({ invites }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const result = await listInvites(COLL, noop);
+
+		expect(result).toEqual(invites);
+		expect(fetchMock.mock.calls[0][0]).toBe(`/api/collections/${COLL}/invites`);
+	});
+
+	it('reports the error and returns an empty list on failure', async () => {
+		const fetchMock = vi.fn(async (..._args: unknown[]) =>
+			Response.json({ error: 'Only the owner can manage invites' }, { status: 403 })
+		);
+		vi.stubGlobal('fetch', fetchMock);
+		const { deps, err } = capture();
+
+		const result = await listInvites(COLL, deps);
+
+		expect(result).toEqual([]);
+		expect(err()).toBe('Only the owner can manage invites');
+	});
+});
+
+describe('revokeInvite', () => {
+	it('DELETEs the invite by id, scoped to the collection', async () => {
+		const fetchMock = vi.fn(async (..._args: unknown[]) => Response.json({ revoked: true }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const ok = await revokeInvite(COLL, 'h1', noop);
+
+		expect(ok).toBe(true);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(url).toBe(`/api/collections/${COLL}/invites?id=h1`);
+		expect(init.method).toBe('DELETE');
+	});
+
+	it('reports the error and returns false on failure', async () => {
+		const fetchMock = vi.fn(async (..._args: unknown[]) =>
+			Response.json({ error: 'Not found' }, { status: 404 })
+		);
+		vi.stubGlobal('fetch', fetchMock);
+		const { deps, err } = capture();
+
+		const ok = await revokeInvite(COLL, 'h1', deps);
+
+		expect(ok).toBe(false);
+		expect(err()).toBe('Not found');
 	});
 });
 

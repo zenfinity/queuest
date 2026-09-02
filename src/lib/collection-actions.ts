@@ -147,6 +147,32 @@ export async function createInvite(
 	}
 }
 
+export interface OutstandingInvite {
+	id: string;
+	createdAt: string;
+	expiresAt: string;
+}
+
+/** Lists this collection's outstanding (unclaimed, unrevoked, unexpired)
+ *  invites, so the owner can see — and revoke — a link before it's used. */
+export async function listInvites(
+	collectionId: string,
+	deps: CollectionActionDeps
+): Promise<OutstandingInvite[]> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const res = await fetch(`/api/collections/${collectionId}/invites`);
+		await throwIfNotOk(res);
+		return ((await res.json()) as { invites: OutstandingInvite[] }).invites;
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not load invites.');
+		return [];
+	} finally {
+		deps.setBusy(false);
+	}
+}
+
 export async function revokeInvite(
 	collectionId: string,
 	inviteId: string,
