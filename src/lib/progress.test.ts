@@ -135,6 +135,28 @@ describe('cancelCandidates', () => {
 		const result = cancelCandidates(items, 40, {});
 		expect(result.map((c) => c.providerId)).toEqual([9, 8]);
 	});
+
+	// #242 — subscribedIds narrows candidates to providers actually marked
+	// subscribed, rather than just "has a thin queue under budget."
+	describe('subscribedIds', () => {
+		it('falls back to queue-only inference when subscribedIds is omitted or empty', () => {
+			const item = makeItem({ providers: [provider], runtime_minutes: 60 });
+			expect(cancelCandidates([item], 40, {})).toHaveLength(1);
+			expect(cancelCandidates([item], 40, {}, new Set())).toHaveLength(1);
+		});
+
+		it('excludes a provider with a thin queue that the user never marked subscribed', () => {
+			const item = makeItem({ providers: [provider], runtime_minutes: 60 });
+			expect(cancelCandidates([item], 40, {}, new Set([999]))).toEqual([]);
+		});
+
+		it('includes a provider that is both thin-queued and marked subscribed', () => {
+			const item = makeItem({ providers: [provider], runtime_minutes: 60 });
+			const result = cancelCandidates([item], 40, {}, new Set([8]));
+			expect(result).toHaveLength(1);
+			expect(result[0].providerId).toBe(8);
+		});
+	});
 });
 
 describe('releaseChip', () => {

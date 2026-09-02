@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
-	import type { SearchResult } from '$lib/types';
+	import type { SearchResult, Provider } from '$lib/types';
 	import type { SearchSuggestion } from '../api/search-suggestions/+server';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { releaseChip, DEFAULT_BUDGET_HOURS } from '$lib/progress';
+	import { releaseChip, DEFAULT_BUDGET_HOURS, saveBudgetPrefs } from '$lib/progress';
+	import { readNumber } from '$lib/storage';
 	import { page, navigating } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
-	import { getAll } from '$lib/db';
+	import { resolve } from '$app/paths';
+	import { getAll, getServices, toggleService } from '$lib/db';
 	import { listCollections } from '$lib/queue-actions';
 	import { getQueueColors, sharedListColor } from '$lib/queue-colors';
 	import {
@@ -16,6 +18,7 @@
 		type SharedCollection
 	} from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
+	import { services, setSubscribedIds } from '$lib/services.svelte';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import NavHint from '$lib/components/NavHint.svelte';
@@ -26,6 +29,63 @@
 	let isOnboarding = $derived(page.url.searchParams.has('onboarding'));
 
 	let { data }: { data: PageData } = $props();
+
+	// ── Onboarding: setup screen (#242) ───────────────────────────────────────
+	// Replaces the old two-step /budget?onboarding=1 -> /add?onboarding=1 flow
+	// with one screen. Weekly hours and subscribed services aren't new state —
+	// they're the same budget-prefs localStorage keys and the same
+	// services.svelte.ts / IndexedDB services store that /budget already reads
+	// and writes; this screen is just a second, onboarding-shaped surface over
+	// them, same as /budget's own (now-removed) onboarding copy was.
+	function storedOr(key: string, fallback: number): number {
+		const stored = readNumber(key, -1);
+		return stored > 0 ? stored : fallback;
+	}
+	let weeklyHours = $state(storedOr('sq:budget:weekly', 6));
+	// Weeks/month isn't user-adjustable here — full control over both stays on
+	// /budget. Held at whatever's already stored (or the app default) so the
+	// preview math matches what /budget would show for the same weekly figure.
+	const weeksPerMonth = storedOr('sq:budget:weeks', 4);
+	let previewHours = $derived(Math.round(weeklyHours * weeksPerMonth));
+	let previewFilms = $derived(Math.max(1, Math.round(previewHours / 2)));
+
+	$effect(() => {
+		if (isOnboarding) saveBudgetPrefs(weeklyHours, weeksPerMonth);
+	});
+
+	let majorProviders: Provider[] = $state([]);
+	// Two independent loads (local subscribed-ids read, network provider
+	// fetch) gate this section together — settling only one of them was
+	// showing a false "couldn't load" flash while the other was still
+	// in flight.
+	let subscribedIdsLoaded = $state(false);
+	let providersLoaded = $state(false);
+	let servicesLoaded = $derived(subscribedIdsLoaded && providersLoaded);
+	let toggleError = $state('');
+	let subscribedIds = $derived(services.ids);
+
+	async function handleServiceToggle(provider: Provider) {
+		const id = provider.provider_id;
+		const wasSubscribed = services.ids.has(id);
+		toggleError = '';
+		if (wasSubscribed) services.ids.delete(id);
+		else services.ids.add(id);
+		try {
+			await toggleService(provider);
+		} catch (e) {
+			if (wasSubscribed) services.ids.add(id);
+			else services.ids.delete(id);
+			toggleError =
+				e instanceof Error ? e.message : 'Could not save. Check browser storage settings.';
+		}
+	}
+
+	let importDetailsEl: HTMLDetailsElement | undefined = $state();
+	function openImport() {
+		if (!importDetailsEl) return;
+		importDetailsEl.open = true;
+		importDetailsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
 
 	// The search form submits as a GET navigation (new ?q= triggers the server load) — the
 	// only navigation that normally fires while sitting on this page is that search itself.
@@ -113,6 +173,23 @@
 				sharedListColors = colors;
 			});
 		});
+
+		if (isOnboarding) {
+			getServices()
+				.then((svcs) => setSubscribedIds(new Set(svcs.map((s) => s.provider_id))))
+				.finally(() => {
+					subscribedIdsLoaded = true;
+				});
+			fetch('/api/major-providers')
+				.then((res) => (res.ok ? res.json() : []))
+				.then((provs: Provider[]) => (majorProviders = provs))
+				.catch(() => {
+					// Best-effort; the section's own empty-state covers a failed fetch
+				})
+				.finally(() => {
+					providersLoaded = true;
+				});
+		}
 	});
 
 	function addDeps(): Parameters<typeof addSearchResultToQueue>[1] {
@@ -153,14 +230,94 @@
 <h1 class="sr-only">Add</h1>
 
 <div class="space-y-5 xs:space-y-8">
+	{#if isOnboarding}
+		<div class="space-y-1.5">
+			<h2 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
+				Three questions, then you're in
+			</h2>
+			<p class="body-text">All of it editable later. Nothing leaves your browser.</p>
+		</div>
+
+		<!-- 01 · weekly hours -->
+		<section class="space-y-2">
+			<p class="panel-label">01 · How much do you watch</p>
+			<div class="flex items-baseline gap-1.5">
+				<span class="text-3xl font-bold tabular-nums text-gray-900 dark:text-white"
+					>{weeklyHours}</span
+				>
+				<span class="text-sm text-gray-500 dark:text-gray-400">hrs/week</span>
+			</div>
+			<input
+				type="range"
+				min="1"
+				max="40"
+				step="1"
+				bind:value={weeklyHours}
+				aria-label="Hours you watch per week"
+				class="w-full accent-orange-500"
+			/>
+			<p class="text-xs text-gray-500 dark:text-gray-400">
+				≈ {previewHours} hours — about {previewFilms} film{previewFilms === 1 ? '' : 's'}
+			</p>
+		</section>
+
+		<div class="divider"></div>
+
+		<!-- 02 · subscribed services -->
+		<section class="space-y-2">
+			<p class="panel-label">02 · What are you paying for</p>
+			<p class="body-text">So we can tell you what to keep and what to drop.</p>
+			{#if !servicesLoaded}
+				<p class="text-sm text-gray-400 dark:text-gray-600">Loading…</p>
+			{:else if majorProviders.length === 0}
+				<p class="text-sm text-gray-400 dark:text-gray-600">
+					Couldn't load services right now — you can set these later on Budget.
+				</p>
+			{:else}
+				<div class="flex flex-wrap gap-3">
+					{#each majorProviders as provider (provider.provider_id)}
+						<button
+							type="button"
+							onclick={() => handleServiceToggle(provider)}
+							aria-pressed={subscribedIds.has(provider.provider_id)}
+							style:border-color={subscribedIds.has(provider.provider_id)
+								? '#22c55e'
+								: 'transparent'}
+							style:border-style="solid"
+							class="flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors
+								{subscribedIds.has(provider.provider_id)
+								? 'bg-white dark:bg-gray-900'
+								: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
+						>
+							<img
+								src="{TMDB_IMG}/original{provider.logo_path}"
+								alt=""
+								class="h-6 w-6 rounded-md object-cover"
+							/>
+							<span
+								class={subscribedIds.has(provider.provider_id)
+									? 'text-gray-900 dark:text-white'
+									: ''}>{provider.provider_name}</span
+							>
+						</button>
+					{/each}
+				</div>
+				{#if toggleError}
+					<p class="text-xs text-red-500">{toggleError}</p>
+				{/if}
+			{/if}
+			<p class="text-xs text-gray-400 dark:text-gray-500">
+				None of them? Skip — the queue will suggest one.
+			</p>
+		</section>
+
+		<div class="divider"></div>
+
+		<p class="panel-label">03 · Add the first thing</p>
+	{/if}
+
 	<div class="space-y-2">
 		<h2 class="section-heading">Search</h2>
-		{#if isOnboarding}
-			<p class="text-xs text-gray-500 dark:text-gray-400">
-				Already have a watchlist elsewhere? Expand <strong>Import</strong> below to add titles from Letterboxd,
-				IMDb, or a backup instead of one by one.
-			</p>
-		{/if}
 	</div>
 
 	<form
@@ -399,7 +556,10 @@
 	{/if}
 
 	<!-- Import (collapsible) -->
-	<details class="group rounded-lg border border-gray-200 dark:border-gray-800">
+	<details
+		bind:this={importDetailsEl}
+		class="group rounded-lg border border-gray-200 dark:border-gray-800"
+	>
 		<summary
 			class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"
 		>
@@ -435,6 +595,19 @@
 			<ImportPanel {existingCollections} {queueColors} {sharedCollections} {sharedListColors} />
 		</div>
 	</details>
+
+	{#if isOnboarding}
+		<div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+			<Button href={resolve('/app')} class="px-5 py-2.5 text-sm">Go to my queue →</Button>
+			<button
+				type="button"
+				onclick={openImport}
+				class="text-sm text-gray-500 underline decoration-gray-300 underline-offset-2 hover:text-gray-700 dark:text-gray-400 dark:decoration-gray-700 dark:hover:text-gray-200"
+			>
+				Import a watchlist instead
+			</button>
+		</div>
+	{/if}
 </div>
 
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->

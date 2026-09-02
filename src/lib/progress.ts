@@ -145,11 +145,21 @@ export interface CancelCandidate {
  * Returns providers whose unwatched queue fits within the monthly budget,
  * sorted by ascending remaining time. Used to surface "consider pausing"
  * alerts. A candidate dismissed within the last 30 days is excluded.
+ *
+ * `subscribedIds` (#242) narrows candidates to providers the user has
+ * actually marked as subscribed on the Budget/setup screen — without it, a
+ * provider just happens to have a thin *queue* under budget, which isn't the
+ * same thing as "you're paying for it" (someone could queue a title without
+ * subscribing anywhere yet). Optional and defaults to the old queue-only
+ * inference: a user who's never touched the Subscribed Services chips has no
+ * subscription data to narrow by, so falling back is the only option that
+ * doesn't just turn cancellation alerts off for them.
  */
 export function cancelCandidates(
 	unwatched: WatchlistItem[],
 	budgetHours: number,
-	dismissed: Record<string, string>
+	dismissed: Record<string, string>,
+	subscribedIds: Set<number> = new Set()
 ): CancelCandidate[] {
 	const budgetMins = budgetHours * 60;
 	if (budgetMins <= 0) return [];
@@ -164,6 +174,7 @@ export function cancelCandidates(
 		}))
 		.filter(({ providerId, totalMins }) => {
 			if (totalMins <= 0 || totalMins > budgetMins) return false;
+			if (subscribedIds.size > 0 && !subscribedIds.has(providerId)) return false;
 			const d = dismissed[String(providerId)];
 			if (!d) return true; // not dismissed
 			const dismissedTime = new Date(d).getTime();

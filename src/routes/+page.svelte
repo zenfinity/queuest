@@ -179,7 +179,7 @@
 		} catch {
 			// Best-effort localStorage write; app navigates to onboarding regardless
 		}
-		goto(resolve('/budget?onboarding=1'));
+		goto(resolve('/add?onboarding=1'));
 	}
 </script>
 
@@ -229,7 +229,7 @@
 							onclick={start}
 							class="rounded-2xl bg-orange-500 px-7 py-3.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110"
 						>
-							Start your queue
+							Start a queue
 						</button>
 					{/if}
 					<a
@@ -240,7 +240,9 @@
 					</a>
 				</div>
 				<p data-reveal class="mt-5 text-[13px] text-gray-500">
-					No card required · Free while in beta · End-to-end encrypted
+					{welcomed
+						? 'No card required · Free while in beta · End-to-end encrypted'
+						: 'No account. Stays in your browser.'}
 				</p>
 			</div>
 

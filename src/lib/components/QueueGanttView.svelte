@@ -10,6 +10,7 @@
 	import { remainingRuntime, hms } from '$lib/progress';
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls, UNCATEGORIZED } from '$lib/queue-controls.svelte';
+	import { services } from '$lib/services.svelte';
 
 	const BAR_H = 32; // px — compact chip height
 
@@ -53,6 +54,29 @@
 		const h = mins / 60;
 		return `+${h % 1 === 0 ? h : h.toFixed(1)}h over`;
 	}
+
+	// Keep/start/cancel (#242) — only meaningful for a real provider lane (not
+	// a collection lane or the "Not Streaming"/"Uncategorized" terminal one),
+	// and only once the user has told us *something* they subscribe to; with
+	// zero subscribed services we have no signal to distinguish "not
+	// subscribed" from "haven't said yet," so every lane stays unlabeled
+	// rather than guessing everything is a "start" candidate.
+	function laneStatus(
+		lane: Pick<Lane, 'providerId' | 'totalMins'>,
+		budgetMins: number
+	): 'keep' | 'start' | 'cancel' | null {
+		if (lane.providerId == null || services.ids.size === 0) return null;
+		const subscribed = services.ids.has(lane.providerId);
+		if (subscribed) return lane.totalMins > 0 ? 'keep' : 'cancel';
+		return lane.totalMins > 0 && lane.totalMins <= budgetMins ? 'start' : null;
+	}
+
+	const LANE_STATUS_STYLE = {
+		keep: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400',
+		start: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+		cancel: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+	} as const;
+	const LANE_STATUS_LABEL = { keep: 'Keep', start: 'Start', cancel: 'Cancel' } as const;
 	let lanes = $derived.by((): Lane[] => {
 		const budgetMins = budgetHours * 60;
 		const map = new SvelteMap<
@@ -194,6 +218,7 @@
 	{#each lanes as lane (lane.key)}
 		{@const colors = laneColors(lane.hue, theme.dark)}
 		{@const budgetMins = budgetHours * 60}
+		{@const status = laneStatus(lane, budgetMins)}
 
 		<div
 			class="flex items-stretch overflow-visible rounded-xl"
@@ -227,6 +252,15 @@
 				<p class="text-[10px] text-gray-400 dark:text-gray-600">
 					{lane.items.length} title{lane.items.length === 1 ? '' : 's'} · {hms(lane.totalMins)}
 				</p>
+				{#if status}
+					<span
+						class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide {LANE_STATUS_STYLE[
+							status
+						]}"
+					>
+						{LANE_STATUS_LABEL[status]}
+					</span>
+				{/if}
 			</div>
 
 			<!-- Budget zone: clips at month boundary -->
