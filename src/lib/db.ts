@@ -4,7 +4,36 @@ const DB_NAME = 'streamq';
 const STORE = 'watchlist';
 const SERVICES_STORE = 'services';
 const META_STORE = 'meta';
-const VERSION = 4;
+const VERSION = 5;
+const TMDB_MEDIA_INDEX = 'tmdb_media'; // v1–v4: global-uniqueness index, removed in v5
+const TMDB_MEDIA_LIST_INDEX = 'tmdb_media_list'; // v5+: per-list uniqueness index
+
+// ── Per-list title uniqueness (#221) ────────────────────────────────────────
+// The store's uniqueness index moved from [tmdb_id, media_type] (one row per
+// title, full stop) to [tmdb_id, media_type, queue_tag] (one row per title
+// *per list*) — a title can now be queued once untagged and again under any
+// number of named lists. IndexedDB drops a record from a compound index
+// entirely if any key path component is `undefined`, which would silently
+// stop enforcing uniqueness on every untagged item (the common case) — so
+// the stored value is never left undefined/null; QUEUE_TAG_NONE is a real,
+// index-safe string standing in for "no list." It never leaves this file:
+// every write normalizes into it, every read normalizes back out, so
+// nothing outside db.ts ever has to know it exists (see queue_tag's
+// `undefined`/`null`-means-"no list" convention used everywhere else).
+const QUEUE_TAG_NONE = '';
+
+function normalizeQueueTagForWrite(tag: string | null | undefined): string {
+	return tag ?? QUEUE_TAG_NONE;
+}
+
+/** Undoes normalizeQueueTagForWrite on the way out, so no caller outside this
+ * file ever observes QUEUE_TAG_NONE. */
+function denormalizeItem<T extends WatchlistItem | undefined>(item: T): T {
+	if (item && item.queue_tag === QUEUE_TAG_NONE) {
+		return { ...item, queue_tag: undefined };
+	}
+	return item;
+}
 
 let _dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -54,7 +83,7 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 
 			if (oldVersion < 1) {
 				const store = db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
-				store.createIndex('tmdb_media', ['tmdb_id', 'media_type'], { unique: true });
+				store.createIndex(TMDB_MEDIA_INDEX, ['tmdb_id', 'media_type'], { unique: true });
 			}
 			if (oldVersion < 2) {
 				if (!db.objectStoreNames.contains(SERVICES_STORE)) {
@@ -76,13 +105,53 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 				let i = 0;
 				cursorReq.onsuccess = () => {
 					const cursor = cursorReq.result;
-					if (!cursor) return;
+					if (!cursor) {
+						if (oldVersion < 5) normalizeQueueTagsAndReindex();
+						return;
+					}
 					const item = cursor.value as WatchlistItem;
 					if (item.sort_order === undefined) {
 						item.sort_order = i;
 						cursor.update(item);
 					}
 					i++;
+					cursor.continue();
+				};
+			}
+
+			// Swaps the global-uniqueness index for the per-list one (#221),
+			// after normalizing every row's queue_tag to QUEUE_TAG_NONE instead
+			// of undefined/null — see the constant's own comment for why that
+			// has to happen first. Chained after backfillSortOrder for the same
+			// reason backfillSortOrder is chained after the v3 cursor: one
+			// read-modify-write cursor over the store at a time within a single
+			// versionchange transaction. Creating the new unique index only
+			// after every row is normalized is also what makes the index
+			// creation itself safe — the old index already guaranteed at most
+			// one row per [tmdb_id, media_type], so there's no way for the
+			// backfill to produce a duplicate [tmdb_id, media_type, queue_tag]
+			// for the new index to reject.
+			function normalizeQueueTagsAndReindex() {
+				const store = tx.objectStore(STORE);
+				if (store.indexNames.contains(TMDB_MEDIA_INDEX)) {
+					store.deleteIndex(TMDB_MEDIA_INDEX);
+				}
+				const cursorReq = store.openCursor();
+				cursorReq.onsuccess = () => {
+					const cursor = cursorReq.result;
+					if (!cursor) {
+						if (!store.indexNames.contains(TMDB_MEDIA_LIST_INDEX)) {
+							store.createIndex(TMDB_MEDIA_LIST_INDEX, ['tmdb_id', 'media_type', 'queue_tag'], {
+								unique: true
+							});
+						}
+						return;
+					}
+					const item = cursor.value as WatchlistItem;
+					if (item.queue_tag === undefined || item.queue_tag === null) {
+						item.queue_tag = QUEUE_TAG_NONE;
+						cursor.update(item);
+					}
 					cursor.continue();
 				};
 			}
@@ -99,6 +168,7 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 					const cursor = cursorReq.result;
 					if (!cursor) {
 						if (oldVersion < 4) backfillSortOrder();
+						else if (oldVersion < 5) normalizeQueueTagsAndReindex();
 						return;
 					}
 					const item = cursor.value as WatchlistItem;
@@ -110,6 +180,8 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 				};
 			} else if (oldVersion < 4) {
 				backfillSortOrder();
+			} else if (oldVersion < 5) {
+				normalizeQueueTagsAndReindex();
 			}
 		};
 		req.onsuccess = () => resolve(req.result);
@@ -128,7 +200,7 @@ export async function getAll(): Promise<WatchlistItem[]> {
 		const req = db.transaction(STORE).objectStore(STORE).getAll();
 		req.onsuccess = () => {
 			const all = req.result as WatchlistItem[];
-			resolve(all.filter((item) => !item.deleted_at));
+			resolve(all.filter((item) => !item.deleted_at).map((item) => denormalizeItem(item)));
 		};
 		req.onerror = () => reject(req.error);
 	});
@@ -139,7 +211,8 @@ export async function getAllIncludingDeleted(): Promise<WatchlistItem[]> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const req = db.transaction(STORE).objectStore(STORE).getAll();
-		req.onsuccess = () => resolve(req.result as WatchlistItem[]);
+		req.onsuccess = () =>
+			resolve((req.result as WatchlistItem[]).map((item) => denormalizeItem(item)));
 		req.onerror = () => reject(req.error);
 	});
 }
@@ -165,12 +238,13 @@ export async function addItem(
 				added_at: now,
 				watched_at: null,
 				updated_at: now,
-				sort_order: countReq.result
+				sort_order: countReq.result,
+				queue_tag: normalizeQueueTagForWrite(plain.queue_tag)
 			};
 			const addReq = store.add(full);
 			addReq.onsuccess = () => {
 				notifyMutation();
-				resolve({ ...full, id: addReq.result as number });
+				resolve(denormalizeItem({ ...full, id: addReq.result as number }));
 			};
 			addReq.onerror = () => reject(addReq.error);
 		};
@@ -294,24 +368,30 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
 }
 
 /**
- * Looks up an item by the same [tmdb_id, media_type] key the store's unique
- * index enforces — used when an `add()` hits that constraint, to tell the
- * caller which existing row it collided with (and its list) instead of just
- * "duplicate". Returns tombstoned rows too, same as the index itself does;
- * callers that only care about active items should check `deleted_at`.
+ * Looks up an item by the same [tmdb_id, media_type, queue_tag] key the
+ * store's unique index enforces (#221 — uniqueness is per list, not global,
+ * so the list has to be part of the lookup key too) — used when an `add()`
+ * hits that constraint, to confirm whether the row it collided with is a
+ * live duplicate or just a tombstone (a previously-removed row still
+ * occupies its index slot). Pass `queue_tag` exactly as given to the
+ * `add()` that collided; omit it (or pass `null`/`undefined`) for the
+ * untagged personal queue. Returns tombstoned rows too, same as the index
+ * itself does; callers that only care about active items should check
+ * `deleted_at`.
  */
 export async function getItemByTmdbId(
 	tmdb_id: number,
-	media_type: WatchlistItem['media_type']
+	media_type: WatchlistItem['media_type'],
+	queue_tag?: string | null
 ): Promise<WatchlistItem | undefined> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
 		const req = db
 			.transaction(STORE)
 			.objectStore(STORE)
-			.index('tmdb_media')
-			.get([tmdb_id, media_type]);
-		req.onsuccess = () => resolve(req.result as WatchlistItem | undefined);
+			.index(TMDB_MEDIA_LIST_INDEX)
+			.get([tmdb_id, media_type, normalizeQueueTagForWrite(queue_tag)]);
+		req.onsuccess = () => resolve(denormalizeItem(req.result as WatchlistItem | undefined));
 		req.onerror = () => reject(req.error);
 	});
 }
@@ -406,6 +486,52 @@ export async function patchProviders(
 	);
 }
 
+// #221 — since a title can now live under more than one list at once, a
+// bulk cursor rewrite of queue_tag (rename, clear) can hit the same
+// [tmdb_id, media_type, queue_tag] unique index it's writing into: renaming
+// "Horror" to "Comedy" collides if a title already sits in both. Before
+// #221 this could never happen (uniqueness was global, so no title could
+// occupy two tags simultaneously to collide with). Checked ahead of time via
+// the index rather than attempting the write and reacting to a
+// ConstraintError — an unhandled request error aborts the *whole*
+// transaction in IndexedDB, so every other item in the same rename would
+// silently fail to rename too, not just the colliding one; a plain
+// try/suppress on the request's error event is a spec-legal way to avoid
+// that (preventDefault on the error stops it bubbling into the
+// transaction), but support for it is inconsistent enough across
+// implementations that checking first is the more predictable of the two —
+// this runs inside the same transaction, so there's no other writer that
+// could sneak a change in between the check and the write. The colliding
+// row just stays on its original tag, which is the only reasonable outcome
+// anyway (merging it into the target would either lose data or fail
+// differently).
+function applyTagChangeSkippingCollisions(
+	store: IDBObjectStore,
+	cursor: IDBCursorWithValue,
+	item: WatchlistItem,
+	onDone: () => void
+): void {
+	const checkReq = store
+		.index(TMDB_MEDIA_LIST_INDEX)
+		.get([item.tmdb_id, item.media_type, normalizeQueueTagForWrite(item.queue_tag)]);
+	checkReq.onsuccess = () => {
+		if (checkReq.result) {
+			onDone(); // Target slot already occupied — leave this row as-is.
+			return;
+		}
+		const updateReq = cursor.update(item);
+		updateReq.onsuccess = () => onDone();
+		updateReq.onerror = (ev) => {
+			// Not expected given the check above (no concurrent writer is
+			// possible within one transaction), but don't let a surprise
+			// here take the rest of the batch down with it.
+			ev.preventDefault();
+			onDone();
+		};
+	};
+	checkReq.onerror = () => onDone();
+}
+
 /**
  * Bulk-renames a collection tag across all matching, non-deleted items via a
  * cursor — not getAll()+replaceAll(), which would clear the whole store and
@@ -426,9 +552,10 @@ export async function renameCollectionTag(oldName: string, newName: string): Pro
 			if (!item.deleted_at && item.queue_tag === oldName) {
 				item.queue_tag = newName;
 				item.updated_at = now;
-				cursor.update(item);
+				applyTagChangeSkippingCollisions(store, cursor, item, () => cursor.continue());
+			} else {
+				cursor.continue();
 			}
-			cursor.continue();
 		};
 		cursorReq.onerror = () => reject(cursorReq.error);
 		tx.oncomplete = () => {
@@ -452,11 +579,12 @@ export async function clearCollectionTag(name: string): Promise<void> {
 			if (!cursor) return;
 			const item = cursor.value as WatchlistItem;
 			if (!item.deleted_at && item.queue_tag === name) {
-				item.queue_tag = undefined;
+				item.queue_tag = QUEUE_TAG_NONE;
 				item.updated_at = now;
-				cursor.update(item);
+				applyTagChangeSkippingCollisions(store, cursor, item, () => cursor.continue());
+			} else {
+				cursor.continue();
 			}
-			cursor.continue();
 		};
 		cursorReq.onerror = () => reject(cursorReq.error);
 		tx.oncomplete = () => {

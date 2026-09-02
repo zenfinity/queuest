@@ -84,27 +84,25 @@ describe('addAllToQueue', () => {
 		expect(state.addError).toBe('');
 	});
 
-	it('counts a ConstraintError (already in queue) as a skip, not a failure', async () => {
+	// #221 — the store's uniqueness is per list, so a ConstraintError here can
+	// only mean "already have this exact title in this exact target list";
+	// existingTag is always the target tag itself once the row isn't a
+	// tombstone (see getItemByTmdbId's own doc comment). Which list the
+	// *existing* row happens to be tagged is no longer looked up for this —
+	// that's what stopped being a conflict at all (see the "different list"
+	// test below).
+	it('counts a ConstraintError (already in this exact list) as a skip, not a failure', async () => {
 		const { state, deps } = makeDeps();
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
-		getItemByTmdbId.mockResolvedValue({ id: 1, queue_tag: 'Horror October', deleted_at: null });
+		getItemByTmdbId.mockResolvedValue({ id: 1, queue_tag: 'My Queue', deleted_at: null });
 
 		await addAllToQueue([makeShareItem()], 'My Queue', deps);
 
-		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: 'Horror October' }]);
+		expect(getItemByTmdbId).toHaveBeenCalledWith(100, 'movie', 'My Queue');
+		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: 'My Queue' }]);
 		expect(state.addedCount).toBe(0);
 		expect(state.addDone).toBe(true);
 		expect(state.addError).toBe('');
-	});
-
-	it('attributes a skip to the untagged queue when the existing row has no tag', async () => {
-		const { state, deps } = makeDeps();
-		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
-		getItemByTmdbId.mockResolvedValue({ id: 1, queue_tag: null, deleted_at: null });
-
-		await addAllToQueue([makeShareItem()], 'My Queue', deps);
-
-		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: null }]);
 	});
 
 	it('does not attribute a skip to a list when the matching row is a tombstone', async () => {

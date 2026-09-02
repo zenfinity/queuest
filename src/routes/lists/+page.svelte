@@ -361,11 +361,12 @@
 			// whole store, and getAll() (rightly) excludes soft-deleted tombstones, so replaceAll(items)
 			// would silently drop them from the store instead of leaving them for GC.
 			await renameCollectionTag(oldName, newName);
-			for (const item of items) {
-				if (item.queue_tag === oldName) {
-					item.queue_tag = newName;
-				}
-			}
+			// Re-fetch rather than hand-mutating `items` in place: since #221,
+			// a title already present under `newName` makes renameCollectionTag
+			// skip that one row (left on `oldName`, see its own comment) rather
+			// than colliding — assuming every matching item renamed would leave
+			// the UI showing a state the DB doesn't actually have.
+			items = await getAll();
 			renameCollectionColor(oldName, newName);
 			queueColors = getQueueColors();
 			collections = listCollections(items, Object.keys(queueColors));
@@ -386,13 +387,10 @@
 		manageBusy = true;
 		try {
 			// Items are never deleted, only uncategorized. Targeted cursor update — see the
-			// comment in renameCollection for why this isn't getAll()+replaceAll().
+			// comment in renameCollection for why this isn't getAll()+replaceAll(), and for
+			// why this re-fetches rather than hand-mutating `items` (#221 collision-skip).
 			await clearCollectionTag(name);
-			for (const item of items) {
-				if (item.queue_tag === name) {
-					item.queue_tag = undefined;
-				}
-			}
+			items = await getAll();
 			deleteCollectionColor(name);
 			queueColors = getQueueColors();
 			collections = listCollections(items, Object.keys(queueColors));

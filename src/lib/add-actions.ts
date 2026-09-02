@@ -57,6 +57,14 @@ async function addAndPlace(
 		deps.setAdded(result.id, true);
 	} catch (e) {
 		if (isConstraintError(e)) {
+			// #221 — the store's uniqueness is per list now, so this can only
+			// mean "already have this exact title in this exact target"
+			// (untagged, or the specific list passed in queueTag) — unlike
+			// before #221, it can no longer mean "already have it under some
+			// other list," since that case now succeeds as a second row
+			// instead of colliding. Nothing left to disambiguate: treating an
+			// exact-target repeat as an already-satisfied "add" is correct
+			// as-is, no lookup needed.
 			deps.setAdded(result.id, true);
 		} else {
 			const msg = e instanceof Error ? e.message : 'Failed to add';

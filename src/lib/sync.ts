@@ -2,7 +2,7 @@
 // encrypted-blob API in a merge-then-push loop that keeps this device's
 // IndexedDB and the server's opaque blob converged, without ever letting the
 // server see plaintext or this device's local (autoIncrement) ids.
-import { itemKey, type WatchlistItem, type Provider } from './types';
+import type { WatchlistItem, Provider } from './types';
 import {
 	getAllIncludingDeleted,
 	replaceAll,
@@ -124,14 +124,13 @@ export async function restoreSyncState(): Promise<void> {
 }
 
 // ── Merge (the reviewable core) ──────────────────────────────────────────
-// Merge key: [tmdb_id, media_type] — the same compound unique index db.ts
-// already enforces (src/lib/db.ts's tmdb_media index). Field-group merge,
-// not whole-item LWW: blind LWW would lose real work (device A marks
-// something watched while device B updates its own copy of the same title —
-// one edit silently wins and the other vanishes). Instead, whichever side
-// has the newer updated_at wins every field *except* watched_seasons, which
-// unions — monotonic and conflict-free, matching what the user meant by
-// marking a season watched on either device.
+// Base identity: [tmdb_id, media_type] — was also the whole merge key before
+// #221. Field-group merge, not whole-item LWW: blind LWW would lose real
+// work (device A marks something watched while device B updates its own
+// copy of the same title — one edit silently wins and the other vanishes).
+// Instead, whichever side has the newer updated_at wins every field *except*
+// watched_seasons, which unions — monotonic and conflict-free, matching what
+// the user meant by marking a season watched on either device.
 //
 // (The originating issue's merge table lists per-field LWW groups —
 // watched_at/current_season/current_episode, queue_tag/title,
@@ -164,23 +163,83 @@ function mergeOne(local: LocalItem | undefined, remote: BackupItem | undefined):
 	return { ...winner, id: local.id, added_at, watched_seasons };
 }
 
+function baseKey(item: { tmdb_id: number; media_type: 'movie' | 'tv' }): string {
+	return `${item.media_type}:${item.tmdb_id}`;
+}
+
+function groupByBaseKey<T extends { tmdb_id: number; media_type: 'movie' | 'tv' }>(
+	items: T[]
+): Map<string, T[]> {
+	const map = new Map<string, T[]>();
+	for (const item of items) {
+		const k = baseKey(item);
+		const group = map.get(k);
+		if (group) group.push(item);
+		else map.set(k, [item]);
+	}
+	return map;
+}
+
 /**
  * Merges this device's full local state (including tombstones) against a
  * remote snapshot just pulled from the server, producing the list to hand
  * to replaceAll(). Every local id is preserved; remote-only items get no id
  * so IndexedDB's key generator assigns one.
+ *
+ * Since #221, the store's uniqueness constraint is per list (queue_tag), not
+ * global — the same title can legitimately have more than one row. That
+ * can't just become the merge key, though: an ordinary list move (one device
+ * changes queue_tag, the other hasn't synced yet) would then look like
+ * "local added a new copy, remote kept the old one" — an edit misread as a
+ * duplicate, which is exactly what #221's own scope note rules out ("manual
+ * list reassignment should keep moving an item between lists, not
+ * duplicating it").
+ *
+ * So this groups by the base identity (tmdb_id+media_type) first, same as
+ * before #221, and only splits into per-queue_tag matching once a genuine
+ * multi-list scenario already exists on at least one side (more than one
+ * row sharing the base key) — that can only happen through a deliberate
+ * multi-add (import, or adding the same title to a second list), never
+ * through a single row's queue_tag changing. The common case — at most one
+ * copy per side, which is still effectively all of today's usage — merges
+ * exactly as it did before, with queue_tag as just another LWW-governed
+ * field.
+ *
+ * Known gap: a move and an independent concurrent multi-list add for the
+ * *same* title, on two devices, before either syncs, can still produce a
+ * spurious extra row (there's no stable cross-device row id to disambiguate
+ * "moved" from "added elsewhere" once both sides show 2+ copies). Rare, and
+ * the fix is deleting the stray row, not lost data — a real per-row identity
+ * would close this properly but is a materially bigger change than this
+ * migration.
  */
 export function mergeItems(local: LocalItem[], remote: BackupItem[]): MergeCandidate[] {
-	const localByKey = new Map<string, LocalItem>();
-	for (const item of local) localByKey.set(itemKey(item), item);
+	const localByBase = groupByBaseKey(local);
+	const remoteByBase = groupByBaseKey(remote);
 
-	const remoteByKey = new Map<string, BackupItem>();
-	for (const item of remote) remoteByKey.set(itemKey(item), item);
-
-	const keys = new Set([...localByKey.keys(), ...remoteByKey.keys()]);
 	const merged: MergeCandidate[] = [];
-	for (const key of keys) {
-		merged.push(mergeOne(localByKey.get(key), remoteByKey.get(key)));
+	const baseKeys = new Set([...localByBase.keys(), ...remoteByBase.keys()]);
+	for (const key of baseKeys) {
+		const localGroup = localByBase.get(key) ?? [];
+		const remoteGroup = remoteByBase.get(key) ?? [];
+
+		if (localGroup.length <= 1 && remoteGroup.length <= 1) {
+			merged.push(mergeOne(localGroup[0], remoteGroup[0]));
+			continue;
+		}
+
+		const remoteByTag = new Map(remoteGroup.map((item) => [item.queue_tag ?? '', item]));
+		const matchedTags = new Set<string>();
+		for (const item of localGroup) {
+			const tag = item.queue_tag ?? '';
+			matchedTags.add(tag);
+			merged.push(mergeOne(item, remoteByTag.get(tag)));
+		}
+		for (const item of remoteGroup) {
+			const tag = item.queue_tag ?? '';
+			if (matchedTags.has(tag)) continue;
+			merged.push(mergeOne(undefined, item));
+		}
 	}
 	return merged;
 }
