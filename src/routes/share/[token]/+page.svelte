@@ -141,7 +141,12 @@
 						</button>
 					{/if}
 				{/if}
-				<Button href={resolve('/app')} class="px-4 py-2 text-sm">Build your own queue →</Button>
+				<!-- Routes through the same setup screen the landing page's CTA
+				     does (#242) rather than straight to an empty /app — this
+				     visitor hasn't been through it either. -->
+				<Button href={resolve('/add?onboarding=1')} class="px-4 py-2 text-sm"
+					>Build your own queue →</Button
+				>
 			</div>
 		</div>
 	</div>

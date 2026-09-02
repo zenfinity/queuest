@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0] — 2026-09-02
+
+### Invite-flow copy rewrite (#242, final piece)
+
+Third and final piece of the onboarding redesign. Opening an invite link now leads with an outcome-specific reason to sign up ("Create your account to see {list}") instead of generic "set up sync" copy, with the encryption/privacy explanation tucked into a "Why do I need an account?" disclosure instead of always competing with the button for attention. Landing in an empty personal queue via an invite (or a read-only share link) now leads into the same setup screen the front door does, instead of a bare "search to get started" link.
+
+This closes out #242 — all three pieces (setup screen, hint de-floating, invite-flow copy) have shipped.
+
 ## [1.7.0] — 2026-09-02
 
 ### Onboarding hints move in-flow (#242, fixes #239)

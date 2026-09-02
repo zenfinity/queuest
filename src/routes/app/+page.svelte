@@ -737,19 +737,22 @@
 				></div>{/each}
 		</div>
 
-		<!-- Empty: no items in queue at all -->
+		<!-- Empty: no items in queue at all. Routes into the same setup screen
+		     Flow A's landing CTA does (#242) — reached this way by anyone who
+		     skipped it entirely, most notably an invite-flow signup landing
+		     here with nothing queued yet. Deliberately a CTA, not an
+		     auto-redirect: someone who emptied an existing queue on purpose
+		     should still be able to just look at an empty queue. -->
 	{:else if items.length === 0}
 		<div class="flex flex-col items-center justify-center py-12 text-center xs:py-24">
 			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🎬</p>
 			<p class="text-base font-medium text-gray-700 xs:text-lg dark:text-gray-300">
 				Your queue is empty
 			</p>
-			<p class="mt-1 text-sm text-gray-500">
-				<a class="text-orange-500 hover:underline" href={resolve('/add')}
-					>Search for movies and shows</a
-				>
-				to get started
-			</p>
+			<p class="mt-1 text-sm text-gray-500">Add a few titles and set your budget to get started.</p>
+			<Button href={resolve('/add?onboarding=1')} class="mt-4 px-5 py-2.5 text-sm">
+				Get started →
+			</Button>
 		</div>
 
 		<!-- Empty: items exist but none match the current filters -->
