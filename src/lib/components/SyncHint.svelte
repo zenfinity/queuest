@@ -1,30 +1,21 @@
 <script lang="ts">
-	// Onboarding nudge toward sync (#191) — shown once a queue represents real
-	// investment (its own trigger threshold, computed by the caller) and sync
-	// isn't already on. #191's original proposal also included "second device
-	// detected" as a trigger, but that needs an account to observe in the
-	// first place — a chicken-and-egg signal for a hint whose whole point is
-	// getting someone to create one. Left out rather than faked.
-	//
-	// Copy is deliberately plain, not a cheerful "keep your queue everywhere!"
-	// pitch — #191 calls this out explicitly: sync means a passphrase and a
-	// recovery code, and losing both is unrecoverable by design. That's a real
-	// tradeoff worth one honest sentence, not something to gloss over to sell
-	// the feature.
+	// Permanent footer line at the foot of the queue (#242, formerly a
+	// dismiss-once floating pill triggered past a size/watched threshold —
+	// #191). Always visible once there's something in the queue and sync
+	// isn't already on, rather than nudging past some "you've invested
+	// enough now" line — the tradeoff it states (a passphrase and a
+	// recovery code you can't lose) deserves to be legible whenever it's
+	// relevant, not sprung once and then gone.
 	import { resolve } from '$app/paths';
-	import Hint from './Hint.svelte';
 
-	let { show = false }: { show?: boolean } = $props();
+	let { show = false, count = 0 }: { show?: boolean; count?: number } = $props();
 </script>
 
-<Hint {show} dismissKey="sq:sync-hint-dismissed">
-	{#snippet children(dismiss)}
-		Keep this queue on your other devices too — end-to-end encrypted, we can't read it. Set up
-		<a
-			href={resolve('/settings#sync')}
-			onclick={dismiss}
-			class="font-medium text-orange-400 underline">Sync</a
-		>
-		(keep the recovery code it gives you — losing both it and your passphrase means losing the data).
-	{/snippet}
-</Hint>
+{#if show}
+	<p class="mt-8 text-center text-xs leading-relaxed text-gray-400 dark:text-gray-600">
+		{count} title{count === 1 ? '' : 's'}, on this browser only.
+		<a href={resolve('/settings#sync')} class="font-medium text-orange-500 hover:underline">Sync</a>
+		puts them on your other devices, encrypted so we can't read them — it needs a passphrase and a recovery
+		code you can't lose.
+	</p>
+{/if}

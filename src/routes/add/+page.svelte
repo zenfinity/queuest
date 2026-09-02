@@ -19,9 +19,9 @@
 	} from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
 	import { services, setSubscribedIds } from '$lib/services.svelte';
+	import { triggerNavHint } from '$lib/nav-hint.svelte';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
-	import NavHint from '$lib/components/NavHint.svelte';
 	import AddToListButton from '$lib/components/AddToListButton.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import { addSearchResultToQueue, addSearchResultToList } from '$lib/add-actions';
@@ -199,8 +199,12 @@
 				else adding.delete(id);
 			},
 			setAdded: (id, isAdded) => {
-				if (isAdded) added.add(id);
-				else added.delete(id);
+				if (isAdded) {
+					added.add(id);
+					triggerNavHint();
+				} else {
+					added.delete(id);
+				}
 			},
 			setError: (id, message) => {
 				if (message) errors.set(id, message);
@@ -224,8 +228,6 @@
 <svelte:head>
 	<title>Queuest — Add</title>
 </svelte:head>
-
-<NavHint show={added.size > 0} />
 
 <h1 class="sr-only">Add</h1>
 

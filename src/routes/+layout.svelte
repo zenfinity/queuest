@@ -9,7 +9,9 @@
 	import { initSyncTriggers } from '$lib/sync';
 	import '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
+	import { dismissNavHint } from '$lib/nav-hint.svelte';
 	import QueueDock from '$lib/components/QueueDock.svelte';
+	import NavHint from '$lib/components/NavHint.svelte';
 
 	let { children } = $props();
 
@@ -123,6 +125,7 @@
 		if (currentIndex === -1) return; // not on a main-tab page (settings, search, landing)
 		const target = navLinks[currentIndex + direction];
 		if (target) void goto(resolve(target.href));
+		dismissNavHint(); // swipe/Alt+arrow is "used it", same as hovering the dot
 	}
 
 	function handleTouchStart(e: TouchEvent) {
@@ -255,15 +258,20 @@
 				<div class="flex items-end gap-5 sm:gap-6">
 					{#each navLinks as link (link.href)}
 						{@const active = isActive(link.href, link.exact)}
+						{@const isQueueTab = link.href === '/app'}
 						<a
 							use:tabRef={link.href}
 							class="relative z-10 flex items-center px-0 py-1.5 text-xs font-medium transition-colors sm:px-0.5 sm:py-2 sm:text-sm
+								{isQueueTab ? 'group' : ''}
 								{active
 								? 'text-gray-900 dark:text-white'
 								: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
 							href={resolve(link.href)}
+							onmouseenter={isQueueTab ? dismissNavHint : undefined}
+							onfocus={isQueueTab ? dismissNavHint : undefined}
 						>
 							{link.label}
+							{#if isQueueTab}<NavHint />{/if}
 						</a>
 					{/each}
 				</div>
