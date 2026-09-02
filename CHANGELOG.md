@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.0] — 2026-09-02
+
+### Fix: shared-list full-page view was a frozen duplicate, missing 8 features (#243)
+
+Clicking into a shared list from the Lists page landed on `/lists/[id]`, a separately-maintained copy of the same UI that lives in `SharedListSection` — it had drifted out of sync with every shared-list feature shipped since it was written (notes, item detail view, remove item, ballot drag-reorder, filters, sort, grid/list/compact view modes, the ranking hint). It's now a thin host around `SharedListSection`'s existing `inline` mode, so it inherits everything automatically and can't drift again. Also ported the one feature the old page had and `SharedListSection` didn't — small avatars showing who's watched each item — so both surfaces have it.
+
+### chore: collapse repeated logic scaffolding (#244)
+
+Three independent cleanups, no behavior change: the five IndexedDB item-mutation functions in `db.ts` (mark watched, note, tag, progress, refreshed metadata) shared the same ~22 lines of get→mutate→put boilerplate, now a single helper; the three server routes that fetch a title's providers/runtime from TMDB and assemble the same ~11-field bundle now share one `hydrateMedia()` step instead of independently re-implementing it (each new TMDB field previously had to be added by hand in three places); and the `tmdb_id`+`media_type` identity key the collections/sync merge system runs on, previously defined six times across the codebase, now has one definition.
+
 ## [1.4.0] — 2026-09-01
 
 ### Drag-and-drop reordering for Rank sort and shared-list ballots (#231)
