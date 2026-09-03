@@ -248,7 +248,8 @@ describe('db: watchlist items', () => {
 			'Director Name',
 			7,
 			'Creator Name',
-			'tt0111161'
+			'tt0111161',
+			'/backdrop.jpg'
 		);
 
 		const item = (await db.getAll())[0];
@@ -262,6 +263,7 @@ describe('db: watchlist items', () => {
 		expect(item.director).toBe('Director Name');
 		expect(item.director_id).toBe(7);
 		expect(item.creator).toBe('Creator Name');
+		expect(item.backdrop_path).toBe('/backdrop.jpg');
 		expect(item.imdb_id).toBe('tt0111161');
 	});
 

@@ -24,12 +24,9 @@ export function setPendingInvite(invite: PendingInvite): void {
 	}
 }
 
-/** Reads and clears in one step — single-use, same as the invite token itself. */
-export function takePendingInvite(): PendingInvite | null {
+function parseStored(raw: string | null): PendingInvite | null {
+	if (!raw) return null;
 	try {
-		const raw = sessionStorage.getItem(KEY);
-		if (!raw) return null;
-		sessionStorage.removeItem(KEY);
 		const parsed: unknown = JSON.parse(raw);
 		if (
 			parsed &&
@@ -42,5 +39,34 @@ export function takePendingInvite(): PendingInvite | null {
 		return null;
 	} catch {
 		return null;
+	}
+}
+
+/** Reads and clears in one step — single-use, same as the invite token itself. */
+export function takePendingInvite(): PendingInvite | null {
+	try {
+		const raw = sessionStorage.getItem(KEY);
+		if (!raw) return null;
+		sessionStorage.removeItem(KEY);
+		return parseStored(raw);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Non-consuming read — for deciding *how* to render a screen before the
+ * invite is actually claimed (e.g. Settings jumping straight to the signup
+ * form instead of its default choose-account-vs-sign-in screen). Settings
+ * still calls takePendingInvite() itself, after sync actually turns on, to
+ * consume the stash and drive the post-signup redirect back to the invite —
+ * peeking here must never be the thing that clears it, or that later read
+ * would come back empty.
+ */
+export function hasPendingInvite(): boolean {
+	try {
+		return parseStored(sessionStorage.getItem(KEY)) !== null;
+	} catch {
+		return false;
 	}
 }

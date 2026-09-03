@@ -26,7 +26,7 @@
 		deleteAccount
 	} from '$lib/sync-account-actions';
 	import { getQueueName, setQueueName } from '$lib/queue-colors';
-	import { takePendingInvite } from '$lib/pending-invite';
+	import { takePendingInvite, hasPendingInvite } from '$lib/pending-invite';
 	import { scrollToHashTarget } from '$lib/scroll-to-hash';
 	import Button from '$lib/components/Button.svelte';
 	import pkg from '../../../package.json';
@@ -319,7 +319,16 @@
 		myQueueName = getQueueName();
 
 		syncEnabled = await isSyncEnabled();
-		if (syncEnabled) syncView = 'status';
+		if (syncEnabled) {
+			syncView = 'status';
+		} else if (hasPendingInvite()) {
+			// Arrived via an invite's "Create account" CTA (#265) — the whole
+			// reason they're here is already decided, so the choose-account-vs-
+			// sign-in screen has nothing left to disambiguate. Peeking (not
+			// taking) leaves the stash intact for the $effect below, which
+			// consumes it for real once signup actually completes.
+			syncView = 'signup';
+		}
 
 		// This page is ssr=false, so the initial HTML is an empty shell — the
 		// browser's native #sync anchor-scroll (from the invite CTA, #265) has

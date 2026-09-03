@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.13.0] — 2026-09-03
+
+### Fix: invite path made you click "Create account" twice (follow-up to #265)
+
+The invite CTA correctly said "Create account" and landed on the Sync section as of #265 — but Settings still opened on its default choose-account-vs-sign-in screen, which for this specific arrival has nothing left to disambiguate: the visitor already told the app what they want by clicking a button that said exactly that. Settings now peeks (not consumes) the pending-invite stash at mount and jumps straight to the signup form when one's found, skipping the redundant middle screen. The actual consuming read still happens later, unchanged, to drive the post-signup redirect back to the invite — peeking must never be what clears that stash, or the redirect would find nothing there. A "Back" link still reaches the normal choose screen for anyone who decides they actually want to sign in to an existing account instead.
+
+### Feature: desktop-only hero backdrop in the detail panel (#133)
+
+`backdrop_path` — TMDB's wide 16:9 image, distinct from the poster — is now fetched, stored, and threaded through sync/export alongside every other TMDB-derived field, and rendered as a banner above the poster+meta row in the detail panel's desktop drawer. Mobile's bottom sheet is untouched (this was tried once before, in v0.4.0, and reverted for eating the mobile layout's tight vertical space — the `sm:`-only gate here is specifically to not repeat that). Existing items pick up a backdrop the next time Settings → Refresh Data runs; no migration needed, same as every other optional field of this kind.
+
 ## [1.12.0] — 2026-09-03
 
 ### Fix: invite CTA button overlapped its own label, and said the wrong thing (#264, #265)

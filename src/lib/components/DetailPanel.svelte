@@ -26,6 +26,7 @@
 		genres?: string[];
 		cast?: CastMember[];
 		imdb_id?: string | null;
+		backdrop_path?: string | null;
 		providers: Provider[];
 		rentable?: boolean;
 		release?: ReleaseInfo | null;
@@ -205,6 +206,21 @@
 
 	<!-- Scrollable content -->
 	<div class="flex-1 overflow-y-auto">
+		<!-- Backdrop hero (#133) — desktop-only (the drawer, not the mobile bottom
+		     sheet, which is what a past attempt at this ate the vertical space
+		     of; see CHANGELOG v0.4.0). Gated on the same sm: breakpoint the panel
+		     itself switches layout at just above, not a separate one. w780 is
+		     plenty sharp at the drawer's 22rem width without w1280's extra
+		     weight. Fades into the panel's own background color at the bottom,
+		     same colors as the panel's own bg-white/dark:bg-gray-900. -->
+		{#if item.backdrop_path}
+			<div class="relative hidden h-[200px] w-full overflow-hidden sm:block">
+				<img src="{TMDB_IMG}/w780{item.backdrop_path}" alt="" class="h-full w-full object-cover" />
+				<div
+					class="absolute inset-0 bg-gradient-to-b from-transparent to-white dark:to-gray-900"
+				></div>
+			</div>
+		{/if}
 		<!-- Hero: poster + meta -->
 		<div class="flex gap-3 px-4 pt-4 pb-3">
 			{#if item.poster_path}

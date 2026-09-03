@@ -549,6 +549,40 @@ describe('getRuntime — cast and director person ids (#180)', () => {
 		expect(result.creator).toBe('Some Creator');
 		expect(result.director_id).toBeNull();
 	});
+
+	it('captures backdrop_path for a movie (#133)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					runtime: 120,
+					genres: [],
+					backdrop_path: '/movie-backdrop.jpg',
+					credits: { cast: [], crew: [] }
+				})
+			)
+		);
+		const result = await getRuntime(1, 'movie', 'key');
+		expect(result.backdrop_path).toBe('/movie-backdrop.jpg');
+	});
+
+	it('captures backdrop_path for a TV show, and defaults to null when TMDB omits it (#133)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				OK({
+					number_of_episodes: 1,
+					episode_run_time: [30],
+					seasons: [],
+					networks: [],
+					genres: [],
+					credits: { cast: [] }
+				})
+			)
+		);
+		const result = await getRuntime(1, 'tv', 'key');
+		expect(result.backdrop_path).toBeNull();
+	});
 });
 
 describe('getPersonExternalId (#180)', () => {
