@@ -12,7 +12,10 @@ export function uniqueEmail(): string {
 
 export async function signUp(page: Page, email: string): Promise<void> {
 	await page.goto('/settings?__e2e=1');
-	await page.getByRole('button', { name: 'Enable sync' }).click();
+	// Two distinct "Create account" buttons exist in sequence, never both in
+	// the DOM at once — this one switches choose -> signup view (#265 renamed
+	// it from "Enable sync"); the one below (line 19) submits that form.
+	await page.getByRole('button', { name: 'Create account' }).click();
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Passphrase', { exact: true }).fill(PASSPHRASE);
 	await page.getByLabel('Confirm passphrase').fill(PASSPHRASE);

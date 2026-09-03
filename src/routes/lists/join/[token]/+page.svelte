@@ -144,7 +144,7 @@
 				<p class="text-sm text-red-500">{joinError}</p>
 			{/if}
 
-			<p class="text-xs text-gray-400">
+			<p class="text-xs text-gray-500 dark:text-gray-400">
 				This invite is single-use and expires {new Date(preview.expiresAt).toLocaleDateString()}.
 			</p>
 		</div>
