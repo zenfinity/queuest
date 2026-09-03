@@ -27,6 +27,7 @@
 	} from '$lib/sync-account-actions';
 	import { getQueueName, setQueueName } from '$lib/queue-colors';
 	import { takePendingInvite } from '$lib/pending-invite';
+	import { scrollToHashTarget } from '$lib/scroll-to-hash';
 	import Button from '$lib/components/Button.svelte';
 	import pkg from '../../../package.json';
 
@@ -319,6 +320,13 @@
 
 		syncEnabled = await isSyncEnabled();
 		if (syncEnabled) syncView = 'status';
+
+		// This page is ssr=false, so the initial HTML is an empty shell — the
+		// browser's native #sync anchor-scroll (from the invite CTA, #265) has
+		// nothing to jump to yet at that point. The Sync section itself doesn't
+		// wait on any async data, so it's already in the DOM by the time this
+		// runs; scroll to it explicitly, same pattern as budget's #suggest.
+		scrollToHashTarget();
 	});
 
 	// Resumes a shared-list invite that sent a logged-out visitor here to set
@@ -389,7 +397,7 @@
 	<div class="divider"></div>
 
 	<!-- Sync -->
-	<section class="space-y-3">
+	<section id="sync" class="space-y-3">
 		<h2 class="section-heading">Sync</h2>
 		<p class="body-text">
 			Keep your queue in sync across devices. End-to-end encrypted — Queuest never sees your data,
@@ -407,7 +415,7 @@
 					}}
 					class="px-4 py-2 text-sm"
 				>
-					Enable sync
+					Create account
 				</Button>
 				<button
 					onclick={() => {
@@ -635,7 +643,7 @@
 							Sync error
 						{/if}
 					</span>
-					<span class="text-gray-400">· {syncEmail || syncStatus.email}</span>
+					<span class="text-gray-500 dark:text-gray-400">· {syncEmail || syncStatus.email}</span>
 				</div>
 				<p class="text-xs text-gray-500 dark:text-gray-400">
 					Last synced: {formatSyncTime(syncStatus.lastSyncedAt)}

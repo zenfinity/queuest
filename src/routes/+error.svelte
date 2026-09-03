@@ -31,8 +31,6 @@
 		<p class="mt-4 text-sm text-gray-500 dark:text-gray-500">
 			{page.error?.message || "Sorry, we couldn't process your request."}
 		</p>
-		<Button href={resolve('/app')} class="mt-6 inline-block px-6 py-3 text-sm">
-			Return to Queue
-		</Button>
+		<Button href={resolve('/app')} class="mt-6 px-6 py-3 text-sm">Return to Queue</Button>
 	</div>
 </div>

@@ -424,6 +424,8 @@
 								<img
 									src="{TMDB_IMG}/w92{s.poster_path}"
 									alt=""
+									loading="lazy"
+									decoding="async"
 									class="h-9 w-6 shrink-0 rounded object-cover"
 								/>
 							{:else}
@@ -461,6 +463,8 @@
 					<img
 						src="{TMDB_IMG}/w300{result.poster_path}"
 						alt={result.title}
+						loading="lazy"
+						decoding="async"
 						class="h-full w-full object-cover"
 					/>
 				{:else}

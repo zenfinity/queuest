@@ -26,8 +26,13 @@
 		children: Snippet;
 	} = $props();
 
+	// inline-flex (not inline-block): the <a> branch is otherwise `display:
+	// inline` by UA default, which silently drops width/vertical-margin and
+	// makes vertical padding overflow the line box instead of expanding it —
+	// exactly the bug in #264. inline-flex fixes all three and centers
+	// content for call sites with a trailing glyph (e.g. "Go to my queue →").
 	const base =
-		'rounded-lg bg-orange-500 font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50';
+		'inline-flex items-center justify-center rounded-lg bg-orange-500 font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50';
 </script>
 
 {#if href}
