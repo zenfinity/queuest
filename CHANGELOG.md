@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.0] — 2026-09-03
+
+### Fix: invite CTA button overlapped its own label, and said the wrong thing (#264, #265)
+
+Two compounding bugs on the exact screen a new user sees first when a friend invites them to a shared list. `Button.svelte`'s link branch rendered as `display: inline` by browser default, which silently drops `width`/vertical-margin and makes vertical padding overflow instead of expanding the line box — the button overlapped the label above it and ignored `w-full` (#264). Separately, the invite page's "Create an account" CTA linked to `/settings#sync`, but no such anchor existed, so visitors landed at the top of Settings — three sections above Sync — and were greeted by a button that said "Enable sync" instead of anything matching what they'd just been told (#265). Fixed the component's display mode (fixes all 4 affected buttons at once), added the missing anchor with an explicit scroll (this page is `ssr=false`, so the native anchor-scroll has nothing to jump to at first paint), and renamed the button to "Create account" to match the form it already leads into.
+
+Also, from a scoped accessibility pass over the same two pages: fixed two `text-gray-400` instances missing their `dark:` pairing (too low contrast in light mode) — the sync-status email line and the invite-expiry line, both now `text-gray-500 dark:text-gray-400` like their neighbors.
+
+### Perf: lazy-load posters on the Add page (#246)
+
+`loading="lazy" decoding="async"` on the search-result grid and suggestions-dropdown posters — the first images a new user's own search populates. Part of the broader "nothing in the app lazy-loads images" finding in #246; the rest (queue views, runtime-sort comparator) is unscoped follow-up.
+
 ## [1.11.0] — 2026-09-02
 
 ### Fix: search suggestions dropdown had no keyboard navigation (#255)
