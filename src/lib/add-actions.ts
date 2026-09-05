@@ -38,6 +38,7 @@ async function addAndPlace(
 			director_id: result.director_id,
 			creator: result.creator,
 			imdb_id: result.imdb_id,
+			backdrop_path: result.backdrop_path,
 			queue_tag: queueTag
 		};
 		const created = await addItem(item);

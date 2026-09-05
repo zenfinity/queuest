@@ -32,6 +32,7 @@ function makeResult(overrides: Partial<SearchResult> = {}): SearchResult {
 		director_id: null,
 		creator: null,
 		imdb_id: null,
+		backdrop_path: null,
 		...overrides
 	};
 }

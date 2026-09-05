@@ -462,7 +462,8 @@ export async function patchProviders(
 	director?: string | null,
 	director_id?: number | null,
 	creator?: string | null,
-	imdb_id?: string | null
+	imdb_id?: string | null,
+	backdrop_path?: string | null
 ): Promise<void> {
 	return mutateItem(
 		id,
@@ -478,6 +479,7 @@ export async function patchProviders(
 			if (director_id !== undefined) item.director_id = director_id;
 			if (creator !== undefined) item.creator = creator;
 			if (imdb_id !== undefined) item.imdb_id = imdb_id;
+			if (backdrop_path !== undefined) item.backdrop_path = backdrop_path;
 		},
 		// Refreshed TMDB metadata is regenerable, not a user edit, so it must
 		// not stamp updated_at — doing so would let it win a sync LWW merge

@@ -62,6 +62,7 @@ export interface WatchlistItem {
 	creator?: string | null; // TV show creator(s) — not linkable: a joined string of possibly several names, see #180
 	imdb_id?: string | null; // e.g. "tt0111161" — from TMDB external_ids, for a "View on IMDb" link
 	notes?: string; // free-text note (#155); on a shared item, one note for the whole list, owner-editable only (UI-enforced, see setCollectionItemNote)
+	backdrop_path?: string | null; // wide 16:9 image, distinct from poster_path; powers the detail panel's desktop-only hero (#133)
 
 	// ── Collaborative Collections (#188) ────────────────────────────────────
 	// Unused by a personal (non-collection) item — the personal merge engine
@@ -112,6 +113,7 @@ export interface SearchResult {
 	director_id: number | null;
 	creator: string | null;
 	imdb_id: string | null;
+	backdrop_path: string | null;
 }
 
 export interface Suggestion {

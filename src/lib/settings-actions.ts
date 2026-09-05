@@ -58,7 +58,8 @@ export async function refreshProviders(deps: SettingsActionDeps): Promise<void> 
 				r.director,
 				r.director_id,
 				r.creator,
-				r.imdb_id
+				r.imdb_id,
+				r.backdrop_path
 			);
 			deps.setRefreshDone(results.indexOf(r) + 1);
 		}

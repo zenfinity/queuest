@@ -231,6 +231,10 @@ interface RuntimeResult {
 	/** From TMDB's external_ids, appended to the same title request — cheap,
 	 * no extra call. Powers a "View on IMDb" link on the detail panel. (#142) */
 	imdb_id: string | null;
+	/** Wide 16:9 image, distinct from poster_path — top-level on the same
+	 * /movie or /tv response this function already fetches, no extra call.
+	 * Powers the detail panel's desktop-only hero (#133). */
+	backdrop_path: string | null;
 }
 
 export async function getRuntime(
@@ -256,7 +260,8 @@ export async function getRuntime(
 			director: null,
 			director_id: null,
 			creator: null,
-			imdb_id: null
+			imdb_id: null,
+			backdrop_path: null
 		};
 
 	if (mediaType === 'movie') {
@@ -264,6 +269,7 @@ export async function getRuntime(
 			runtime?: number;
 			status?: string;
 			release_date?: string;
+			backdrop_path?: string | null;
 			genres?: Array<{ id: number; name: string }>;
 			production_companies?: Array<{ id: number }>;
 			release_dates?: {
@@ -311,7 +317,8 @@ export async function getRuntime(
 			director: directorCredit?.name ?? null,
 			director_id: directorCredit?.id ?? null,
 			creator: null,
-			imdb_id: data.external_ids?.imdb_id ?? null
+			imdb_id: data.external_ids?.imdb_id ?? null,
+			backdrop_path: data.backdrop_path ?? null
 		};
 	}
 
@@ -322,6 +329,7 @@ export async function getRuntime(
 		seasons?: Array<{ season_number: number; episode_count: number; name: string }>;
 		networks?: Array<{ id: number }>;
 		status?: string;
+		backdrop_path?: string | null;
 		next_episode_to_air?: { air_date?: string; season_number?: number } | null;
 		genres?: Array<{ id: number; name: string }>;
 		created_by?: Array<{ name: string }>;
@@ -380,7 +388,8 @@ export async function getRuntime(
 		director: null,
 		director_id: null,
 		creator,
-		imdb_id: data.external_ids?.imdb_id ?? null
+		imdb_id: data.external_ids?.imdb_id ?? null,
+		backdrop_path: data.backdrop_path ?? null
 	};
 }
 
@@ -635,6 +644,7 @@ export interface HydratedMedia {
 	director_id: number | null;
 	creator: string | null;
 	imdb_id: string | null;
+	backdrop_path: string | null;
 }
 
 /**
@@ -670,7 +680,8 @@ export async function hydrateMedia(
 		director: runtime.director,
 		director_id: runtime.director_id,
 		creator: runtime.creator,
-		imdb_id: runtime.imdb_id
+		imdb_id: runtime.imdb_id,
+		backdrop_path: runtime.backdrop_path
 	};
 }
 

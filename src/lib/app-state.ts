@@ -309,6 +309,7 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		director_id: coerceNumber(item.director_id),
 		creator: typeof item.creator === 'string' ? item.creator.slice(0, 200) : null,
 		imdb_id: validateImdbId(item.imdb_id),
+		backdrop_path: validatePath(item.backdrop_path),
 		...(typeof item.notes === 'string' && item.notes
 			? { notes: item.notes.slice(0, NOTE_MAX_LENGTH) }
 			: {}),

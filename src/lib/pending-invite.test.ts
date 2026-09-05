@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { setPendingInvite, takePendingInvite } from './pending-invite';
+import { setPendingInvite, takePendingInvite, hasPendingInvite } from './pending-invite';
 
 beforeEach(() => {
 	sessionStorage.clear();
@@ -29,5 +29,26 @@ describe('pending-invite', () => {
 	it('ignores a stored value missing the expected shape', () => {
 		sessionStorage.setItem('queuest-pending-invite', JSON.stringify({ token: 'only-token' }));
 		expect(takePendingInvite()).toBeNull();
+	});
+
+	describe('hasPendingInvite', () => {
+		it('is false when nothing is pending', () => {
+			expect(hasPendingInvite()).toBe(false);
+		});
+
+		it('is true once something is stashed, and does not consume it', () => {
+			setPendingInvite({ token: 'tok123', dek: 'the-dek' });
+			expect(hasPendingInvite()).toBe(true);
+			// The real assertion: peeking must not be the thing that clears it —
+			// a later takePendingInvite() (the post-signup redirect) still needs
+			// to see it.
+			expect(hasPendingInvite()).toBe(true);
+			expect(takePendingInvite()).toEqual({ token: 'tok123', dek: 'the-dek' });
+		});
+
+		it('is false for malformed or misshapen storage, same as takePendingInvite', () => {
+			sessionStorage.setItem('queuest-pending-invite', 'not json');
+			expect(hasPendingInvite()).toBe(false);
+		});
 	});
 });
