@@ -27,6 +27,7 @@
 	} from '$lib/sync-account-actions';
 	import { getQueueName, setQueueName } from '$lib/queue-colors';
 	import { takePendingInvite, hasPendingInvite } from '$lib/pending-invite';
+	import { readBoolean } from '$lib/storage';
 	import { scrollToHashTarget } from '$lib/scroll-to-hash';
 	import Button from '$lib/components/Button.svelte';
 	import pkg from '../../../package.json';
@@ -315,7 +316,7 @@
 
 	// ── Persistence ───────────────────────────────────────────────────────────
 	onMount(async () => {
-		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
+		cancelAlertsEnabled = readBoolean('sq:cancel-alerts', false);
 		myQueueName = getQueueName();
 
 		syncEnabled = await isSyncEnabled();

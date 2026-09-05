@@ -37,6 +37,7 @@
 import type { WatchlistItem, Provider, SeasonSummary, CastMember, ReleaseInfo } from './types';
 import { getAll, getAllIncludingDeleted, getServices, NOTE_MAX_LENGTH } from './db';
 import { getQueueName, getQueueColors, setQueueName } from './queue-colors';
+import { readBoolean } from './storage';
 import {
 	coerceString,
 	coerceNumber,
@@ -113,7 +114,7 @@ function buildPrefs(): AppStatePrefs {
 		sort: (readRaw('sq:sort') as AppStatePrefs['sort']) ?? 'added',
 		sortDir: (readRaw('sq:sortDir') as AppStatePrefs['sortDir']) ?? 'desc',
 		view: (readRaw('sq:view') as AppStatePrefs['view']) ?? 'grid',
-		cancelAlerts: readRaw('sq:cancel-alerts') === 'true'
+		cancelAlerts: readBoolean('sq:cancel-alerts', false)
 	};
 }
 

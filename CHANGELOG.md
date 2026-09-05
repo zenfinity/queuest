@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.0] — 2026-09-05
+
+### Chore: remove four dead `storage.ts` exports, adopt the fifth (#249)
+
+`readString`, `readArray`, and `readDate` had zero references anywhere in the codebase — not in production code, not in tests — and are deleted. `readDate` looked like a plausible fit for `sq:dismiss-cancel`'s per-provider dismissal dates, but that key stores a `Record<string, string>` of dates under one key, not a single date under its own key, so `readDate`'s shape doesn't actually apply there; the existing inline `new Date(d).getTime()` in `progress.ts`'s `cancelCandidates()` stays as is. `getLoadError` in `services.svelte.ts` is deleted the same way — no caller, ever.
+
+`readBoolean` gets adopted instead of deleted: `app-state.ts`, `settings/+page.svelte`, and `app/+page.svelte` each had their own `localStorage.getItem('sq:cancel-alerts') === 'true'`/`readRaw(...) === 'true'` one-liner for the same key. All three now call `readBoolean('sq:cancel-alerts', false)`, which is behaviorally identical (`JSON.parse` accepts bare `"true"`/`"false"` as valid JSON) but goes through the same validated read path as every other typed preference. The issue also flagged `sq:hints-disabled` as a second overlap candidate, but that key and everything that read it were already removed in #242 — nothing to adopt there.
+
 ## [1.14.0] — 2026-09-05
 
 ### Perf: lazy-load posters everywhere else, and stop re-walking seasons inside runtime sort (#246)
