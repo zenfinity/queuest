@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.18.0] — 2026-09-05
+
+### feat: minimal failure observability for sync and collaborative-collection crypto (#254)
+
+75 `catch {}` blocks across the app degrade gracefully and silently — the right call for UX, but it meant the failures that matter most (this is a distributed, end-to-end-encrypted system where the server is deliberately blind) were completely unknowable: "is sync working for everyone?" had no better answer than "nobody's complained." This adds content-free failure *counters* — no user id, no collection id, no titles, just "this failure class happened" — for the sync/crypto paths named in the issue, via a new Cloudflare Analytics Engine dataset (`queuest_failures`, binding `FAILURES` in `wrangler.toml`; created automatically on first write, no separate provisioning step). Scoped deliberately narrow, per the issue's own "worth deciding first" list: the other ~70 catches are local-only (a `localStorage` write failing under Safari private mode, etc.) and aren't worth a network call.
+
+Six failure classes, reported via a new `reportFailure()` helper (fire-and-forget, `keepalive: true`, never throws) to a new unauthenticated `POST /api/failure` endpoint (same-origin-checked, rate-limited, validated against a fixed allowlist — never an arbitrary-string sink):
+
+- `sync_409_exhausted` / `collection_sync_409_exhausted` — personal or collection sync gave up after `MAX_RETRIES` straight version conflicts.
+- `collection_key_rotated` — a collection PUT was refused because this client's wrapped key is behind the collection's current generation.
+- `collection_dek_mismatch` — **new detection, not just new reporting**: the blob GET's `X-Collection-Dek-Version` header was compared against the caller's own `memberDekVersion` *before* attempting to decrypt. That header has existed since the collections work landed specifically to let a client distinguish "encrypted under a generation I don't hold" from "corrupt" — but nothing ever actually read it. `pullCollectionBlob` (and `fetchCollectionState`/`syncCollectionItems`/`syncCollectionBallots` above it) now take an optional `expectedDekVersion` and throw the existing `CollectionKeyRotatedError` proactively on a mismatch, before wasting a decrypt attempt that was always going to fail.
+- `collection_decrypt_failed` — decrypt/gunzip/parse failed on a collection blob whose dek version *did* match what was expected: genuine corruption, not a key-generation lag.
+- `backup_item_parse_rejected` — a synced item failed `parseBackupItem`'s validation despite arriving from a source (another of the account's own devices, or a collection) that should only ever produce well-formed payloads. `deserializeAppState` now returns a `rejectedItemCount` alongside `items`; only the sync caller in `sync.ts` acts on it; the plain backup-file-import path (`import-actions.ts`) ignores it, since a hand-edited or years-old export rejecting some items isn't a distributed-system health question.
+
 ## [1.17.0] — 2026-09-05
 
 ### a11y: audit the seven suppressed warnings on the primary interaction surfaces (#256)

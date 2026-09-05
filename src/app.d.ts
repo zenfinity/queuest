@@ -4,6 +4,7 @@ declare global {
 			env?: {
 				SHARE_KV?: KVNamespace;
 				DB?: D1Database;
+				FAILURES?: AnalyticsEngineDataset;
 			};
 		}
 		interface Locals {
