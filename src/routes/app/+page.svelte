@@ -44,7 +44,7 @@
 		sharedFilterId
 	} from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
-	import { readNumber, readRecord } from '$lib/storage';
+	import { readNumber, readRecord, readBoolean } from '$lib/storage';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
@@ -330,7 +330,7 @@
 		queueControls.ready = true;
 		budgetHours = readNumber('sq:budget', DEFAULT_BUDGET_HOURS);
 		queueColors = getQueueColors();
-		cancelAlertsEnabled = localStorage.getItem('sq:cancel-alerts') === 'true';
+		cancelAlertsEnabled = readBoolean('sq:cancel-alerts', false);
 		dismissedAlerts = readRecord('sq:dismiss-cancel', {});
 
 		const hasBudget = localStorage.getItem('sq:budget:weekly') !== null;

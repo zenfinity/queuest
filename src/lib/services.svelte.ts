@@ -16,10 +16,6 @@ export function setSubscribedIds(next: Set<number>) {
 	_loadError = null;
 }
 
-export function getLoadError(): string | null {
-	return _loadError;
-}
-
 export function ensureSubscribedLoaded(): Promise<void> {
 	if (_loaded || _loadError) return Promise.resolve();
 	if (_promise) return _promise;
