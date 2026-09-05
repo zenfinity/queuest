@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.17.0] — 2026-09-05
+
+### a11y: audit the seven suppressed warnings on the primary interaction surfaces (#256)
+
+Worked each of the suppressed `a11y_click_events_have_key_events`/`a11y_no_static_element_interactions` pairs in `QueueGridView.svelte`, `QueueListView.svelte`, and `DetailPanel.svelte` per the issue's own framework: is this element missing real keyboard reachability, or is the suppression correct and just undocumented?
+
+- **6 of 8 suppressions already had solid explanatory comments** from earlier work — the drag handles and the card/row "click is a convenience only" wrappers. Nothing to change there.
+- **DetailPanel's 2 suppressions (the scrim, the poster lightbox) had none** — both are legitimate (a proper Close button and Escape already cover keyboard dismissal), so they get the same comment treatment now.
+- **Keyboard-reachability of drag-and-drop, checked empirically**: `svelte-dnd-action`'s built-in keyboard mode (Tab to the handle, Space to pick up, arrow keys to move, Space to drop) already works — confirmed with a real browser test, not just reading the docs. The existing move-up/move-down buttons are a second, independent path. No fix needed; this was already correct and already documented in the code comments.
+- **Tab-order pass on the queue card**: poster → season toggles → drag handle/rank buttons → watched toggle → remove, in that order in the DOM — matches the visual top-to-bottom reading order. No fix needed.
+- **Contrast audit found a real, systemic bug**: `text-gray-400` paired with `dark:text-gray-500`/`dark:text-gray-600` — the reverse of the correct pairing — was used for secondary text (section labels, item counts, cast names, instructional copy) across `app.css`'s shared `panel-label` utility (used by 6 components) plus several inline instances in the three audited files. `text-gray-400` on white is 2.54:1 (WCAG AA requires 4.5:1 for normal text); the dark-mode pairing was failing too (`gray-600` on `gray-900` is 2.35:1). Fixed by swapping to `text-gray-500 dark:text-gray-400` — the pairing already used correctly elsewhere in the same files (4.83:1 light, 6.99:1 dark) — everywhere the text conveys real information. Purely decorative fallback glyphs (the missing-poster 🎬 placeholder, the missing-photo 👤 placeholder) are left alone; contrast requirements are for text/icons that convey information, not backdrop decoration.
+- **Related but out of scope**: `QueueDock.svelte`'s sort-direction toggle button has the same reversed-pairing bug. Left alone since it's outside the three files this issue names — worth its own small follow-up.
+
 ## [1.16.0] — 2026-09-05
 
 ### Chore: dependency maintenance — clears 6 of 9 audit findings (#250)

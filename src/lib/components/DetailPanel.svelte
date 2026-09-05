@@ -166,7 +166,10 @@
 	}}
 />
 
-<!-- Scrim -->
+<!-- Scrim — click-to-dismiss is a convenience only; the panel itself is
+     already keyboard-reachable via the Close button (aria-label="Close",
+     below) and via Escape (trapFocus's onEscape on the panel div), so this
+     backdrop is deliberately not a second, nested interactive element. -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onclick={close}></div>
@@ -193,7 +196,7 @@
 		</h2>
 		<button
 			onclick={close}
-			class="shrink-0 rounded-full p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+			class="shrink-0 rounded-full p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
 			aria-label="Close"
 		>
 			<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"
@@ -297,7 +300,7 @@
 			{#if onSetCollection}
 				<div class="flex items-center justify-between gap-2">
 					<span
-						class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+						class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
 						>List</span
 					>
 					<div class="flex min-w-0 items-center gap-2">
@@ -348,7 +351,7 @@
 			{#if onSetNote || item.notes}
 				<div>
 					<span
-						class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+						class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
 					>
 						Notes
 					</span>
@@ -407,7 +410,7 @@
 				<span class="shrink-0 text-[10px] tabular-nums text-gray-500">
 					{formatRuntime(runtimeMins, item.media_type)}
 					{#if item.runtime_minutes && item.media_type === 'tv'}<span
-							class="text-gray-400 dark:text-gray-600"
+							class="text-gray-500 dark:text-gray-400"
 						>
 							/ {formatRuntime(item.runtime_minutes, item.media_type)}</span
 						>{/if}
@@ -453,7 +456,7 @@
 									</p>
 								{/if}
 								<p
-									class="text-center text-[9px] leading-tight text-gray-400 dark:text-gray-600 line-clamp-1"
+									class="text-center text-[9px] leading-tight text-gray-500 dark:text-gray-400 line-clamp-1"
 								>
 									{c.character}
 								</p>
@@ -462,7 +465,7 @@
 					</div>
 				</div>
 			{:else if !item.cast}
-				<p class="text-[10px] text-gray-400 dark:text-gray-600">
+				<p class="text-[10px] text-gray-500 dark:text-gray-400">
 					Run <strong>Settings → Refresh Data</strong> to load cast info.
 				</p>
 			{/if}
@@ -575,7 +578,11 @@
 	</div>
 </div>
 
-<!-- Poster lightbox -->
+<!-- Poster lightbox — click-anywhere-to-dismiss doesn't need its own
+     key handler since the element already has a real role/tabindex and a
+     working keyboard dismissal path (Escape, via trapFocus's onEscape);
+     a11y_no_static_element_interactions doesn't fire here at all because
+     role="dialog" makes this a non-static element already. -->
 {#if posterExpanded && item.poster_path}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div

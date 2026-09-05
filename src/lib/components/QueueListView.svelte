@@ -182,7 +182,7 @@
 					{item.watched_at ? 'Unwatch' : '✓'}
 				</button>
 				<button
-					class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-red-900/50 dark:hover:text-red-400"
+					class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
 					disabled={busy.has(item.id)}
 					onclick={(e) => {
 						e.stopPropagation();
@@ -213,7 +213,7 @@
 					/>
 				{/each}
 				{#if item.providers.length > 3}
-					<span class="text-[9px] text-gray-400 dark:text-gray-600"
+					<span class="text-[9px] text-gray-500 dark:text-gray-400"
 						>+{item.providers.length - 3}</span
 					>
 				{/if}
@@ -235,7 +235,7 @@
 					<div
 						class="absolute top-full left-0 z-20 mt-1 w-max rounded-lg bg-white px-3 py-2 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-700"
 					>
-						<p class="mb-1.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500">
+						<p class="mb-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
 							Check your library
 						</p>
 						<div class="flex flex-col gap-1">
@@ -308,8 +308,8 @@
 					>
 						{section.name}
 					</h3>
-					<span class="text-[10px] text-gray-400 dark:text-gray-600">{section.items.length}</span>
-					<span class="text-[10px] text-gray-400 dark:text-gray-600"
+					<span class="text-[10px] text-gray-500 dark:text-gray-400">{section.items.length}</span>
+					<span class="text-[10px] text-gray-500 dark:text-gray-400"
 						>· {hms(sectionRemainingMins)}</span
 					>
 				</div>
