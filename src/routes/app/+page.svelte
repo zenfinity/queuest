@@ -250,10 +250,16 @@
 
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
 		const mul = queueControls.sortDir === 'asc' ? 1 : -1;
+		// remainingRuntime() walks the item's seasons, so compute it once per
+		// item (#246) rather than ~2·N·log N times inside the comparator.
+		const runtimeOf =
+			queueControls.sortBy === 'runtime'
+				? new Map(list.map((item) => [item, remainingRuntime(item)]))
+				: null;
 		return [...list].sort((a, b) => {
 			if (queueControls.sortBy === 'title') return a.title.localeCompare(b.title) * mul;
-			if (queueControls.sortBy === 'runtime') {
-				return (remainingRuntime(a) - remainingRuntime(b)) * mul;
+			if (runtimeOf) {
+				return ((runtimeOf.get(a) ?? 0) - (runtimeOf.get(b) ?? 0)) * mul;
 			}
 			if (queueControls.sortBy === 'rank') {
 				return ((a.sort_order ?? 0) - (b.sort_order ?? 0)) * mul;

@@ -272,9 +272,13 @@
 				return a.added_at.localeCompare(b.added_at) * mul;
 			});
 		}
+		// rt() walks the item's seasons, so compute it once per item (#246)
+		// rather than ~2·N·log N times inside the comparator.
+		const runtimeOf =
+			queueControls.sortBy === 'runtime' ? new Map(list.map((item) => [item, rt(item)])) : null;
 		return [...list].sort((a, b) => {
 			if (queueControls.sortBy === 'title') return a.title.localeCompare(b.title) * mul;
-			if (queueControls.sortBy === 'runtime') return (rt(a) - rt(b)) * mul;
+			if (runtimeOf) return ((runtimeOf.get(a) ?? 0) - (runtimeOf.get(b) ?? 0)) * mul;
 			return a.added_at.localeCompare(b.added_at) * mul;
 		});
 	});
@@ -333,6 +337,8 @@
 				<img
 					src="{TMDB_IMG}/w300{item.poster_path}"
 					alt={item.title}
+					loading="lazy"
+					decoding="async"
 					class="h-full w-full object-cover"
 				/>
 			{:else}
@@ -460,6 +466,8 @@
 					<img
 						src="{TMDB_IMG}/w92{item.poster_path}"
 						alt={item.title}
+						loading="lazy"
+						decoding="async"
 						class="h-full w-full object-cover"
 					/>
 				{:else}
@@ -593,6 +601,8 @@
 			<img
 				src="{TMDB_IMG}/w92{item.poster_path}"
 				alt=""
+				loading="lazy"
+				decoding="async"
 				class="h-16 w-11 shrink-0 rounded object-cover bg-gray-200 dark:bg-gray-700"
 			/>
 		{:else}

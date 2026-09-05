@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.14.0] — 2026-09-05
+
+### Perf: lazy-load posters everywhere else, and stop re-walking seasons inside runtime sort (#246)
+
+Follow-up to the partial pass in #246/v1.12.0, which only covered the Add page. `loading="lazy" decoding="async"` is now on every remaining poster `<img>` — the Grid, List, and Gantt queue views, all three density levels of `SharedListSection`, and the public share page — so opening a large queue no longer fires every poster request at once, eagerly, before anything's scrolled into view. The detail panel's own poster and backdrop are deliberately left eager, since they're on-screen the moment the panel opens.
+
+Separately, `remainingRuntime()` — which allocates a `Set` and walks the item's seasons — was being called twice per comparison inside the "sort by runtime" comparator in both `app/+page.svelte` and `SharedListSection.svelte`, for a value that doesn't change during the sort. Both now compute it once per item into a `Map` before sorting (the same decorate-sort-undecorate shape already used for the Group Ranking sort, #229), cutting roughly 2·N·log N calls down to N. Not a fix for a user-visible stall — the honest scale is single-digit milliseconds — just a couple of lines matching a pattern already established elsewhere.
+
 ## [1.13.0] — 2026-09-03
 
 ### Fix: invite path made you click "Create account" twice (follow-up to #265)

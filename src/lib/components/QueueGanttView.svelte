@@ -303,6 +303,8 @@
 									<img
 										src="{TMDB_IMG}/w92{item.poster_path}"
 										alt=""
+										loading="lazy"
+										decoding="async"
 										class="h-full shrink-0 object-cover"
 										style="width:{posterW}px;"
 									/>
