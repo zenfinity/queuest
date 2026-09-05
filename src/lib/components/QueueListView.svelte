@@ -103,6 +103,8 @@
 				<img
 					src="{TMDB_IMG}/w92{item.poster_path}"
 					alt={item.title}
+					loading="lazy"
+					decoding="async"
 					class="h-full w-full object-cover"
 				/>
 			{:else}
