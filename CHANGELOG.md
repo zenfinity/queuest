@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.16.0] — 2026-09-05
+
+### Chore: dependency maintenance — clears 6 of 9 audit findings (#250)
+
+An audit pass found the dependency tree itself lean (nothing unused, nothing to discard) but the maintenance behind it stale. This lands the safe part of that pass:
+
+- **`wrangler` 4.90.0 → 4.129.0** (38 minor versions), which also required bumping **`@cloudflare/workers-types` 4.x → 5.x** — wrangler's own peer dependency on it switched majors partway through that range (`4.107.0` was the last version still declaring a `^4.x` peer; `4.108.0`+ all want `^5.x`). Unlike this issue's other deferred major bumps (`vite`, `typescript`), this one is ambient TypeScript declarations only — no runtime behavior, no build-tool semantics — and `npm run check`/`npm run build` both pass clean against it, so it's landed alongside the wrangler bump rather than deferred with the rest.
+- In-range minor bumps picked up via `npm update <pkg>` (package.json ranges unchanged, lockfile only): `svelte`, `svelte-check`, `svelte-eslint-parser`, `eslint`, `eslint-plugin-svelte`, `globals`, `tailwindcss`, `@tailwindcss/vite`, `typescript-eslint`, `@sveltejs/kit`, `@playwright/test`.
+
+`npm audit` goes from 9 findings to 3 — all three are the same low-severity `cookie`/`@sveltejs/kit` advisory the issue flagged as upstream-blocked (current SvelteKit is already the latest release; the vulnerable version range extends through it). Left alone per the issue's own recommendation: wait for upstream, don't force an override, and specifically **do not** run `npm audit fix --force` — it resolves by installing `@sveltejs/kit@0.0.30`, a five-major-version downgrade to a 2021 release.
+
+`vite` (6→8), `typescript` (5→7), `@sveltejs/vite-plugin-svelte` (6→7), `vitest`/`@vitest/coverage-v8` (4→5), and `jsdom` (29→30) are untouched, per the issue's own call to treat those as separate work.
+
 ## [1.15.0] — 2026-09-05
 
 ### Chore: remove four dead `storage.ts` exports, adopt the fifth (#249)

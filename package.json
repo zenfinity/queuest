@@ -1,6 +1,6 @@
 {
   "name": "queuest",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "private": true,
   "license": "AGPL-3.0",
   "type": "module",
@@ -20,7 +20,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply queuest-db --remote"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.0.0",
+    "@cloudflare/workers-types": "^5.20260905.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
     "@sveltejs/adapter-cloudflare": "^7.2.9",
