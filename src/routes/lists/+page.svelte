@@ -8,7 +8,7 @@
 	// `collection` throughout the codebase — renaming those touches the crypto
 	// schema and API surface for zero user-facing benefit, so this is a
 	// presentation-layer rename only.
-	import type { WatchlistItem } from '$lib/types';
+	import { hasActiveTag, type WatchlistItem } from '$lib/types';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
@@ -117,9 +117,8 @@
 		promoting = true;
 		promoteError = '';
 		try {
-			// Captured before deleteCollectionColor below removes it — carried
-			// over to the shared side so promoting doesn't hand the list a
-			// random new color it never had before.
+			// Carried over to the shared side so promoting doesn't hand the list
+			// a random new color it never had before.
 			const oldColor = queueColors[name];
 			const created = await promoteCollection(name, items, {
 				setBusy: () => {},
@@ -132,12 +131,10 @@
 				// itself having failed — the list already exists at this point,
 				// just without its carried-over color.
 				if (oldColor) await updateSharedListColor(created, oldColor);
-				// Drop the personal list's color entry too. A name with no items
-				// still "exists" as a palette key (see listCollections's
-				// extraNames), so without this the promoted name keeps showing up
-				// in both sections — the exact duplication promotion exists to end.
-				deleteCollectionColor(name);
-				queueColors = getQueueColors();
+				// The personal list's own color entry is left alone — promotion
+				// is additive (#274), so "{name}" still exists as a real personal
+				// list with its item(s) in it, showing under both sections here
+				// is the correct, intended state, not a leftover to clean up.
 				items = await getAll();
 				collections = listCollections(items, Object.keys(queueColors));
 				updateCounts();
@@ -283,7 +280,7 @@
 		readOnlyLinkError = '';
 		readOnlyLinkQr = '';
 		showReadOnlyLinkQr = false;
-		const tagged = items.filter((i) => i.queue_tag === name);
+		const tagged = items.filter((i) => hasActiveTag(i, name));
 		await createShareLink(tagged, new Set([name]), [name], {
 			setShareCreating: (v) => (readOnlyLinkCreating = v),
 			setShareUrl: (v) => (readOnlyLinkUrl = v),
@@ -395,11 +392,12 @@
 			// whole store, and getAll() (rightly) excludes soft-deleted tombstones, so replaceAll(items)
 			// would silently drop them from the store instead of leaving them for GC.
 			await renameCollectionTag(oldName, newName);
-			// Re-fetch rather than hand-mutating `items` in place: since #221,
-			// a title already present under `newName` makes renameCollectionTag
-			// skip that one row (left on `oldName`, see its own comment) rather
-			// than colliding — assuming every matching item renamed would leave
-			// the UI showing a state the DB doesn't actually have.
+			// Re-fetch rather than hand-mutating `items` in place — renaming a
+			// tag a row already independently also carries under `newName`
+			// leaves that row's `newName` entry untouched (see
+			// renameCollectionTag's own comment), so assuming every matching
+			// item's rendered tag changed the same way could show the UI a
+			// state the DB doesn't actually have.
 			items = await getAll();
 			renameCollectionColor(oldName, newName);
 			queueColors = getQueueColors();
@@ -422,7 +420,7 @@
 		try {
 			// Items are never deleted, only uncategorized. Targeted cursor update — see the
 			// comment in renameCollection for why this isn't getAll()+replaceAll(), and for
-			// why this re-fetches rather than hand-mutating `items` (#221 collision-skip).
+			// why this re-fetches rather than hand-mutating `items`.
 			await clearCollectionTag(name);
 			items = await getAll();
 			deleteCollectionColor(name);
@@ -438,7 +436,7 @@
 	function updateCounts() {
 		const counts: Record<string, number> = {};
 		for (const collection of collections) {
-			counts[collection] = items.filter((i) => i.queue_tag === collection).length;
+			counts[collection] = items.filter((i) => hasActiveTag(i, collection)).length;
 		}
 		collectionCounts = counts;
 	}
@@ -632,10 +630,11 @@
 									Its {collectionCounts[collection] ?? 0} title{(collectionCounts[collection] ??
 										0) === 1
 										? ''
-										: 's'} move into a shared list and leave this queue. From then on they live online,
-									reachable only through this account —
+										: 's'} also join a new shared list — they stay in “{collection}” here too. The
+									shared copy lives online, reachable only through this account —
 									<span class="font-medium"
-										>if you lose both your passphrase and your recovery code, they're gone for good.</span
+										>if you lose both your passphrase and your recovery code, that copy is gone for
+										good.</span
 									>
 								</p>
 								{#if promoteError}

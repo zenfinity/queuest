@@ -11,7 +11,7 @@ import {
 	importDek
 } from './crypto';
 import { b64urlEncode } from './base64url';
-import { getSyncDek, getUserPrivateKey, removeItem } from './db';
+import { getSyncDek, getUserPrivateKey } from './db';
 import { ensureKeypair } from './keypair';
 import { throwIfNotOk } from './http';
 import {
@@ -22,7 +22,7 @@ import {
 	type CollectionItem,
 	type BallotEntry
 } from './collection-sync';
-import { itemKey, type WatchlistItem } from './types';
+import { itemKey, hasActiveTag, type WatchlistItem } from './types';
 import { getSyncStatus } from './sync';
 
 export interface CollectionActionDeps {
@@ -323,21 +323,24 @@ export async function removeMemberAndRotate(
 }
 
 /**
- * Promotes a personal collection (a `queue_tag` grouping, see queue-actions.ts)
- * into a shared one. This is the *only* way a shared collection comes into
- * existence — there is deliberately no "create a shared collection from
- * scratch" path, because two independently-created things both called
- * "Collections" is exactly the confusion #145 flagged.
+ * Promotes a personal collection (a `queue_tags` membership, see
+ * queue-actions.ts) into a shared one. This is the *only* way a shared
+ * collection comes into existence — there is deliberately no "create a
+ * shared collection from scratch" path, because two independently-created
+ * things both called "Collections" is exactly the confusion #145 flagged.
  *
- * The move is one-way and the items genuinely relocate: they are seeded into
- * the collection blob and then tombstoned locally, so the shared copy is the
- * single source of truth and a member's watch state lives in the per-account
- * `watch` map rather than a local `watched_at`. Callers must warn the user
- * before invoking this — once promoted, the titles live only on the server,
- * reachable solely through this account's keys.
+ * Additive, not a move (#274): the items are seeded into the collection blob
+ * and stay in the personal queue exactly as they were. Under one-row-per-
+ * title, there's nothing membership-shaped left to remove — the personal tag
+ * and the new shared collection are simply two independent things the title
+ * now belongs to, the same way it can belong to any other personal list at
+ * once. (Before #274, promotion tombstoned the local rows; that only made
+ * sense while a row *was* a membership, which stopped being true once list
+ * membership moved to a map on one row instead of one row per list.)
  *
- * Ordering is deliberate: the blob is written *before* anything is deleted
- * locally, so a failure at any step leaves the personal collection intact.
+ * Ordering still matters even though nothing is deleted afterward: the blob
+ * is written *before* returning, so a failure partway through never reports
+ * success for a collection that doesn't actually have its seed data yet.
  */
 export async function promoteCollection(
 	name: string,
@@ -347,7 +350,7 @@ export async function promoteCollection(
 	deps.setBusy(true);
 	deps.setError('');
 	try {
-		const tagged = items.filter((i) => i.queue_tag === name && !i.deleted_at);
+		const tagged = items.filter((i) => hasActiveTag(i, name) && !i.deleted_at);
 
 		const personalDek = await requirePersonalDek();
 		const publicKey = await ensureKeypair(personalDek);
@@ -371,12 +374,6 @@ export async function promoteCollection(
 		const dek = await importDek(dekB64, false);
 		await syncCollectionItems(collection.id, dek, [], () => seeded, collection.memberDekVersion);
 
-		// Only now that the blob is durably written do the local copies go. Soft
-		// deletes, so the removal propagates to this account's other devices
-		// through the normal personal-sync tombstone path rather than silently
-		// reappearing on the next pull.
-		for (const item of tagged) await removeItem(item.id);
-
 		return collection;
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not share this collection.');
@@ -391,12 +388,12 @@ export async function promoteCollection(
  * meaning in the move: `watched_at` is a single user's fact, so it becomes
  * this account's entry in the per-member `watch` map, and authorship is
  * recorded explicitly since a shared item can no longer be assumed to be the
- * reader's own. The local `id` and `queue_tag` are dropped — a collection
+ * reader's own. The local `id` and `queue_tags` are dropped — a collection
  * item's identity is `tmdb_id`+`media_type`, and its grouping is the
- * collection itself.
+ * collection itself, not whatever personal lists it also happens to sit in.
  */
 function toCollectionItem(item: WatchlistItem, accountId: string): CollectionItem {
-	const { id: _id, queue_tag: _tag, watched_at, ...rest } = item;
+	const { id: _id, queue_tags: _tags, watched_at, ...rest } = item;
 	return {
 		...rest,
 		watched_at,
@@ -621,8 +618,8 @@ export async function setSharedCollectionColor(
  * Assigns items to an existing shared collection — the general form of what
  * promoting a whole personal list already does for all of its items at once
  * (see promoteCollection above), now for an arbitrary subset, as few as one.
- * Same ordering guarantee: the blob write happens before anything is removed
- * locally, so a failure at any point leaves the personal queue untouched.
+ * Additive, same as promoteCollection (#274) — the items stay in the personal
+ * queue.
  *
  * Mirrors "assign to a personal list" in the UI — a shared list is just
  * another option in the same picker, not a separate flow. The difference is
@@ -664,9 +661,6 @@ export async function addItemsToSharedCollection(
 			collection.memberDekVersion
 		);
 
-		for (const item of items) {
-			await removeItem(item.id);
-		}
 		return true;
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not add to this shared list.');

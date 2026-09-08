@@ -98,7 +98,7 @@ describe('createShareLink', () => {
 
 		const { deps } = makeDeps();
 		await createShareLink(
-			[makeItem({ queue_tag: 'Horror' })],
+			[makeItem({ queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z' } } })],
 			new Set(['Horror']),
 			['Horror', 'Comedy'],
 			deps

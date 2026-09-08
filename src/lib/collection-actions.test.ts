@@ -278,7 +278,7 @@ describe('promoteCollection', () => {
 				runtime_minutes: 100,
 				seasons: [],
 				watched_seasons: [],
-				queue_tag: e.queue_tag
+				queue_tags: e.queue_tag ? { [e.queue_tag]: { at: '2024-01-01T00:00:00.000Z' } } : undefined
 			} as never);
 		}
 		const { getAll } = await dbMod();
@@ -319,7 +319,10 @@ describe('promoteCollection', () => {
 		expect(blob.every((i) => i.added_by_account_id === ALICE)).toBe(true);
 	});
 
-	it('tombstones the promoted items locally, leaving the rest alone', async () => {
+	// #274: promotion is additive now, not a move — the personal copy stays
+	// exactly where it was, since under one-row-per-title there's nothing
+	// membership-shaped left to remove.
+	it('leaves the promoted items in the personal queue, alongside the rest', async () => {
 		const items = await seedLocal([
 			{ tmdb_id: 10, queue_tag: 'Date night' },
 			{ tmdb_id: 11, queue_tag: 'Solo' }
@@ -330,7 +333,7 @@ describe('promoteCollection', () => {
 
 		const { getAll } = await dbMod();
 		const left = await getAll();
-		expect(left.map((i) => i.tmdb_id)).toEqual([11]);
+		expect(left.map((i) => i.tmdb_id).sort()).toEqual([10, 11]);
 	});
 
 	// The whole point of writing the blob first: a failure must not eat titles.
@@ -633,14 +636,14 @@ describe('addItemsToSharedCollection', () => {
 				providers: [],
 				runtime_minutes: 100,
 				seasons: [],
-				watched_seasons: [],
-				queue_tag: null
+				watched_seasons: []
 			} as never);
 		}
 		return getAll();
 	}
 
-	it('moves the given items into the shared blob and tombstones them locally', async () => {
+	// #274: additive, not a move — the personal copies stay.
+	it('adds the given items into the shared blob, without touching the local copies', async () => {
 		const items = await seedLocal([{ tmdb_id: 100 }, { tmdb_id: 101 }]);
 		const { mock, stored } = stubAddFetch();
 		vi.stubGlobal('fetch', mock);
@@ -653,7 +656,7 @@ describe('addItemsToSharedCollection', () => {
 		expect(blobItems.every((i) => i.added_by_account_id === ALICE)).toBe(true);
 
 		const { getAll } = await import('./db');
-		expect(await getAll()).toEqual([]);
+		expect((await getAll()).map((i) => i.tmdb_id).sort()).toEqual([100, 101]);
 	});
 
 	it('dedupes against items already present in the shared blob', async () => {

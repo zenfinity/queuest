@@ -211,13 +211,20 @@ describe('toggleSeasonProgress', () => {
 	});
 });
 
+const AT = '2024-01-01T00:00:00.000Z';
+/** Builds a queue_tags map from plain tag names, for tests that only care
+ *  which lists are active, not the per-key timestamps. */
+function tags(...names: string[]): WatchlistItem['queue_tags'] {
+	return Object.fromEntries(names.map((n) => [n, { at: AT }]));
+}
+
 describe('listCollections', () => {
 	it('returns sorted, deduped collection names', () => {
 		const items = [
-			makeItem({ queue_tag: 'Favorites' }),
-			makeItem({ queue_tag: 'Action' }),
-			makeItem({ queue_tag: 'Favorites' }),
-			makeItem({ queue_tag: undefined })
+			makeItem({ queue_tags: tags('Favorites') }),
+			makeItem({ queue_tags: tags('Action') }),
+			makeItem({ queue_tags: tags('Favorites') }),
+			makeItem({ queue_tags: undefined })
 		];
 
 		const result = listCollections(items);
@@ -225,8 +232,8 @@ describe('listCollections', () => {
 		expect(result).toEqual(['Action', 'Favorites']);
 	});
 
-	it('returns empty array when no items have queue_tag', () => {
-		const items = [makeItem(), makeItem({ queue_tag: null })];
+	it('returns empty array when no items have any active tag', () => {
+		const items = [makeItem(), makeItem({ queue_tags: {} })];
 
 		const result = listCollections(items);
 
@@ -234,20 +241,26 @@ describe('listCollections', () => {
 	});
 
 	it('merges in extraNames, deduped and sorted, for collections with no items yet', () => {
-		const items = [makeItem({ queue_tag: 'Favorites' })];
+		const items = [makeItem({ queue_tags: tags('Favorites') })];
 
 		const result = listCollections(items, ['Weekend Watch', 'Favorites']);
 
 		expect(result).toEqual(['Favorites', 'Weekend Watch']);
 	});
+
+	it('ignores a tombstoned (deleted) tag entry', () => {
+		const items = [makeItem({ queue_tags: { Favorites: { at: AT, deleted: true } } })];
+
+		expect(listCollections(items)).toEqual([]);
+	});
 });
 
 describe('groupIntoCollections', () => {
 	it('groups items alphabetically by tag with Uncategorized pinned last', () => {
-		const drama = makeItem({ id: 1, title: 'Drama Item', queue_tag: 'Drama' });
-		const action1 = makeItem({ id: 2, title: 'Action Item 1', queue_tag: 'Action' });
-		const noTag = makeItem({ id: 3, title: 'No Tag Item', queue_tag: undefined });
-		const action2 = makeItem({ id: 4, title: 'Action Item 2', queue_tag: 'Action' });
+		const drama = makeItem({ id: 1, title: 'Drama Item', queue_tags: tags('Drama') });
+		const action1 = makeItem({ id: 2, title: 'Action Item 1', queue_tags: tags('Action') });
+		const noTag = makeItem({ id: 3, title: 'No Tag Item', queue_tags: undefined });
+		const action2 = makeItem({ id: 4, title: 'Action Item 2', queue_tags: tags('Action') });
 
 		const sections = groupIntoCollections([drama, action1, noTag, action2], {
 			Action: '#ef4444',
@@ -264,7 +277,7 @@ describe('groupIntoCollections', () => {
 	});
 
 	it('omits the Uncategorized section when every item has a tag', () => {
-		const sections = groupIntoCollections([makeItem({ queue_tag: 'Drama' })], {});
+		const sections = groupIntoCollections([makeItem({ queue_tags: tags('Drama') })], {});
 		expect(sections.map((s) => s.name)).toEqual(['Drama']);
 	});
 
@@ -278,10 +291,22 @@ describe('groupIntoCollections', () => {
 	});
 
 	it('preserves item order within each section', () => {
-		const b = makeItem({ id: 1, title: 'B', queue_tag: 'X' });
-		const a = makeItem({ id: 2, title: 'A', queue_tag: 'X' });
+		const b = makeItem({ id: 1, title: 'B', queue_tags: tags('X') });
+		const a = makeItem({ id: 2, title: 'A', queue_tags: tags('X') });
 		const sections = groupIntoCollections([b, a], {});
 		expect(sections[0].items).toEqual([b, a]);
+	});
+
+	// #274 — an item can carry more than one active tag now, so it fans into
+	// one section per tag rather than exactly one section overall.
+	it('an item with two active tags appears in both sections', () => {
+		const both = makeItem({ id: 1, title: 'Both', queue_tags: tags('Action', 'Drama') });
+
+		const sections = groupIntoCollections([both], {});
+
+		expect(sections.map((s) => s.name)).toEqual(['Action', 'Drama']);
+		expect(sections[0].items).toEqual([both]);
+		expect(sections[1].items).toEqual([both]);
 	});
 });
 
@@ -290,20 +315,20 @@ describe('setItemCollection', () => {
 		const { state, deps } = makeDeps();
 		const item = makeItem({ id: 6 });
 		setQueueTag.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([{ ...item, queue_tag: 'Drama' }]);
+		getAll.mockResolvedValue([{ ...item, queue_tags: tags('Drama') }]);
 
 		await setItemCollection(item, 'Drama', deps);
 
 		expect(setQueueTag).toHaveBeenCalledWith(6, 'Drama');
-		expect(state.items[0].queue_tag).toBe('Drama');
+		expect(state.items[0].queue_tags).toEqual(tags('Drama'));
 		expect(state.busy.has(6)).toBe(false);
 	});
 
 	it('clears a collection (null) on success', async () => {
 		const { state, deps } = makeDeps();
-		const item = makeItem({ id: 8, queue_tag: 'Action' });
+		const item = makeItem({ id: 8, queue_tags: tags('Action') });
 		setQueueTag.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([{ ...item, queue_tag: undefined }]);
+		getAll.mockResolvedValue([{ ...item, queue_tags: undefined }]);
 
 		await setItemCollection(item, null, deps);
 
@@ -417,7 +442,7 @@ describe('bulkSetCollection', () => {
 		const { state, deps } = makeDeps();
 		const items = [makeItem({ id: 1 }), makeItem({ id: 2 }), makeItem({ id: 3 })];
 		setQueueTag.mockResolvedValue(undefined);
-		getAll.mockResolvedValue(items.map((i) => ({ ...i, queue_tag: 'Movie Night' })));
+		getAll.mockResolvedValue(items.map((i) => ({ ...i, queue_tags: tags('Movie Night') })));
 
 		await bulkSetCollection(items, 'Movie Night', deps);
 
@@ -444,8 +469,8 @@ describe('bulkSetCollection', () => {
 	it('clears a collection from every selected item with null', async () => {
 		const { deps } = makeDeps();
 		const items = [
-			makeItem({ id: 1, queue_tag: 'Drama' }),
-			makeItem({ id: 2, queue_tag: 'Drama' })
+			makeItem({ id: 1, queue_tags: tags('Drama') }),
+			makeItem({ id: 2, queue_tags: tags('Drama') })
 		];
 		setQueueTag.mockResolvedValue(undefined);
 		getAll.mockResolvedValue([]);

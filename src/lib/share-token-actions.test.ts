@@ -3,12 +3,15 @@ import type { ShareItem } from './types';
 import type { DuplicateSkip } from './share-token-actions';
 
 const addItem = vi.fn();
+const addQueueTag = vi.fn();
 const getItemByTmdbId = vi.fn();
 const getOrAssignColor = vi.fn();
 
 vi.mock('./db', () => ({
 	addItem: (...args: unknown[]) => addItem(...args),
-	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args)
+	addQueueTag: (...args: unknown[]) => addQueueTag(...args),
+	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args),
+	nowIso: () => '2024-01-01T00:00:00.000Z'
 }));
 
 vi.mock('./queue-colors', () => ({
@@ -60,6 +63,7 @@ function makeDeps() {
 
 beforeEach(() => {
 	addItem.mockReset();
+	addQueueTag.mockReset();
 	getItemByTmdbId.mockReset();
 	getItemByTmdbId.mockResolvedValue(undefined);
 	getOrAssignColor.mockReset();
@@ -84,38 +88,37 @@ describe('addAllToQueue', () => {
 		expect(state.addError).toBe('');
 	});
 
-	// #221 — the store's uniqueness is per list, so a ConstraintError here can
-	// only mean "already have this exact title in this exact target list";
-	// existingTag is always the target tag itself once the row isn't a
-	// tombstone (see getItemByTmdbId's own doc comment). Which list the
-	// *existing* row happens to be tagged is no longer looked up for this —
-	// that's what stopped being a conflict at all (see the "different list"
-	// test below).
-	it('counts a ConstraintError (already in this exact list) as a skip, not a failure', async () => {
+	// #274 — identity is global again, so a ConstraintError here means "this
+	// title is already in the queue somewhere," not "already in this exact
+	// list." Membership is additive now, so this gains the tag rather than
+	// being reported as a no-op skip.
+	it('additively tags an already-queued title instead of reporting a skip', async () => {
 		const { state, deps } = makeDeps();
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
-		getItemByTmdbId.mockResolvedValue({ id: 1, queue_tag: 'My Queue', deleted_at: null });
+		getItemByTmdbId.mockResolvedValue({ id: 1, tmdb_id: 100, deleted_at: null });
 
 		await addAllToQueue([makeShareItem()], 'My Queue', deps);
 
-		expect(getItemByTmdbId).toHaveBeenCalledWith(100, 'movie', 'My Queue');
-		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: 'My Queue' }]);
-		expect(state.addedCount).toBe(0);
+		expect(getItemByTmdbId).toHaveBeenCalledWith(100, 'movie');
+		expect(addQueueTag).toHaveBeenCalledWith(1, 'My Queue');
+		expect(state.skips).toEqual([]);
+		expect(state.addedCount).toBe(1);
 		expect(state.addDone).toBe(true);
 		expect(state.addError).toBe('');
 	});
 
-	it('does not attribute a skip to a list when the matching row is a tombstone', async () => {
+	it('still reports a skip when the matching row is a tombstone (previously removed)', async () => {
 		const { state, deps } = makeDeps();
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
 		getItemByTmdbId.mockResolvedValue({
 			id: 1,
-			queue_tag: 'Horror October',
+			tmdb_id: 100,
 			deleted_at: '2026-01-01T00:00:00.000Z'
 		});
 
 		await addAllToQueue([makeShareItem()], 'My Queue', deps);
 
+		expect(addQueueTag).not.toHaveBeenCalled();
 		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: null }]);
 	});
 
@@ -153,6 +156,6 @@ describe('addAllToQueue', () => {
 		await addAllToQueue([makeShareItem()], '', deps);
 
 		const [written] = addItem.mock.calls[0];
-		expect(written.queue_tag).toBe('Shared List');
+		expect(written.queue_tags).toEqual({ 'Shared List': { at: expect.any(String) } });
 	});
 });

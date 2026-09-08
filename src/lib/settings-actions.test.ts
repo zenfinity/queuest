@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Provider } from './types';
+import { APP_STATE_VERSION } from './app-state';
 
 const getAll = vi.fn();
 const replaceAll = vi.fn();
@@ -107,7 +108,7 @@ describe('buildExportBlob', () => {
 		const [json, passphrase] = encrypt.mock.calls[0];
 		expect(passphrase).toBe('hunter2');
 		const payload = JSON.parse(json);
-		expect(payload.version).toBe(2);
+		expect(payload.version).toBe(APP_STATE_VERSION);
 		expect(payload.items).toEqual([{ id: 1, title: 'Arrival' }]);
 		expect(payload.services).toEqual([{ provider_id: 8 }]);
 		// No sq:budget:weekly/weeks in localStorage (stub returns null) -> defaults

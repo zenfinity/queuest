@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
-	import type { WatchlistItem } from '$lib/types';
+	import { representativeTag, type WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
 	import { remainingRuntime, releaseChip, hms } from '$lib/progress';
@@ -306,7 +306,9 @@
 				>
 			</div>
 			{#each section.items as item, i (item.id)}
-				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				{@const tagColor = representativeTag(item)
+					? (queueColors[representativeTag(item)!] ?? null)
+					: null}
 				<!-- Card click is a convenience only — the poster button inside cardContent
 				     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
 				     action, so this div is deliberately not a second, nested interactive element. -->
@@ -345,7 +347,9 @@
 			onfinalize={handleDndFinalize}
 		>
 			{#each dndItems as item, i (item.id)}
-				{@const tagColor = item.queue_tag ? (queueColors[item.queue_tag] ?? null) : null}
+				{@const tagColor = representativeTag(item)
+					? (queueColors[representativeTag(item)!] ?? null)
+					: null}
 				<!-- Card click is a convenience only — see the grouped branch above. -->
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->

@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WatchlistItem } from './types';
 
 const addItem = vi.fn();
+const addQueueTag = vi.fn();
+const getItemByTmdbId = vi.fn();
 const replaceAll = vi.fn();
 const setServices = vi.fn();
 const decrypt = vi.fn();
@@ -13,6 +15,9 @@ const addItemsToSharedCollection = vi.fn();
 
 vi.mock('./db', () => ({
 	addItem: (...args: unknown[]) => addItem(...args),
+	addQueueTag: (...args: unknown[]) => addQueueTag(...args),
+	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args),
+	nowIso: () => '2024-01-01T00:00:00.000Z',
 	replaceAll: (...args: unknown[]) => replaceAll(...args),
 	setServices: (...args: unknown[]) => setServices(...args)
 }));
@@ -98,6 +103,8 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
 	addItem.mockReset();
+	addQueueTag.mockReset();
+	getItemByTmdbId.mockReset();
 	replaceAll.mockReset();
 	setServices.mockReset();
 	decrypt.mockReset();
@@ -152,11 +159,13 @@ describe('importRows', () => {
 			json: async () => [{ title: 'Arrival', result: makeItem() }]
 		});
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({ id: 1, tmdb_id: 100, deleted_at: null });
 
 		await importRows([{ title: 'Arrival', year: null, mediaTypeHint: 'auto' }], deps);
 
 		expect(state.importAdded).toBe(1);
 		expect(state.importError).toBe('');
+		expect(addQueueTag).not.toHaveBeenCalled(); // no target list on a plain import
 	});
 
 	it('surfaces a non-ConstraintError add failure and still clears importing', async () => {
@@ -199,8 +208,27 @@ describe('importRows', () => {
 			tag: 'Date Night'
 		});
 
-		expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ queue_tag: 'Date Night' }));
+		expect(addItem).toHaveBeenCalledWith(
+			expect.objectContaining({ queue_tags: { 'Date Night': { at: expect.any(String) } } })
+		);
 		expect(addItemsToSharedCollection).not.toHaveBeenCalled();
+		expect(state.importAdded).toBe(1);
+	});
+
+	it('additively tags an already-queued row instead of leaving the import target unfulfilled (#274)', async () => {
+		const { state, deps } = makeImportDeps();
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => [{ title: 'Arrival', result: makeItem({ tmdb_id: 5, title: 'Arrival' }) }]
+		});
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({ id: 7, tmdb_id: 5, deleted_at: null });
+
+		await importRows([{ title: 'Arrival', year: null, mediaTypeHint: 'auto' }], deps, {
+			tag: 'Date Night'
+		});
+
+		expect(addQueueTag).toHaveBeenCalledWith(7, 'Date Night');
 		expect(state.importAdded).toBe(1);
 	});
 
@@ -228,7 +256,7 @@ describe('importRows', () => {
 			{ collection: collection as never }
 		);
 
-		expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ queue_tag: undefined }));
+		expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ queue_tags: undefined }));
 		expect(addItemsToSharedCollection).toHaveBeenCalledTimes(1);
 		expect(addItemsToSharedCollection).toHaveBeenCalledWith(
 			collection,

@@ -1,6 +1,6 @@
 import type { ImportFormat, ImportRow } from './import';
-import type { WatchlistItem } from './types';
-import { addItem, replaceAll, setServices } from './db';
+import { soloTagMap, type WatchlistItem } from './types';
+import { addItem, addQueueTag, getItemByTmdbId, nowIso, replaceAll, setServices } from './db';
 import { decrypt } from './crypto';
 import { deserializeAppState } from './app-state';
 import { setQueueName, setQueueColor } from './queue-colors';
@@ -60,18 +60,28 @@ export async function importRows(
 			for (const { title, result } of matched) {
 				if (result) {
 					try {
-						const created = await addItem({ ...result, queue_tag: queueTag });
+						const created = await addItem({
+							...result,
+							queue_tags: soloTagMap(queueTag, nowIso())
+						});
 						importAdded++;
 						if (target && 'collection' in target) addedForSharedPush.push(created);
 					} catch (e) {
-						// A duplicate already existed under its own id before this import
-						// started — leave it wherever it already was rather than chasing
-						// down that id to relocate it into the shared destination too.
-						if (isConstraintError(e)) {
-							importAdded++;
-						} else {
-							throw e;
+						if (!isConstraintError(e)) throw e;
+						// #274 — identity is global again, so a collision means
+						// "already in the queue somewhere," not "already in this
+						// exact list" the way it did under #221's per-list
+						// uniqueness. Additively tag the existing row and still
+						// queue it for the shared push, rather than leaving this
+						// import's actual target (the list, or the shared
+						// collection) silently unfulfilled for a title that
+						// happened to already be queued.
+						const existing = await getItemByTmdbId(result.tmdb_id, result.media_type);
+						if (existing && !existing.deleted_at) {
+							if (queueTag) await addQueueTag(existing.id, queueTag);
+							if (target && 'collection' in target) addedForSharedPush.push(existing);
 						}
+						importAdded++;
 					}
 				} else {
 					missedTitles = [...missedTitles, title];
