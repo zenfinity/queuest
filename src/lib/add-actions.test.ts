@@ -2,10 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SearchResult } from './types';
 
 const addItem = vi.fn();
+const addQueueTag = vi.fn();
+const getItemByTmdbId = vi.fn();
 const addItemsToSharedCollection = vi.fn();
 
 vi.mock('./db', () => ({
-	addItem: (...args: unknown[]) => addItem(...args)
+	addItem: (...args: unknown[]) => addItem(...args),
+	addQueueTag: (...args: unknown[]) => addQueueTag(...args),
+	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args),
+	nowIso: () => '2024-01-01T00:00:00.000Z'
 }));
 vi.mock('./collection-actions', () => ({
 	addItemsToSharedCollection: (...args: unknown[]) => addItemsToSharedCollection(...args)
@@ -68,6 +73,8 @@ function makeDeps() {
 
 beforeEach(() => {
 	addItem.mockReset();
+	addQueueTag.mockReset();
+	getItemByTmdbId.mockReset();
 	addItemsToSharedCollection.mockReset();
 });
 
@@ -97,11 +104,14 @@ describe('addSearchResultToQueue', () => {
 	it('treats a duplicate (ConstraintError) as a successful add', async () => {
 		const { state, deps } = makeDeps();
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({ id: 2, tmdb_id: 2, deleted_at: null });
 
 		await addSearchResultToQueue(makeResult({ id: 2 }), deps);
 
 		expect(state.added.has(2)).toBe(true);
 		expect(state.errors.has(2)).toBe(false);
+		// No target list on this path — nothing to additively tag.
+		expect(addQueueTag).not.toHaveBeenCalled();
 	});
 
 	it('surfaces a non-ConstraintError failure and still clears the busy flag', async () => {
@@ -125,9 +135,38 @@ describe('addSearchResultToList', () => {
 
 		await addSearchResultToList(makeResult({ id: 10 }), { tag: 'Date Night' }, deps);
 
-		expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ queue_tag: 'Date Night' }));
+		expect(addItem).toHaveBeenCalledWith(
+			expect.objectContaining({ queue_tags: { 'Date Night': { at: expect.any(String) } } })
+		);
 		expect(addItemsToSharedCollection).not.toHaveBeenCalled();
 		expect(state.added.has(10)).toBe(true);
+	});
+
+	it('additively tags an already-queued title instead of silently no-oping (#274)', async () => {
+		const { state, deps } = makeDeps();
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({ id: 99, tmdb_id: 99, deleted_at: null });
+		addQueueTag.mockResolvedValue(undefined);
+
+		await addSearchResultToList(makeResult({ id: 99 }), { tag: 'Date Night' }, deps);
+
+		expect(addQueueTag).toHaveBeenCalledWith(99, 'Date Night');
+		expect(state.added.has(99)).toBe(true);
+	});
+
+	it('does not additively tag a tombstoned (previously removed) row', async () => {
+		const { state, deps } = makeDeps();
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({
+			id: 99,
+			tmdb_id: 99,
+			deleted_at: '2024-01-01T00:00:00.000Z'
+		});
+
+		await addSearchResultToList(makeResult({ id: 99 }), { tag: 'Date Night' }, deps);
+
+		expect(addQueueTag).not.toHaveBeenCalled();
+		expect(state.added.has(99)).toBe(true);
 	});
 
 	it('creates the item untagged, then hands it to the shared collection', async () => {
@@ -138,7 +177,7 @@ describe('addSearchResultToList', () => {
 
 		await addSearchResultToList(makeResult({ id: 20 }), { collection: COLLECTION }, deps);
 
-		expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ queue_tag: undefined }));
+		expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ queue_tags: undefined }));
 		expect(addItemsToSharedCollection).toHaveBeenCalledWith(
 			COLLECTION,
 			[created],

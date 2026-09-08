@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { SvelteMap } from 'svelte/reactivity';
-	import type { WatchlistItem } from '$lib/types';
+	import { activeQueueTags, type WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { laneColors, resolvedHue, hexToHue } from '$lib/colors';
 	import { theme } from '$lib/theme.svelte';
@@ -88,26 +88,33 @@
 
 		for (const item of items) {
 			if (byCollection) {
-				if (!item.queue_tag) {
+				// #274: an item can carry more than one active tag now, so it
+				// fans into one lane per tag — the same "legitimately appears
+				// more than once" rule groupIntoCollections uses for the Grid/
+				// List Group view.
+				const tags = activeQueueTags(item);
+				if (tags.length === 0) {
 					terminal.push(item);
 					continue;
 				}
-				if (!map.has(item.queue_tag)) {
-					const color = queueColors[item.queue_tag] ?? null;
-					map.set(item.queue_tag, {
-						key: item.queue_tag,
-						label: item.queue_tag,
-						logo: null,
-						providerId: null,
-						color,
-						hue: color ? hexToHue(color) : null,
-						items: [],
-						totalMins: 0
-					});
+				for (const tag of tags) {
+					if (!map.has(tag)) {
+						const color = queueColors[tag] ?? null;
+						map.set(tag, {
+							key: tag,
+							label: tag,
+							logo: null,
+							providerId: null,
+							color,
+							hue: color ? hexToHue(color) : null,
+							items: [],
+							totalMins: 0
+						});
+					}
+					const lane = map.get(tag)!;
+					lane.items.push(item);
+					lane.totalMins += remainingRuntime(item);
 				}
-				const lane = map.get(item.queue_tag)!;
-				lane.items.push(item);
-				lane.totalMins += remainingRuntime(item);
 			} else {
 				if (!item.providers.length) {
 					terminal.push(item);

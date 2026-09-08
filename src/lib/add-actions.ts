@@ -1,5 +1,5 @@
-import type { SearchResult, WatchlistItem } from './types';
-import { addItem } from './db';
+import { soloTagMap, type SearchResult, type WatchlistItem } from './types';
+import { addItem, addQueueTag, getItemByTmdbId, nowIso } from './db';
 import { isConstraintError } from './http';
 import { addItemsToSharedCollection, type SharedCollection } from './collection-actions';
 
@@ -39,15 +39,34 @@ async function addAndPlace(
 			creator: result.creator,
 			imdb_id: result.imdb_id,
 			backdrop_path: result.backdrop_path,
-			queue_tag: queueTag
+			queue_tags: soloTagMap(queueTag, nowIso())
 		};
-		const created = await addItem(item);
+
+		let created: WatchlistItem;
+		try {
+			created = await addItem(item);
+		} catch (e) {
+			if (!isConstraintError(e)) throw e;
+			// #274 — identity is global again (one row per title), so a
+			// collision here means "already in the queue somewhere," not
+			// "already in this exact list" the way it did under #221's
+			// per-list uniqueness. Additively tag the existing row rather than
+			// treating the collision as fully satisfied and silently dropping
+			// the list/collection this add was actually targeting.
+			const existing = await getItemByTmdbId(result.id, result.media_type);
+			if (!existing || existing.deleted_at) {
+				deps.setAdded(result.id, true);
+				return;
+			}
+			if (queueTag) await addQueueTag(existing.id, queueTag);
+			created = existing;
+		}
 
 		if (sharedCollection) {
-			// Same "blob write, then remove locally" ordering promoteCollection
-			// relies on — a failure here leaves the title in the personal queue
-			// (untagged) rather than losing it, at the cost of a retry not
-			// re-attempting the shared push specifically.
+			// Same "blob write first" ordering promoteCollection relies on — a
+			// failure here leaves the title in the personal queue rather than
+			// losing it, at the cost of a retry not re-attempting the shared
+			// push specifically.
 			const ok = await addItemsToSharedCollection(sharedCollection, [created], {
 				setBusy: () => {},
 				setError: (msg) => deps.setError(result.id, msg)
@@ -57,20 +76,8 @@ async function addAndPlace(
 
 		deps.setAdded(result.id, true);
 	} catch (e) {
-		if (isConstraintError(e)) {
-			// #221 — the store's uniqueness is per list now, so this can only
-			// mean "already have this exact title in this exact target"
-			// (untagged, or the specific list passed in queueTag) — unlike
-			// before #221, it can no longer mean "already have it under some
-			// other list," since that case now succeeds as a second row
-			// instead of colliding. Nothing left to disambiguate: treating an
-			// exact-target repeat as an already-satisfied "add" is correct
-			// as-is, no lookup needed.
-			deps.setAdded(result.id, true);
-		} else {
-			const msg = e instanceof Error ? e.message : 'Failed to add';
-			deps.setError(result.id, msg);
-		}
+		const msg = e instanceof Error ? e.message : 'Failed to add';
+		deps.setError(result.id, msg);
 	} finally {
 		deps.setAdding(result.id, false);
 	}

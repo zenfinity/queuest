@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { WatchlistItem } from './types';
-import type { BackupItem } from './app-state';
+import { APP_STATE_VERSION, type BackupItem } from './app-state';
 import * as db from './db';
 import { generateShareKey, encryptBytesWithDek, importDek } from './crypto';
 import { gzip } from './gzip';
@@ -166,138 +166,110 @@ describe('mergeItems', () => {
 		expect(merged).toHaveLength(3);
 	});
 
-	// #221 — the store's uniqueness went from global to per-list, so the
-	// merge can no longer assume at most one local and one remote copy of a
-	// title. These cover the two things that have to both be true at once:
-	// a genuine multi-list scenario merges each copy independently, and an
-	// ordinary list move (one copy per side, tag differs) still merges as a
-	// single edited row rather than fanning out into two.
-	describe('per-list titles (#221)', () => {
-		it('merges two distinct list-copies of the same title independently, matched by queue_tag', () => {
+	// #274 — one row per title again; list membership merges as its own
+	// per-key LWW-element-set field (queue_tags) rather than as part of row
+	// identity. These cover the properties that actually matter: a plain add
+	// merges cleanly, a newer entry on either side wins per key (not as a
+	// whole-map swap), and — the real correctness risk — a removal survives
+	// an offline device's stale copy without getting silently resurrected.
+	describe('queue_tags merge (#274)', () => {
+		it('takes the one side that has a tag when the other side has none', () => {
 			const local = [
-				makeItem({
-					id: 1,
-					tmdb_id: 10,
-					title: 'Local Horror copy',
-					queue_tag: 'Horror',
-					updated_at: '2024-01-01T00:00:00.000Z'
-				}),
-				makeItem({
-					id: 2,
-					tmdb_id: 10,
-					title: 'Local Comedy copy',
-					queue_tag: 'Comedy',
-					updated_at: '2024-01-01T00:00:00.000Z'
-				})
+				makeItem({ id: 1, tmdb_id: 10, queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z' } } })
 			];
-			const remote = [
-				makeBackupItem({
-					tmdb_id: 10,
-					title: 'Remote Horror copy (newer)',
-					queue_tag: 'Horror',
-					updated_at: '2024-06-01T00:00:00.000Z'
-				}),
-				makeBackupItem({
-					tmdb_id: 10,
-					title: 'Remote Comedy copy (newer)',
-					queue_tag: 'Comedy',
-					updated_at: '2024-06-01T00:00:00.000Z'
-				})
-			];
-
-			const merged = mergeItems(local, remote);
-
-			expect(merged).toHaveLength(2);
-			const horror = merged.find((i) => i.queue_tag === 'Horror')!;
-			const comedy = merged.find((i) => i.queue_tag === 'Comedy')!;
-			// Each list-copy merged against its own remote counterpart (newer
-			// wins the field bundle) and kept its own local id — not, say, one
-			// copy's id landing on the other's fields.
-			expect(horror.title).toBe('Remote Horror copy (newer)');
-			expect(horror.id).toBe(1);
-			expect(comedy.title).toBe('Remote Comedy copy (newer)');
-			expect(comedy.id).toBe(2);
-		});
-
-		it('keeps a local-only second list-copy alongside a matched first copy', () => {
-			const local = [
-				makeItem({ id: 1, tmdb_id: 10, title: 'Shared copy', queue_tag: 'Horror' }),
-				makeItem({ id: 2, tmdb_id: 10, title: 'Local-only copy', queue_tag: 'Comedy' })
-			];
-			const remote = [makeBackupItem({ tmdb_id: 10, title: 'Shared copy', queue_tag: 'Horror' })];
-
-			const merged = mergeItems(local, remote);
-
-			expect(merged).toHaveLength(2);
-			expect(merged.find((i) => i.queue_tag === 'Comedy')!.id).toBe(2);
-		});
-
-		it('adopts a remote-only second list-copy alongside a matched first copy', () => {
-			const local = [makeItem({ id: 1, tmdb_id: 10, title: 'Shared copy', queue_tag: 'Horror' })];
-			const remote = [
-				makeBackupItem({ tmdb_id: 10, title: 'Shared copy', queue_tag: 'Horror' }),
-				makeBackupItem({ tmdb_id: 10, title: 'Remote-only copy', queue_tag: 'Comedy' })
-			];
-
-			const merged = mergeItems(local, remote);
-
-			expect(merged).toHaveLength(2);
-			const remoteOnly = merged.find((i) => i.queue_tag === 'Comedy')!;
-			expect(remoteOnly.id).toBeUndefined(); // no local id — the store assigns one
-		});
-
-		// The critical regression this issue exists to prevent: without this,
-		// a queue_tag change on one device (still unsynced on the other) would
-		// misread as "local added a new copy, remote kept the old one,"
-		// silently duplicating a title that was only ever moved once.
-		it('merges an ordinary list move as one edited row, not a duplicate', () => {
-			const local = [
-				makeItem({
-					id: 1,
-					tmdb_id: 10,
-					title: 'Moved locally',
-					queue_tag: 'Comedy', // moved here from Horror
-					updated_at: '2024-06-01T00:00:00.000Z' // the move is the newer edit
-				})
-			];
-			const remote = [
-				makeBackupItem({
-					tmdb_id: 10,
-					title: 'Stale remote copy',
-					queue_tag: 'Horror', // remote hasn't learned about the move yet
-					updated_at: '2024-01-01T00:00:00.000Z'
-				})
-			];
+			const remote = [makeBackupItem({ tmdb_id: 10 })];
 
 			const merged = mergeItems(local, remote);
 
 			expect(merged).toHaveLength(1);
-			expect(merged[0].id).toBe(1);
-			expect(merged[0].queue_tag).toBe('Comedy'); // the newer edit (the move) wins
-			expect(merged[0].title).toBe('Moved locally');
+			expect(merged[0].queue_tags).toEqual({ Horror: { at: '2024-01-01T00:00:00.000Z' } });
 		});
 
-		it('lets a newer remote move win over a stale local tag, still as one row', () => {
+		it('per key, the entry with the newer at wins — not a whole-map swap', () => {
 			const local = [
 				makeItem({
 					id: 1,
 					tmdb_id: 10,
-					queue_tag: 'Horror',
-					updated_at: '2024-01-01T00:00:00.000Z'
+					updated_at: '2024-06-01T00:00:00.000Z', // local wins the field bundle
+					queue_tags: {
+						Horror: { at: '2024-06-01T00:00:00.000Z' }, // newer than remote's Horror
+						Comedy: { at: '2024-01-01T00:00:00.000Z' } // older than remote's Comedy
+					}
 				})
 			];
 			const remote = [
 				makeBackupItem({
 					tmdb_id: 10,
-					queue_tag: 'Comedy',
-					updated_at: '2024-06-01T00:00:00.000Z'
+					updated_at: '2024-01-01T00:00:00.000Z',
+					queue_tags: {
+						Horror: { at: '2024-01-01T00:00:00.000Z' },
+						Comedy: { at: '2024-06-01T00:00:00.000Z' }
+					}
 				})
 			];
 
 			const merged = mergeItems(local, remote);
 
-			expect(merged).toHaveLength(1);
-			expect(merged[0].queue_tag).toBe('Comedy');
+			// Local wins Horror (its own entry is newer), remote wins Comedy —
+			// per-key, independent of which side won the rest of the fields.
+			expect(merged[0].queue_tags?.Horror.at).toBe('2024-06-01T00:00:00.000Z');
+			expect(merged[0].queue_tags?.Comedy.at).toBe('2024-06-01T00:00:00.000Z');
+		});
+
+		// The real correctness risk: device A untags something and pushes;
+		// device B, offline the whole time, still has the old add and merges
+		// against A's pulled state once it comes back online. The tombstone
+		// must win purely because its `at` is newer — no special-casing
+		// `deleted` beyond that.
+		it('a newer tombstone beats a stale add, and stays won', () => {
+			const local = [
+				// B's stale copy: still has the old add, never synced the untag.
+				makeItem({ id: 1, tmdb_id: 10, queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z' } } })
+			];
+			const remote = [
+				// A's pushed untag — newer `at` than B's stale add.
+				makeBackupItem({
+					tmdb_id: 10,
+					queue_tags: { Horror: { at: '2024-06-01T00:00:00.000Z', deleted: true } }
+				})
+			];
+
+			const merged = mergeItems(local, remote);
+
+			expect(merged[0].queue_tags?.Horror).toEqual({
+				at: '2024-06-01T00:00:00.000Z',
+				deleted: true
+			});
+
+			// B re-merging its own now-updated state against the same remote
+			// (idempotent re-merge, e.g. a retry) must not resurrect the tag.
+			const rePulled = mergeItems([{ ...local[0], queue_tags: merged[0].queue_tags }], remote);
+			expect(rePulled[0].queue_tags?.Horror?.deleted).toBe(true);
+		});
+
+		it('a stale tombstone does not beat a newer add', () => {
+			const local = [
+				makeItem({ id: 1, tmdb_id: 10, queue_tags: { Horror: { at: '2024-06-01T00:00:00.000Z' } } })
+			];
+			const remote = [
+				makeBackupItem({
+					tmdb_id: 10,
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z', deleted: true } }
+				})
+			];
+
+			const merged = mergeItems(local, remote);
+
+			expect(merged[0].queue_tags?.Horror.deleted).toBeUndefined();
+		});
+
+		it('omits queue_tags entirely when neither side has any', () => {
+			const local = [makeItem({ id: 1, tmdb_id: 10 })];
+			const remote = [makeBackupItem({ tmdb_id: 10 })];
+
+			const merged = mergeItems(local, remote);
+
+			expect(merged[0].queue_tags).toBeUndefined();
 		});
 	});
 });
@@ -384,7 +356,7 @@ describe('syncNow', () => {
 		await db.addItem(makeBackupItem({ tmdb_id: 1, title: 'Local Item' }) as never);
 
 		const remoteBlob = await buildRemoteBlob(dek, {
-			version: 2,
+			version: APP_STATE_VERSION,
 			prefs: {},
 			items: [makeBackupItem({ tmdb_id: 2, title: 'Remote Item' })],
 			services: []
@@ -471,7 +443,7 @@ describe('syncNow', () => {
 		// should be silently dropped from the merge *and* reported, the valid
 		// one should still make it through.
 		const remoteBlob = await buildRemoteBlob(dek, {
-			version: 2,
+			version: APP_STATE_VERSION,
 			prefs: {},
 			items: [
 				{ tmdb_id: 1, media_type: 'movie', title: 'Valid Item' },

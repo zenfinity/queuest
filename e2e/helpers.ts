@@ -61,7 +61,10 @@ export async function seedItem(page: Page, title: string, queueTag?: string): Pr
 				runtime_minutes: 100,
 				seasons: [],
 				watched_seasons: [],
-				queue_tag: tag ?? null
+				// #274: queue_tag was replaced by a queue_tags map (list name ->
+				// {at}) — this stays a scalar param at the seedItem call-site
+				// since every caller only ever needs one tag at seed time.
+				queue_tags: tag ? { [tag]: { at: new Date().toISOString() } } : undefined
 			});
 			await __e2e.syncNow();
 		},

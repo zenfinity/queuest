@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
-	import type { WatchlistItem } from '$lib/types';
+	import { activeQueueTags, hasActiveTag, representativeTag, type WatchlistItem } from '$lib/types';
 	import {
 		reloadQueue,
 		toggleWatched,
@@ -243,9 +243,9 @@
 	let visibleItems = $derived.by(() => {
 		if (queueControls.collectionFilter === null) return serviceFiltered;
 		if (queueControls.collectionFilter === UNCATEGORIZED) {
-			return serviceFiltered.filter((item) => !item.queue_tag);
+			return serviceFiltered.filter((item) => activeQueueTags(item).length === 0);
 		}
-		return serviceFiltered.filter((item) => item.queue_tag === queueControls.collectionFilter);
+		return serviceFiltered.filter((item) => hasActiveTag(item, queueControls.collectionFilter!));
 	});
 
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
@@ -846,7 +846,7 @@
 {#if detailItem}
 	{@const di = detailItem}
 	<DetailPanel
-		item={di}
+		item={{ ...di, queue_tag: representativeTag(di) }}
 		{budgetHours}
 		showSeasons={true}
 		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}

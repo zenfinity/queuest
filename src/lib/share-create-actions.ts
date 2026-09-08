@@ -1,4 +1,4 @@
-import type { WatchlistItem, SharePayload } from './types';
+import { representativeTag, type WatchlistItem, type SharePayload } from './types';
 import { generateShareKey, encryptWithKey } from './crypto';
 import { getQueueName } from './queue-colors';
 import { throwIfNotOk } from './http';
@@ -35,7 +35,13 @@ export async function createShareLink(
 					season_number: s.season_number,
 					runtime_minutes: s.runtime_minutes
 				})),
-				queue_tag: item.queue_tag ?? null
+				// #274: an item can carry more than one active tag now — this
+				// wire format still only has room for one, so this picks a
+				// single representative (the same rule the Grid/List color
+				// swatch uses) rather than threading the caller's known list
+				// name through one call site specially and this rule through
+				// the other.
+				queue_tag: representativeTag(item)
 			}))
 		};
 		const key = await generateShareKey();

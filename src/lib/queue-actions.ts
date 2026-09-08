@@ -1,4 +1,4 @@
-import type { WatchlistItem } from './types';
+import { activeQueueTags, type WatchlistItem } from './types';
 import {
 	getAll,
 	removeItem,
@@ -92,7 +92,7 @@ export async function toggleSeasonProgress(
 export function listCollections(items: WatchlistItem[], extraNames: string[] = []): string[] {
 	const names = new Set<string>();
 	for (const item of items) {
-		if (item.queue_tag) names.add(item.queue_tag);
+		for (const tag of activeQueueTags(item)) names.add(tag);
 	}
 	for (const name of extraNames) names.add(name);
 	return Array.from(names).sort();
@@ -101,7 +101,7 @@ export function listCollections(items: WatchlistItem[], extraNames: string[] = [
 export interface CollectionSection {
 	/** Display name; 'Uncategorized' for the synthetic no-tag section. */
 	name: string;
-	/** The underlying queue_tag, or null for the Uncategorized section. */
+	/** The underlying list name (a queue_tags key), or null for the Uncategorized section. */
 	tag: string | null;
 	color: string | null;
 	items: WatchlistItem[];
@@ -110,8 +110,14 @@ export interface CollectionSection {
 /**
  * Groups items (in their existing order — this doesn't re-sort) into one
  * section per collection, alphabetical by name, with an Uncategorized
- * section (queue_tag == null) pinned last — mirroring how the Gantt view
- * pins its synthetic "Not Streaming" lane.
+ * section (no active tags) pinned last — mirroring how the Gantt view pins
+ * its synthetic "Not Streaming" lane.
+ *
+ * An item can carry more than one active tag (#274 — list membership is a
+ * map, not a single field), so it legitimately appears in more than one
+ * section here; that's correct, not a duplicate — it really is in both
+ * lists. This grouping view is temporary scaffolding for PR2, which replaces
+ * it with per-title list chips and drops the Group toggle entirely.
  */
 export function groupIntoCollections(
 	items: WatchlistItem[],
@@ -120,11 +126,14 @@ export function groupIntoCollections(
 	const byTag = new Map<string, WatchlistItem[]>();
 	const uncategorized: WatchlistItem[] = [];
 	for (const item of items) {
-		if (item.queue_tag) {
-			if (!byTag.has(item.queue_tag)) byTag.set(item.queue_tag, []);
-			byTag.get(item.queue_tag)!.push(item);
-		} else {
+		const tags = activeQueueTags(item);
+		if (tags.length === 0) {
 			uncategorized.push(item);
+			continue;
+		}
+		for (const tag of tags) {
+			if (!byTag.has(tag)) byTag.set(tag, []);
+			byTag.get(tag)!.push(item);
 		}
 	}
 

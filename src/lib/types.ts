@@ -54,7 +54,17 @@ export interface WatchlistItem {
 	deleted_at?: string | null; // soft-delete tombstone; set by removeItem, never surfaced in getAll()
 	sort_order?: number; // custom "Rank" sort position (#216); lower sorts first, need not be contiguous
 	release?: ReleaseInfo | null;
-	queue_tag?: string | null; // set on items imported from someone else's shared list
+	// Per-list membership (#274) — a title lives in one row now, not one row per
+	// list, so membership is a map: list name -> when it was added/removed. `at`
+	// backs a per-key LWW-element-set merge across devices (see sync.ts's
+	// mergeOne) — a plain union can't express removal, so untagging writes a
+	// `deleted: true` tombstone rather than deleting the key outright. `rank` is
+	// this list's own ordering for the item (unused by PR1's UI; carried through
+	// for PR2's per-list rank). Use activeQueueTags/hasActiveTag below rather
+	// than reading this map directly — every "is this item in list X" check has
+	// to skip deleted entries the same way, or a missed spot silently
+	// resurrects a removed tag.
+	queue_tags?: Record<string, { rank?: number; at: string; deleted?: true }>;
 	genres?: string[];
 	cast?: CastMember[];
 	director?: string | null; // movie director
@@ -93,6 +103,42 @@ export interface WatchlistItem {
  */
 export function itemKey(item: { tmdb_id: number; media_type: 'movie' | 'tv' }): string {
 	return `${item.media_type}:${item.tmdb_id}`;
+}
+
+/** List names this item currently belongs to — every deleted:true entry in
+ *  queue_tags is a tombstone, not a membership, and must be excluded here.
+ *  This is the one place that rule lives; every "is item in list X" check
+ *  elsewhere should go through this or hasActiveTag rather than re-deriving
+ *  it, so a missed spot can't silently resurrect a removed tag. */
+export function activeQueueTags(item: { queue_tags?: WatchlistItem['queue_tags'] }): string[] {
+	const tags = item.queue_tags;
+	if (!tags) return [];
+	return Object.keys(tags).filter((k) => !tags[k].deleted);
+}
+
+export function hasActiveTag(
+	item: { queue_tags?: WatchlistItem['queue_tags'] },
+	tag: string
+): boolean {
+	return item.queue_tags?.[tag]?.deleted !== true && item.queue_tags?.[tag] !== undefined;
+}
+
+/** First active tag, for the few spots that can only show one value — a color
+ *  swatch, a share link's single-list attribution. Not meant for anything
+ *  that decides membership; use hasActiveTag for that. */
+export function representativeTag(item: {
+	queue_tags?: WatchlistItem['queue_tags'];
+}): string | null {
+	return activeQueueTags(item)[0] ?? null;
+}
+
+/** Builds a one-key queue_tags map for an add-time write — the common case of
+ *  "this item goes straight into list X" (or no list at all). */
+export function soloTagMap(
+	tag: string | null | undefined,
+	at: string
+): Record<string, { at: string }> | undefined {
+	return tag ? { [tag]: { at } } : undefined;
 }
 
 export interface SearchResult {

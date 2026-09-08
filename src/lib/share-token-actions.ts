@@ -1,5 +1,5 @@
-import type { ShareItem } from './types';
-import { addItem, getItemByTmdbId } from './db';
+import { soloTagMap, type ShareItem } from './types';
+import { addItem, addQueueTag, getItemByTmdbId, nowIso } from './db';
 import { getOrAssignColor } from './queue-colors';
 import { isConstraintError } from './http';
 
@@ -56,27 +56,28 @@ export async function addAllToQueue(
 					})),
 					watched_seasons: [],
 					release: null,
-					queue_tag: tag
+					queue_tags: soloTagMap(tag, nowIso())
 				});
 				added++;
 			} catch (err) {
-				if (isConstraintError(err)) {
-					// #221 — the store's uniqueness is per list now, so a
-					// conflict here specifically means this title already
-					// occupies *this* target list (a different list it's also
-					// in, if any, is no longer a conflict at all — that add
-					// just succeeds as a second row). The one remaining
-					// ambiguity: a tombstoned row (previously removed) still
-					// occupies the same index slot without really being "in"
-					// the list — check deleted_at before reporting where it
-					// lives, same reasoning as before this loosened.
-					const existing = await getItemByTmdbId(item.tmdb_id, item.media_type, tag);
-					const existingTag = existing && !existing.deleted_at ? tag : null;
-					skips.push({ title: item.title, existingTag });
-				} else {
+				if (!isConstraintError(err)) {
 					const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 					console.error('addItem failed for', item.title, err);
 					failures.push(`${item.title}: ${msg}`);
+					continue;
+				}
+				// #274 — identity is global again, so a conflict here means
+				// "already in the queue somewhere," not "already in this exact
+				// list." Membership is additive now, so this gains the tag
+				// rather than reporting a no-op skip — a tombstoned row
+				// (previously removed, still occupying the index slot) is the
+				// one case genuinely left to skip.
+				const existing = await getItemByTmdbId(item.tmdb_id, item.media_type);
+				if (existing && !existing.deleted_at) {
+					await addQueueTag(existing.id, tag);
+					added++;
+				} else {
+					skips.push({ title: item.title, existingTag: null });
 				}
 			}
 		}

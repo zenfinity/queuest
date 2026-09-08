@@ -68,7 +68,7 @@ export const LOCAL_KEYS = [
 	'sq:shared-list-colors'
 ] as const;
 
-export const APP_STATE_VERSION = 2;
+export const APP_STATE_VERSION = 3;
 
 export interface AppStatePrefs {
 	theme?: 'light' | 'dark';
@@ -284,8 +284,6 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		? item.genres.filter((g): g is string => typeof g === 'string').slice(0, 20)
 		: undefined;
 
-	const queue_tag = typeof item.queue_tag === 'string' ? item.queue_tag.slice(0, 40) : undefined;
-
 	return {
 		tmdb_id,
 		media_type,
@@ -303,7 +301,7 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		updated_at: validateIsoDate(item.updated_at) ?? undefined,
 		deleted_at: validateIsoDate(item.deleted_at),
 		release: parseRelease(item.release),
-		...(queue_tag ? { queue_tag } : {}),
+		...(parseQueueTags(item.queue_tags) ? { queue_tags: parseQueueTags(item.queue_tags) } : {}),
 		...(genres ? { genres } : {}),
 		...(cast ? { cast } : {}),
 		director: typeof item.director === 'string' ? item.director.slice(0, 200) : null,
@@ -351,6 +349,48 @@ function parseWatch(raw: unknown): Record<string, string> | undefined {
 		const iso = validateIsoDate(value);
 		if (!iso) continue;
 		out[key] = iso;
+		count++;
+	}
+	return count > 0 ? out : undefined;
+}
+
+/**
+ * Validates a queue_tags map (#274): list name -> per-key membership entry.
+ * Same untrusted-input posture as parseWatch above — null-prototype output,
+ * the same DANGEROUS_KEYS reject-list — since this parses a sync pull or a
+ * collection blob, not just a backup file someone hand-edited. Capped at 50
+ * lists and 40 characters per name, matching the old scalar field's own
+ * length cap; `rank` and `deleted` are both optional, `at` is required (it's
+ * what the per-key merge in sync.ts compares).
+ */
+const MAX_QUEUE_TAGS = 50;
+const MAX_TAG_NAME_LENGTH = 40;
+
+function parseQueueTagEntry(raw: unknown): { rank?: number; at: string; deleted?: true } | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const e = raw as Record<string, unknown>;
+	const at = validateIsoDate(e.at);
+	if (!at) return null;
+	const rank = coerceNumber(e.rank);
+	return {
+		at,
+		...(rank !== null ? { rank } : {}),
+		...(e.deleted === true ? { deleted: true as const } : {})
+	};
+}
+
+function parseQueueTags(raw: unknown): WatchlistItem['queue_tags'] {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+	const out: NonNullable<WatchlistItem['queue_tags']> = Object.create(null);
+	let count = 0;
+	for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+		if (count >= MAX_QUEUE_TAGS) break;
+		if (DANGEROUS_KEYS.has(key)) continue;
+		const name = key.slice(0, MAX_TAG_NAME_LENGTH);
+		if (!name) continue;
+		const entry = parseQueueTagEntry(value);
+		if (!entry) continue;
+		out[name] = entry;
 		count++;
 	}
 	return count > 0 ? out : undefined;

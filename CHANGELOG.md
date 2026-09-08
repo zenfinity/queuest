@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.19.0] — 2026-09-08
+
+### refactor: one row per title again — list membership is a map, not a duplicated row (#274, PR1 of 2)
+
+Since #221, a title in two lists was stored as two independent rows (one per list), and each row's `watched_at`, `notes`, `watched_seasons`, and `sort_order` diverged independently — mark something watched under one list and it stayed unwatched under another. This collapses that back to one row per title (`[tmdb_id, media_type]` global uniqueness again) and replaces the scalar `queue_tag` field with `queue_tags?: Record<string, { rank?: number; at: string; deleted?: true }>` — a per-list membership map with its own per-key merge across devices, since a plain union (like the existing `watched_seasons` merge) can't express *removal*: untagging on one device would otherwise get silently resurrected by a stale copy on another that hasn't synced.
+
+This is the atomic model swap only — migration, merge rewrite, and the minimum UI adaptation to keep every screen working, no new multi-select UX (that's a follow-on PR2). The IndexedDB migration (v5→v6) collapses any existing duplicate rows for the same title: tags union (each row's old `sort_order` becomes that tag's `rank`), watched-anywhere wins (this rule is migration-only — the ongoing sync merge stays plain last-write-wins, or Unwatch would stop propagating), `watched_seasons` unions, `notes` concatenate (deduped, truncated with a marker past the existing length cap) rather than picking a winner and silently dropping what someone typed, and a title's membership tombstones correctly rather than resurrecting if one of its list-copies was already removed. `APP_STATE_VERSION` bumped 2→3, so a device that hasn't upgraded yet fails loudly on sync (its old shape's push would otherwise get silently misread) rather than silently corrupting the new shape — the trade-off being that two of the same account's devices on different app versions won't sync with each other until both upgrade.
+
+Promoting a personal list to a shared collection (or adding items to an existing one) is now additive, not a move — the personal copy stays exactly where it was, since under one-row-per-title there's nothing membership-shaped left to remove. Caught two live-only regressions this surfaced: the promotion confirmation dialog's copy still said the titles would "leave this queue" (they don't anymore), and the promoted list's own local color entry was being deleted on promotion under the old move-semantics reasoning, silently losing its custom color even though the list still visibly exists. Also fixed a real correctness gap the initial design missed: since identity is global again, an `addItem()` collision now means "already in the queue somewhere," not "already in this exact list" — `add-actions.ts`/`import-actions.ts`/`share-token-actions.ts` previously treated that as an already-satisfied no-op, which would have silently dropped the requested list assignment; they now additively tag the existing row instead.
+
+### fix: e2e seed helper still used the pre-#274 field shape
+
+`e2e/helpers.ts`'s `seedItem` built its test item with the old scalar `queue_tag`, which `addItem()` now silently ignores — caught by the existing `invite-revoke` E2E test timing out waiting for a "Share" button that never appeared, since the seeded item was actually untagged. Fixed to build the `queue_tags` map instead.
+
 ## [1.18.0] — 2026-09-05
 
 ### feat: minimal failure observability for sync and collaborative-collection crypto (#254)

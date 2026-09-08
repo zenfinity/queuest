@@ -155,9 +155,9 @@ describe('deserializeAppState', () => {
 		expect(result.items[0].tmdb_id).toBe(100);
 	});
 
-	it('accepts version 2 with the full prefs shape', () => {
+	it('accepts the current version with the full prefs shape', () => {
 		const backup = {
-			version: 2,
+			version: APP_STATE_VERSION,
 			items: [
 				{
 					tmdb_id: 200,
@@ -206,7 +206,17 @@ describe('deserializeAppState', () => {
 	});
 
 	it('rejects an unsupported future version', () => {
-		expect(() => deserializeAppState({ version: 3, items: [] })).toThrow('Unsupported');
+		expect(() => deserializeAppState({ version: APP_STATE_VERSION + 1, items: [] })).toThrow(
+			'Unsupported'
+		);
+	});
+
+	// #274 — a device that hasn't upgraded yet still sends the old version
+	// number, which must fail loudly rather than have its now-unrecognized
+	// queue_tags field silently stripped and the stale queue_tag shape pushed
+	// back as if it were current.
+	it('rejects a pre-#274 version 2 payload rather than silently reading it as current', () => {
+		expect(() => deserializeAppState({ version: 2, items: [] })).toThrow('Unsupported');
 	});
 
 	it('preserves real added_at/watched_at from the payload', () => {
@@ -367,7 +377,7 @@ describe('deserializeAppState', () => {
 describe('watch / added_by_account_id (#188 — collection blob fields)', () => {
 	function backupWith(itemOverrides: Record<string, unknown>) {
 		return {
-			version: 2,
+			version: APP_STATE_VERSION,
 			items: [
 				{
 					tmdb_id: 1,
@@ -467,10 +477,103 @@ describe('watch / added_by_account_id (#188 — collection blob fields)', () => 
 	});
 });
 
+describe('queue_tags (#274)', () => {
+	function backupWith(itemOverrides: Record<string, unknown>) {
+		return {
+			version: APP_STATE_VERSION,
+			items: [
+				{
+					tmdb_id: 1,
+					media_type: 'movie',
+					title: 'T',
+					poster_path: null,
+					overview: null,
+					providers: [],
+					runtime_minutes: 90,
+					seasons: [],
+					watched_seasons: [],
+					added_at: '2026-01-01T00:00:00.000Z',
+					watched_at: null,
+					...itemOverrides
+				}
+			]
+		};
+	}
+
+	it('round-trips a well-formed queue_tags map', () => {
+		const result = deserializeAppState(
+			backupWith({
+				queue_tags: {
+					Horror: { at: '2026-08-01T00:00:00.000Z', rank: 2 },
+					Comedy: { at: '2026-08-02T00:00:00.000Z', deleted: true }
+				}
+			})
+		);
+		expect(result.items[0].queue_tags).toEqual({
+			Horror: { at: '2026-08-01T00:00:00.000Z', rank: 2 },
+			Comedy: { at: '2026-08-02T00:00:00.000Z', deleted: true }
+		});
+	});
+
+	it('drops an entry missing the required at timestamp', () => {
+		const result = deserializeAppState(backupWith({ queue_tags: { Horror: { rank: 1 } } }));
+		expect(result.items[0].queue_tags).toBeUndefined();
+	});
+
+	it('accepts deleted only as the literal true, not a truthy string', () => {
+		const result = deserializeAppState(
+			backupWith({ queue_tags: { Horror: { at: '2026-08-01T00:00:00.000Z', deleted: 'yes' } } })
+		);
+		expect(result.items[0].queue_tags?.Horror.deleted).toBeUndefined();
+	});
+
+	it('rejects __proto__/constructor/prototype as list names without polluting Object.prototype', () => {
+		const before = ({} as Record<string, unknown>).polluted;
+		const result = deserializeAppState(
+			backupWith({
+				queue_tags: {
+					__proto__: { at: '2026-08-01T00:00:00.000Z' },
+					constructor: { at: '2026-08-01T00:00:00.000Z' },
+					Legit: { at: '2026-08-01T00:00:00.000Z' }
+				}
+			})
+		);
+		expect(result.items[0].queue_tags).toEqual({ Legit: { at: '2026-08-01T00:00:00.000Z' } });
+		expect(({} as Record<string, unknown>).polluted).toBe(before);
+	});
+
+	it('caps queue_tags at 50 lists', () => {
+		const queue_tags: Record<string, unknown> = {};
+		for (let i = 0; i < 80; i++) queue_tags[`List ${i}`] = { at: '2026-08-01T00:00:00.000Z' };
+		const result = deserializeAppState(backupWith({ queue_tags }));
+		expect(Object.keys(result.items[0].queue_tags ?? {})).toHaveLength(50);
+	});
+
+	it('truncates a list name past 40 characters rather than rejecting it', () => {
+		const longName = 'x'.repeat(60);
+		const result = deserializeAppState(
+			backupWith({ queue_tags: { [longName]: { at: '2026-08-01T00:00:00.000Z' } } })
+		);
+		expect(Object.keys(result.items[0].queue_tags ?? {})).toEqual([longName.slice(0, 40)]);
+	});
+
+	it('omits queue_tags entirely when the map has no valid entries', () => {
+		const result = deserializeAppState(
+			backupWith({ queue_tags: { Horror: { at: 'not-a-date' } } })
+		);
+		expect(result.items[0].queue_tags).toBeUndefined();
+	});
+
+	it('ignores a non-object queue_tags value rather than throwing', () => {
+		const result = deserializeAppState(backupWith({ queue_tags: 'not-an-object' }));
+		expect(result.items[0].queue_tags).toBeUndefined();
+	});
+});
+
 describe('notes (#155)', () => {
 	function backupWith(itemOverrides: Record<string, unknown>) {
 		return {
-			version: 2,
+			version: APP_STATE_VERSION,
 			items: [
 				{
 					tmdb_id: 1,
