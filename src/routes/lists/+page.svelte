@@ -44,6 +44,9 @@
 		sortByField,
 		filterByService,
 		moveItemInCollection,
+		toggleWatched,
+		removeQueueItem,
+		toggleSeasonProgress,
 		type QueueActionDeps
 	} from '$lib/queue-actions';
 	import { TMDB_IMG } from '$lib/tmdb';
@@ -53,6 +56,7 @@
 	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import SharedListSection from '$lib/components/SharedListSection.svelte';
+	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import ListHint from '$lib/components/ListHint.svelte';
 	import ShareHint from '$lib/components/ShareHint.svelte';
 	import Button from '$lib/components/Button.svelte';
@@ -302,6 +306,7 @@
 	let listItemBusy = new SvelteSet<number>();
 	let reorderError = $state('');
 	let budgetHours = $state(DEFAULT_BUDGET_HOURS);
+	let detailItem = $state<WatchlistItem | null>(null);
 
 	const listActionDeps: QueueActionDeps = {
 		setItems: (next) => {
@@ -316,9 +321,23 @@
 		}
 	};
 
+	// Collapsing clears any armed destructive/edit state targeting this list
+	// (#273 follow-up) — those controls only live in the now-expanded-only
+	// footer, so leaving one armed behind a collapse would sit one click from
+	// firing with none of the context of having just clicked it.
 	function toggleExpanded(name: string) {
-		if (expandedCollections.has(name)) expandedCollections.delete(name);
-		else expandedCollections.add(name);
+		if (expandedCollections.has(name)) {
+			expandedCollections.delete(name);
+			if (deleteArmed === name) deleteArmed = null;
+			if (promoteArmed === name) promoteArmed = null;
+			if (readOnlyLinkFor === name) readOnlyLinkFor = null;
+			if (renamingCollection === name) {
+				renamingCollection = null;
+				renameInput = '';
+			}
+		} else {
+			expandedCollections.add(name);
+		}
 	}
 
 	async function moveListItem(
@@ -328,6 +347,16 @@
 		tag: string
 	) {
 		await moveItemInCollection(item, tag, direction, visibleOrder, listActionDeps);
+	}
+
+	async function toggle(item: WatchlistItem) {
+		await toggleWatched(item, listActionDeps);
+	}
+	async function remove(item: WatchlistItem) {
+		await removeQueueItem(item, listActionDeps);
+	}
+	async function toggleSeason(item: WatchlistItem, seasonNum: number) {
+		await toggleSeasonProgress(item, seasonNum, listActionDeps);
 	}
 
 	// ── Read-only link ───────────────────────────────────────────────────────
@@ -615,68 +644,143 @@
 					{@const isPromoting = promoteArmed === collection}
 					{@const isReadOnlyLink = readOnlyLinkFor === collection}
 					{@const isExpanded = expandedCollections.has(collection)}
-					<div class="space-y-1">
-						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
-							<div class="flex items-center gap-2.5 min-w-0">
-								<label class="relative shrink-0 cursor-pointer" title="Change color">
+					<!-- One bordered card per list (#273 follow-up) — border-color is
+					     the list's own identity color. Header (name/count/chevron, or
+					     the rename input in its place) is always visible; titles and
+					     management actions reveal on expand instead of sitting pinned
+					     above a separate accordion box. -->
+					<div class="rounded-xl border-2" style="border-color: {color}">
+						<div class="flex items-center gap-2.5 px-3 py-2.5">
+							{#if isRenaming}
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									type="text"
+									aria-label="New list name"
+									maxlength="40"
+									value={renameInput}
+									oninput={(e) => (renameInput = e.currentTarget.value)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') renameCollection(collection, renameInput);
+										if (e.key === 'Escape') renamingCollection = null;
+									}}
+									autofocus
+									class="min-w-0 flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+								/>
+								<button
+									disabled={manageBusy}
+									onclick={() => renameCollection(collection, renameInput)}
+									class="shrink-0 text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+								>
+									Save
+								</button>
+								<button
+									disabled={manageBusy}
+									onclick={() => {
+										renamingCollection = null;
+										renameInput = '';
+									}}
+									class="shrink-0 text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+								>
+									Cancel
+								</button>
+							{:else}
+								<button
+									onclick={() => toggleExpanded(collection)}
+									class="flex flex-1 min-w-0 items-center gap-2 text-left"
+									aria-expanded={isExpanded}
+									aria-label="Toggle {collection}"
+								>
+									<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{color}"></span>
 									<span
-										class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
-										style="background:{color};"
-									></span>
-									<input
-										type="color"
-										aria-label="List color"
-										value={color}
-										oninput={(e) =>
-											updateCollectionColor(
-												collection,
-												(e.currentTarget as HTMLInputElement).value
-											)}
-										class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-									/>
-								</label>
-								{#if isRenaming}
-									<!-- svelte-ignore a11y_autofocus -->
-									<input
-										type="text"
-										aria-label="New list name"
-										maxlength="40"
-										value={renameInput}
-										oninput={(e) => (renameInput = e.currentTarget.value)}
-										onkeydown={(e) => {
-											if (e.key === 'Enter') renameCollection(collection, renameInput);
-											if (e.key === 'Escape') renamingCollection = null;
-										}}
-										autofocus
-										class="flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-									/>
-								{:else}
-									<span class="truncate text-sm font-medium text-gray-800 dark:text-gray-200"
-										>{collection}</span
+										class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200"
 									>
-									<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">({count})</span>
+										{collection}
+									</span>
+									<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+										{count} title{count === 1 ? '' : 's'}
+									</span>
+									<span
+										class="shrink-0 text-gray-400 transition-transform dark:text-gray-500 {isExpanded
+											? 'rotate-90'
+											: ''}">▸</span
+									>
+								</button>
+							{/if}
+						</div>
+
+						{#if isExpanded}
+							{@const filtered = filterByService(
+								(queueControls.watchedOn ? items : items.filter((i) => !i.watched_at)).filter((i) =>
+									hasActiveTag(i, collection)
+								),
+								queueControls.serviceFilter,
+								services.ids
+							)}
+							{@const sortedItems =
+								queueControls.sortBy === 'rank'
+									? sortByRank(filtered, collection, queueControls.sortDir)
+									: sortByField(filtered, queueControls.sortBy, queueControls.sortDir)}
+							<div class="border-t border-gray-100 p-3 dark:border-gray-800/60">
+								{#if sortedItems.length === 0}
+									<p class="text-xs text-gray-400 dark:text-gray-600">
+										{count === 0 ? 'Nothing here yet.' : 'Nothing matches these filters.'}
+									</p>
+								{:else}
+									<ul class="space-y-1">
+										{#each sortedItems as item, i (item.id)}
+											<li class="flex items-center gap-2">
+												<button
+													onclick={() => (detailItem = item)}
+													class="flex min-w-0 flex-1 items-center gap-2 text-left"
+													data-detail-trigger
+												>
+													<div
+														class="h-10 w-7 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-700"
+													>
+														{#if item.poster_path}
+															<img
+																src="{TMDB_IMG}/w92{item.poster_path}"
+																alt=""
+																class="h-full w-full object-cover"
+															/>
+														{/if}
+													</div>
+													<span
+														class="min-w-0 flex-1 truncate text-xs text-gray-700 dark:text-gray-300"
+														>{item.title}</span
+													>
+												</button>
+												{#if queueControls.sortBy === 'rank'}
+													<button
+														disabled={listItemBusy.has(item.id) || i === 0}
+														onclick={() => moveListItem(item, 'up', sortedItems, collection)}
+														class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
+														aria-label="Move up"
+													>
+														↑
+													</button>
+													<button
+														disabled={listItemBusy.has(item.id) || i === sortedItems.length - 1}
+														onclick={() => moveListItem(item, 'down', sortedItems, collection)}
+														class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
+														aria-label="Move down"
+													>
+														↓
+													</button>
+												{/if}
+											</li>
+										{/each}
+									</ul>
+								{/if}
+								{#if reorderError}
+									<p class="mt-1.5 text-red-600 dark:text-red-400">{reorderError}</p>
 								{/if}
 							</div>
-							<div class="mt-2 flex flex-wrap items-center gap-1">
-								{#if isRenaming}
-									<button
-										disabled={manageBusy}
-										onclick={() => renameCollection(collection, renameInput)}
-										class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-									>
-										Save
-									</button>
-									<button
-										disabled={manageBusy}
-										onclick={() => {
-											renamingCollection = null;
-											renameInput = '';
-										}}
-										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-									>
-										Cancel
-									</button>
-								{:else if isDeleting}
+
+							<div
+								class="border-t border-gray-100 px-3 py-2 dark:border-gray-800/60 flex flex-wrap items-center gap-1"
+							>
+								{#if isDeleting}
 									<div class="text-xs text-gray-600 dark:text-gray-400 mr-2">
 										Delete list? Items stay.
 									</div>
@@ -695,6 +799,23 @@
 										Cancel
 									</button>
 								{:else}
+									<label class="relative shrink-0 cursor-pointer" title="Change color">
+										<span
+											class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+											style="background:{color};"
+										></span>
+										<input
+											type="color"
+											aria-label="List color"
+											value={color}
+											oninput={(e) =>
+												updateCollectionColor(
+													collection,
+													(e.currentTarget as HTMLInputElement).value
+												)}
+											class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+										/>
+									</label>
 									{#if syncEnabled}
 										<button
 											disabled={manageBusy || promoting}
@@ -739,189 +860,100 @@
 									</button>
 								{/if}
 							</div>
-						</div>
-						{#if isPromoting}
-							<div
-								class="mt-1 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2.5 text-xs dark:border-orange-900/60 dark:bg-orange-950/30"
-							>
-								<p class="font-medium text-gray-900 dark:text-gray-100">
-									Share “{collection}” with other people?
-								</p>
-								<p class="mt-1 text-gray-700 dark:text-gray-300">
-									Its {collectionCounts[collection] ?? 0} title{(collectionCounts[collection] ??
-										0) === 1
-										? ''
-										: 's'} also join a new shared list — they stay in “{collection}” here too. The
-									shared copy lives online, reachable only through this account —
-									<span class="font-medium"
-										>if you lose both your passphrase and your recovery code, that copy is gone for
-										good.</span
-									>
-								</p>
-								{#if promoteError}
-									<p class="mt-1.5 text-red-600 dark:text-red-400">{promoteError}</p>
-								{/if}
-								<div class="mt-2 flex items-center gap-1">
-									<button
-										disabled={promoting}
-										onclick={() => doPromoteCollection(collection)}
-										class="rounded px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
-									>
-										{promoting ? 'Sharing…' : 'Share it'}
-									</button>
-									<button
-										disabled={promoting}
-										onclick={() => (promoteArmed = null)}
-										class="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-700"
-									>
-										Cancel
-									</button>
-								</div>
-							</div>
-						{/if}
-						{#if isReadOnlyLink}
-							<div
-								class="mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs dark:border-gray-700 dark:bg-gray-800/60"
-							>
-								<p class="text-gray-700 dark:text-gray-300">
-									Anyone with this link can view “{collection}” — no account needed. It's a
-									snapshot: their view won't update when you change the list, and the link stops
-									working after 30 days. For an ongoing, two-way list instead, use
-									<span class="font-medium">Share</span> above.
-								</p>
-								{#if readOnlyLinkCreating}
-									<p class="mt-1.5 text-gray-500 dark:text-gray-400">Creating link…</p>
-								{:else if readOnlyLinkUrl}
-									<div class="mt-2 flex gap-1">
-										<input
-											type="text"
-											readonly
-											value={readOnlyLinkUrl}
-											class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
-										/>
-										<button
-											onclick={copyReadOnlyLink}
-											class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+
+							{#if isPromoting}
+								<div
+									class="border-t border-orange-200 bg-orange-50 px-3 py-2.5 text-xs dark:border-orange-900/40 dark:bg-orange-950/30"
+								>
+									<p class="font-medium text-gray-900 dark:text-gray-100">
+										Share “{collection}” with other people?
+									</p>
+									<p class="mt-1 text-gray-700 dark:text-gray-300">
+										Its {collectionCounts[collection] ?? 0} title{(collectionCounts[collection] ??
+											0) === 1
+											? ''
+											: 's'} also join a new shared list — they stay in “{collection}” here too. The
+										shared copy lives online, reachable only through this account —
+										<span class="font-medium"
+											>if you lose both your passphrase and your recovery code, that copy is gone
+											for good.</span
 										>
-											{readOnlyLinkCopied ? '✓' : 'Copy'}
+									</p>
+									{#if promoteError}
+										<p class="mt-1.5 text-red-600 dark:text-red-400">{promoteError}</p>
+									{/if}
+									<div class="mt-2 flex items-center gap-1">
+										<button
+											disabled={promoting}
+											onclick={() => doPromoteCollection(collection)}
+											class="rounded px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
+										>
+											{promoting ? 'Sharing…' : 'Share it'}
 										</button>
 										<button
-											onclick={toggleReadOnlyLinkQr}
-											class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+											disabled={promoting}
+											onclick={() => (promoteArmed = null)}
+											class="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-700"
 										>
-											{showReadOnlyLinkQr ? 'Hide QR' : 'QR code'}
+											Cancel
 										</button>
 									</div>
-									{#if showReadOnlyLinkQr}
-										<div class="mt-2 flex justify-center rounded bg-white p-2">
-											{#if readOnlyLinkQr}
-												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-												{@html readOnlyLinkQr}
-											{:else}
-												<p class="py-8 text-gray-500">Generating…</p>
-											{/if}
-										</div>
-									{/if}
-								{/if}
-								{#if readOnlyLinkError}
-									<p class="mt-1.5 text-red-600 dark:text-red-400">{readOnlyLinkError}</p>
-								{/if}
-								<button
-									onclick={() => (readOnlyLinkFor = null)}
-									class="mt-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-								>
-									Close
-								</button>
-							</div>
-						{/if}
-						<!-- Titles accordion (#273) — border-color is the list's own identity
-						     color, same shell SharedListSection already uses for shared
-						     lists below; expand reveals titles, ranked/reordered the same
-						     way as the dock-driven sort elsewhere. -->
-						<div class="rounded-xl border-2" style="border-color: {color}">
-							<button
-								onclick={() => toggleExpanded(collection)}
-								class="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-								aria-expanded={isExpanded}
-							>
-								<span
-									class="text-gray-400 transition-transform dark:text-gray-500 {isExpanded
-										? 'rotate-90'
-										: ''}">▸</span
-								>
-								<span
-									class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200"
-								>
-									{collection}
-								</span>
-								<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-									{count} title{count === 1 ? '' : 's'}
-								</span>
-							</button>
-							{#if isExpanded}
-								{@const filtered = filterByService(
-									(queueControls.watchedOn ? items : items.filter((i) => !i.watched_at)).filter(
-										(i) => hasActiveTag(i, collection)
-									),
-									queueControls.serviceFilter,
-									services.ids
-								)}
-								{@const sortedItems =
-									queueControls.sortBy === 'rank'
-										? sortByRank(filtered, collection, queueControls.sortDir)
-										: sortByField(filtered, queueControls.sortBy, queueControls.sortDir)}
-								<div class="border-t border-gray-100 p-3 dark:border-gray-800/60">
-									{#if sortedItems.length === 0}
-										<p class="text-xs text-gray-400 dark:text-gray-600">
-											{count === 0 ? 'Nothing here yet.' : 'Nothing matches these filters.'}
-										</p>
-									{:else}
-										<ul class="space-y-1">
-											{#each sortedItems as item, i (item.id)}
-												<li class="flex items-center gap-2">
-													<div
-														class="h-10 w-7 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-700"
-													>
-														{#if item.poster_path}
-															<img
-																src="{TMDB_IMG}/w92{item.poster_path}"
-																alt=""
-																class="h-full w-full object-cover"
-															/>
-														{/if}
-													</div>
-													<span
-														class="min-w-0 flex-1 truncate text-xs text-gray-700 dark:text-gray-300"
-														>{item.title}</span
-													>
-													{#if queueControls.sortBy === 'rank'}
-														<button
-															disabled={listItemBusy.has(item.id) || i === 0}
-															onclick={() => moveListItem(item, 'up', sortedItems, collection)}
-															class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
-															aria-label="Move up"
-														>
-															↑
-														</button>
-														<button
-															disabled={listItemBusy.has(item.id) || i === sortedItems.length - 1}
-															onclick={() => moveListItem(item, 'down', sortedItems, collection)}
-															class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
-															aria-label="Move down"
-														>
-															↓
-														</button>
-													{/if}
-												</li>
-											{/each}
-										</ul>
-									{/if}
-									{#if reorderError}
-										<p class="mt-1.5 text-red-600 dark:text-red-400">{reorderError}</p>
-									{/if}
 								</div>
 							{/if}
-						</div>
+							{#if isReadOnlyLink}
+								<div class="border-t border-gray-100 px-3 py-2.5 text-xs dark:border-gray-800/60">
+									<p class="text-gray-700 dark:text-gray-300">
+										Anyone with this link can view “{collection}” — no account needed. It's a
+										snapshot: their view won't update when you change the list, and the link stops
+										working after 30 days. For an ongoing, two-way list instead, use
+										<span class="font-medium">Share</span> above.
+									</p>
+									{#if readOnlyLinkCreating}
+										<p class="mt-1.5 text-gray-500 dark:text-gray-400">Creating link…</p>
+									{:else if readOnlyLinkUrl}
+										<div class="mt-2 flex gap-1">
+											<input
+												type="text"
+												readonly
+												value={readOnlyLinkUrl}
+												class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
+											/>
+											<button
+												onclick={copyReadOnlyLink}
+												class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+											>
+												{readOnlyLinkCopied ? '✓' : 'Copy'}
+											</button>
+											<button
+												onclick={toggleReadOnlyLinkQr}
+												class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+											>
+												{showReadOnlyLinkQr ? 'Hide QR' : 'QR code'}
+											</button>
+										</div>
+										{#if showReadOnlyLinkQr}
+											<div class="mt-2 flex justify-center rounded bg-white p-2">
+												{#if readOnlyLinkQr}
+													<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+													{@html readOnlyLinkQr}
+												{:else}
+													<p class="py-8 text-gray-500">Generating…</p>
+												{/if}
+											</div>
+										{/if}
+									{/if}
+									{#if readOnlyLinkError}
+										<p class="mt-1.5 text-red-600 dark:text-red-400">{readOnlyLinkError}</p>
+									{/if}
+									<button
+										onclick={() => (readOnlyLinkFor = null)}
+										class="mt-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+									>
+										Close
+									</button>
+								</div>
+							{/if}
+						{/if}
 					</div>
 				{/each}
 			</div>
@@ -1007,274 +1039,250 @@
 				<div class="space-y-2">
 					{#each sharedCollections as coll (coll.id)}
 						{@const isRenamingShared = renamingSharedId === coll.id}
-						<div class="space-y-1">
-							<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
-								<div class="flex items-center justify-between gap-2">
-									<div class="min-w-0 flex items-center gap-2">
-										{#if coll.role === 'owner'}
-											<label class="relative shrink-0 cursor-pointer" title="Change color">
-												<span
-													class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
-													style="background:{sharedListColors[coll.id] ?? '#888888'};"
-												></span>
-												<input
-													type="color"
-													aria-label="List color"
-													value={sharedListColors[coll.id] ?? '#888888'}
-													oninput={(e) =>
-														updateSharedListColor(
-															coll,
-															(e.currentTarget as HTMLInputElement).value
-														)}
-													class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-												/>
-											</label>
-										{:else}
-											<span
-												class="block h-4 w-4 shrink-0 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
-												style="background:{sharedListColors[coll.id] ?? '#888888'};"
-												title="List color — only the owner can change this"
-											></span>
-										{/if}
-										{#if isRenamingShared}
-											<!-- svelte-ignore a11y_autofocus -->
-											<input
-												type="text"
-												aria-label="New list name"
-												maxlength="100"
-												value={sharedRenameInput}
-												oninput={(e) => (sharedRenameInput = e.currentTarget.value)}
-												onkeydown={(e) => {
-													if (e.key === 'Enter') saveSharedRename(coll);
-													if (e.key === 'Escape') renamingSharedId = null;
-												}}
-												autofocus
-												class="min-w-0 flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-											/>
-										{:else}
-											<p
-												class="min-w-0 flex items-center gap-1.5 text-sm font-medium text-gray-800 dark:text-gray-200"
-											>
-												<span class="truncate">{coll.name}</span>
-												{#if newActivityCounts[coll.id]}
-													<span
-														class="shrink-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
-													>
-														{newActivityCounts[coll.id]} new
-													</span>
-												{/if}
-											</p>
-										{/if}
-									</div>
-									{#if !isRenamingShared}
-										<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
-											{coll.role === 'owner' ? 'You own this' : 'Member'}
-										</span>
-									{/if}
-								</div>
-								{#if sharedRenameError && isRenamingShared}
-									<p class="mt-1 text-xs text-red-600 dark:text-red-400">{sharedRenameError}</p>
-								{/if}
-								<div class="mt-2 flex flex-wrap items-center gap-1">
-									{#if isRenamingShared}
-										<button
-											disabled={sharedRenameBusy}
-											onclick={() => saveSharedRename(coll)}
-											class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-										>
-											Save
-										</button>
-										<button
-											disabled={sharedRenameBusy}
-											onclick={() => (renamingSharedId = null)}
-											class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-										>
-											Cancel
-										</button>
-									{:else}
-										<a
-											href={resolve('/lists/[id]', { id: coll.id })}
-											class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-										>
-											Open
-										</a>
-										{#if coll.role === 'owner'}
-											<button
-												onclick={async () => {
-													openCollection = coll;
-													await generateInviteLink();
-												}}
-												class="text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
-											>
-												Invite
-											</button>
-											<button
-												onclick={() => startSharedRename(coll)}
-												class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-											>
-												Rename
-											</button>
-										{/if}
-										<button
-											onclick={() => {
-												if (openCollection?.id === coll.id) {
-													openCollection = null;
-												} else {
-													openCollection = coll;
-													openMembers = [];
-													outstandingInvites = [];
-													revokingInviteId = null;
-													revokeError = '';
-													loadOpenMembers();
-													loadOutstandingInvites();
-												}
-											}}
-											class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-										>
-											{openCollection?.id === coll.id ? 'Hide' : 'Info'}
-										</button>
-									{/if}
-								</div>
-							</div>
-							{#if openCollection?.id === coll.id}
-								<div
-									class="ml-3 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2 text-xs text-gray-600 dark:text-gray-400"
+						<SharedListSection
+							collection={coll}
+							color={sharedListColors[coll.id] ?? '#9ca3af'}
+							{budgetHours}
+							isRenaming={isRenamingShared}
+							newCount={newActivityCounts[coll.id]}
+						>
+							{#snippet nameSlot()}
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									type="text"
+									aria-label="New list name"
+									maxlength="100"
+									value={sharedRenameInput}
+									oninput={(e) => (sharedRenameInput = e.currentTarget.value)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') saveSharedRename(coll);
+										if (e.key === 'Escape') renamingSharedId = null;
+									}}
+									autofocus
+									class="min-w-0 flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+								/>
+								<button
+									disabled={sharedRenameBusy}
+									onclick={() => saveSharedRename(coll)}
+									class="shrink-0 text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
 								>
-									{#if inviteLink && openCollection.id === coll.id}
-										<div class="flex gap-1">
-											<input
-												type="text"
-												readonly
-												value={inviteLink}
-												class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
-											/>
-											<button
-												onclick={copyInviteLink}
-												class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
-											>
-												{inviteCopied ? '✓' : 'Copy'}
-											</button>
-											<button
-												onclick={toggleInviteQr}
-												class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-											>
-												{showInviteQr ? 'Hide QR' : 'QR code'}
-											</button>
-										</div>
-										{#if showInviteQr}
-											<div class="flex justify-center rounded bg-white p-2">
-												{#if inviteQr}
-													<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-													{@html inviteQr}
-												{:else}
-													<p class="py-8 text-gray-500">Generating…</p>
-												{/if}
-											</div>
-										{/if}
-									{/if}
-									{#if inviteError}
-										<p class="text-red-600 dark:text-red-400">{inviteError}</p>
-									{/if}
-									{#if coll.role === 'owner'}
-										{#if loadingInvites}
-											<p>Loading invites…</p>
-										{:else if outstandingInvites.length > 0}
-											<div>
-												<p class="font-medium text-gray-500 dark:text-gray-400">Pending invites</p>
-												<ul class="mt-1 space-y-1">
-													{#each outstandingInvites as invite (invite.id)}
-														<li class="flex items-center justify-between gap-2">
-															<span class="truncate">
-																Sent {new Date(invite.createdAt).toLocaleDateString()}, expires {new Date(
-																	invite.expiresAt
-																).toLocaleDateString()}
-															</span>
-															{#if revokingInviteId === invite.id}
-																<span class="shrink-0 flex items-center gap-1">
-																	<button
-																		onclick={() => doRevokeInvite(invite)}
-																		class="text-red-500 hover:underline"
-																	>
-																		Confirm
-																	</button>
-																	<button
-																		onclick={() => (revokingInviteId = null)}
-																		class="text-gray-500 hover:underline"
-																	>
-																		Cancel
-																	</button>
-																</span>
-															{:else}
-																<button
-																	onclick={() => doRevokeInvite(invite)}
-																	class="shrink-0 text-red-500 hover:underline"
-																>
-																	Revoke
-																</button>
-															{/if}
-														</li>
-													{/each}
-												</ul>
-												{#if revokeError}
-													<p class="mt-1 text-red-600 dark:text-red-400">{revokeError}</p>
-												{/if}
-											</div>
-										{/if}
-									{/if}
-									{#if loadingMembers}
-										<p>Loading members…</p>
-									{:else if removingMember?.collectionId !== coll.id}
-										<ul class="space-y-1">
-											{#each openMembers as member (member.userId)}
-												<li class="flex items-center justify-between gap-2">
-													<span class="truncate"
-														>{member.email}{member.role === 'owner' ? ' (owner)' : ''}</span
-													>
-													{#if coll.role === 'owner' && member.role !== 'owner'}
-														<button
-															onclick={() => {
-																removingMember = { collectionId: coll.id, userId: member.userId };
-																removalError = '';
-															}}
-															class="shrink-0 text-red-500 hover:underline"
-														>
-															Remove
-														</button>
-													{/if}
-												</li>
-											{/each}
-										</ul>
-									{/if}
-									{#if removingMember?.collectionId === coll.id}
-										<div class="bg-red-50 dark:bg-red-900/20 rounded p-2 space-y-1">
-											<p>Remove member and rotate key?</p>
+									Save
+								</button>
+								<button
+									disabled={sharedRenameBusy}
+									onclick={() => (renamingSharedId = null)}
+									class="shrink-0 text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+								>
+									Cancel
+								</button>
+							{/snippet}
+							{#snippet footerActions()}
+								{#if coll.role === 'owner'}
+									<label class="relative shrink-0 cursor-pointer" title="Change color">
+										<span
+											class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+											style="background:{sharedListColors[coll.id] ?? '#888888'};"
+										></span>
+										<input
+											type="color"
+											aria-label="List color"
+											value={sharedListColors[coll.id] ?? '#888888'}
+											oninput={(e) =>
+												updateSharedListColor(coll, (e.currentTarget as HTMLInputElement).value)}
+											class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+										/>
+									</label>
+								{:else}
+									<span
+										class="block h-4 w-4 shrink-0 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+										style="background:{sharedListColors[coll.id] ?? '#888888'};"
+										title="List color — only the owner can change this"
+									></span>
+								{/if}
+								<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
+									{coll.role === 'owner' ? 'You own this' : 'Member'}
+								</span>
+								<a
+									href={resolve('/lists/[id]', { id: coll.id })}
+									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+								>
+									Open
+								</a>
+								{#if coll.role === 'owner'}
+									<button
+										onclick={async () => {
+											openCollection = coll;
+											await generateInviteLink();
+										}}
+										class="text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+									>
+										Invite
+									</button>
+									<button
+										onclick={() => startSharedRename(coll)}
+										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+									>
+										Rename
+									</button>
+								{/if}
+								<button
+									onclick={() => {
+										if (openCollection?.id === coll.id) {
+											openCollection = null;
+										} else {
+											openCollection = coll;
+											openMembers = [];
+											outstandingInvites = [];
+											revokingInviteId = null;
+											revokeError = '';
+											loadOpenMembers();
+											loadOutstandingInvites();
+										}
+									}}
+									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+								>
+									{openCollection?.id === coll.id ? 'Hide' : 'Info'}
+								</button>
+								{#if sharedRenameError && isRenamingShared}
+									<p class="w-full text-xs text-red-600 dark:text-red-400">{sharedRenameError}</p>
+								{/if}
+								{#if openCollection?.id === coll.id}
+									<div
+										class="w-full mt-1 rounded-lg border border-gray-100 p-2 space-y-2 text-xs text-gray-600 dark:border-gray-800/60 dark:text-gray-400"
+									>
+										{#if inviteLink && openCollection.id === coll.id}
 											<div class="flex gap-1">
+												<input
+													type="text"
+													readonly
+													value={inviteLink}
+													class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
+												/>
 												<button
-													onclick={doRemoveMember}
-													class="px-2 py-1 rounded text-white text-xs bg-red-600 hover:bg-red-700"
+													onclick={copyInviteLink}
+													class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
 												>
-													Confirm
+													{inviteCopied ? '✓' : 'Copy'}
 												</button>
 												<button
-													onclick={() => (removingMember = null)}
+													onclick={toggleInviteQr}
 													class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
 												>
-													Cancel
+													{showInviteQr ? 'Hide QR' : 'QR code'}
 												</button>
 											</div>
-											{#if removalError}
-												<p class="text-red-600 dark:text-red-400">{removalError}</p>
+											{#if showInviteQr}
+												<div class="flex justify-center rounded bg-white p-2">
+													{#if inviteQr}
+														<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+														{@html inviteQr}
+													{:else}
+														<p class="py-8 text-gray-500">Generating…</p>
+													{/if}
+												</div>
 											{/if}
-										</div>
-									{/if}
-								</div>
-							{/if}
-							<SharedListSection
-								collection={coll}
-								color={sharedListColors[coll.id] ?? '#9ca3af'}
-								{budgetHours}
-							/>
-						</div>
+										{/if}
+										{#if inviteError}
+											<p class="text-red-600 dark:text-red-400">{inviteError}</p>
+										{/if}
+										{#if coll.role === 'owner'}
+											{#if loadingInvites}
+												<p>Loading invites…</p>
+											{:else if outstandingInvites.length > 0}
+												<div>
+													<p class="font-medium text-gray-500 dark:text-gray-400">
+														Pending invites
+													</p>
+													<ul class="mt-1 space-y-1">
+														{#each outstandingInvites as invite (invite.id)}
+															<li class="flex items-center justify-between gap-2">
+																<span class="truncate">
+																	Sent {new Date(invite.createdAt).toLocaleDateString()}, expires {new Date(
+																		invite.expiresAt
+																	).toLocaleDateString()}
+																</span>
+																{#if revokingInviteId === invite.id}
+																	<span class="shrink-0 flex items-center gap-1">
+																		<button
+																			onclick={() => doRevokeInvite(invite)}
+																			class="text-red-500 hover:underline"
+																		>
+																			Confirm
+																		</button>
+																		<button
+																			onclick={() => (revokingInviteId = null)}
+																			class="text-gray-500 hover:underline"
+																		>
+																			Cancel
+																		</button>
+																	</span>
+																{:else}
+																	<button
+																		onclick={() => doRevokeInvite(invite)}
+																		class="shrink-0 text-red-500 hover:underline"
+																	>
+																		Revoke
+																	</button>
+																{/if}
+															</li>
+														{/each}
+													</ul>
+													{#if revokeError}
+														<p class="mt-1 text-red-600 dark:text-red-400">{revokeError}</p>
+													{/if}
+												</div>
+											{/if}
+										{/if}
+										{#if loadingMembers}
+											<p>Loading members…</p>
+										{:else if removingMember?.collectionId !== coll.id}
+											<ul class="space-y-1">
+												{#each openMembers as member (member.userId)}
+													<li class="flex items-center justify-between gap-2">
+														<span class="truncate"
+															>{member.email}{member.role === 'owner' ? ' (owner)' : ''}</span
+														>
+														{#if coll.role === 'owner' && member.role !== 'owner'}
+															<button
+																onclick={() => {
+																	removingMember = { collectionId: coll.id, userId: member.userId };
+																	removalError = '';
+																}}
+																class="shrink-0 text-red-500 hover:underline"
+															>
+																Remove
+															</button>
+														{/if}
+													</li>
+												{/each}
+											</ul>
+										{/if}
+										{#if removingMember?.collectionId === coll.id}
+											<div class="bg-red-50 dark:bg-red-900/20 rounded p-2 space-y-1">
+												<p>Remove member and rotate key?</p>
+												<div class="flex gap-1">
+													<button
+														onclick={doRemoveMember}
+														class="px-2 py-1 rounded text-white text-xs bg-red-600 hover:bg-red-700"
+													>
+														Confirm
+													</button>
+													<button
+														onclick={() => (removingMember = null)}
+														class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+													>
+														Cancel
+													</button>
+												</div>
+												{#if removalError}
+													<p class="text-red-600 dark:text-red-400">{removalError}</p>
+												{/if}
+											</div>
+										{/if}
+									</div>
+								{/if}
+							{/snippet}
+						</SharedListSection>
 					{/each}
 				</div>
 			{/if}
@@ -1286,3 +1294,42 @@
 		</p>
 	{/if}
 </div>
+
+<!-- ── Detail panel (#273) ────────────────────────────────────────────────
+     Minimal — no onAddTag/onRemoveTag/onClearTags/sharedCollections/
+     onAssignShared, so DetailPanel's List section (gated on onAddTag)
+     doesn't render here; assignment stays on the Queue page. showSeasons
+     is wired through toggleSeasonProgress since personal items can be TV
+     shows with real progress to track, unlike search results. -->
+{#if detailItem}
+	{@const di = detailItem}
+	<DetailPanel
+		item={di}
+		{budgetHours}
+		showSeasons={true}
+		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
+		onClose={() => (detailItem = null)}
+	>
+		{#snippet footer(item)}
+			<button
+				class="flex-1 rounded-lg py-2 text-sm font-medium transition-colors
+					{item.watched_at
+					? 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-400 dark:hover:bg-teal-900/60'
+					: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+				disabled={listItemBusy.has(item.id)}
+				onclick={async () => {
+					await toggle(di);
+					detailItem = items.find((i) => i.id === item.id) ?? null;
+				}}>{item.watched_at ? '↩ Unwatch' : '✓ Watched'}</button
+			>
+			<button
+				class="rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
+				disabled={listItemBusy.has(item.id)}
+				onclick={async () => {
+					await remove(di);
+					detailItem = null;
+				}}>✕ Remove</button
+			>
+		{/snippet}
+	</DetailPanel>
+{/if}

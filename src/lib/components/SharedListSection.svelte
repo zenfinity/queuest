@@ -12,6 +12,7 @@
 	// bigger, riskier change than duplicating the card shell here. Season-level
 	// toggling and select-mode aren't offered — neither is wired up for shared
 	// items yet.
+	import type { Snippet } from 'svelte';
 	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
 	import { flip } from 'svelte/animate';
 	import { itemKey } from '$lib/types';
@@ -43,7 +44,11 @@
 		color,
 		budgetHours,
 		inline = false,
-		onStats
+		onStats,
+		footerActions,
+		isRenaming = false,
+		nameSlot,
+		newCount
 	}: {
 		collection: SharedCollection;
 		color: string;
@@ -56,6 +61,24 @@
 		// changes, so the caller's own summary line can report this list's
 		// stats instead of duplicating one.
 		onStats?: (stats: { count: number; remainingMins: number }) => void;
+		// Extra content rendered in its own bordered strip at the bottom of the
+		// card, only while `expanded` (never in `inline` mode) — lets a caller
+		// (#273 follow-up) fold its own per-instance chrome (rename/invite/
+		// info/color-picker) into the card without this component exposing any
+		// of its internal state.
+		footerActions?: Snippet;
+		// Small "N new" activity badge shown next to the name in the header
+		// (#273 follow-up) — purely presentational, caller-computed, so it
+		// stays visible even while collapsed rather than hiding behind
+		// footerActions like the rest of the caller's chrome.
+		newCount?: number;
+		// When true, the header renders `nameSlot` (typically a rename input +
+		// Save/Cancel) instead of the plain name/count/chevron button — mirrors
+		// how a caller-owned "list card" swaps its own header between a button
+		// and a plain div while renaming, so an <input> never ends up nested
+		// inside this component's own toggle <button> (invalid HTML).
+		isRenaming?: boolean;
+		nameSlot?: Snippet;
 	} = $props();
 
 	let expanded = $state(false);
@@ -834,29 +857,51 @@
 	{@render content()}
 {:else}
 	<div class="rounded-xl border-2" style="border-color: {color}">
-		<button
-			onclick={toggleOpen}
-			class="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-			aria-expanded={expanded}
-		>
-			<span
-				class="text-gray-400 transition-transform dark:text-gray-500 {expanded ? 'rotate-90' : ''}"
-				>▸</span
+		{#if isRenaming && nameSlot}
+			<div class="flex w-full items-center gap-2 px-3 py-2.5">
+				{@render nameSlot()}
+			</div>
+		{:else}
+			<button
+				onclick={toggleOpen}
+				class="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+				aria-expanded={expanded}
+				aria-label="Toggle {collection.name}"
 			>
-			<span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
-				{collection.name}
-			</span>
-			{#if loaded}
-				<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-					{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'}
+				<span
+					class="text-gray-400 transition-transform dark:text-gray-500 {expanded
+						? 'rotate-90'
+						: ''}">▸</span
+				>
+				<span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+					{collection.name}
 				</span>
-			{/if}
-		</button>
+				{#if newCount}
+					<span
+						class="shrink-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+					>
+						{newCount} new
+					</span>
+				{/if}
+				{#if loaded}
+					<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+						{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'}
+					</span>
+				{/if}
+			</button>
+		{/if}
 
 		{#if expanded}
 			<div class="border-t border-gray-100 p-3 dark:border-gray-800/60">
 				{@render content()}
 			</div>
+			{#if footerActions}
+				<div
+					class="border-t border-gray-100 px-3 py-2 dark:border-gray-800/60 flex flex-wrap items-center gap-1"
+				>
+					{@render footerActions()}
+				</div>
+			{/if}
 		{/if}
 	</div>
 {/if}
