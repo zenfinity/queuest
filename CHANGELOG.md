@@ -8,6 +8,58 @@
 
 Forward-migrates version 2 instead: parses the legacy scalar `queue_tag` field and re-runs it through the exact same duplicate-row collapsing logic the v5→v6 IndexedDB migration already uses (`collapseGroup`/`collapseNotes`, relocated from that migration's closure to module scope in `db.ts` and reused, rather than reimplemented, in `app-state.ts`'s new `migrateV2Items`). A title that was in two lists — two rows under the old shape — becomes one row with both tags active, same as the IndexedDB migration already does for a device's own local data. Both callers of `deserializeAppState` (the sync engine, and backup-file restore) get this fix for free, since neither has any version-specific logic of its own.
 
+## [1.25.0] — 2026-09-09
+
+### refactor: drag handle to poster corner, drop the rank arrows
+
+Grid-card footers in rank mode crammed 5 controls (drag handle, ↑, ↓, watched, remove) into one row under a narrow poster column, visibly spilling over. Since v1.24.0 fully wired drag-to-reorder end-to-end, the ↑/↓ buttons were redundant with dragging — and `svelte-dnd-action`'s drag handles are independently keyboard-operable (tab to focus, space/enter to lift, arrow keys to move), so removing the buttons doesn't regress keyboard accessibility, only a discrete-click alternative to dragging.
+
+Drops the arrows everywhere and relocates the grid card's drag handle to an overlay badge on the poster's bottom-right corner, mirroring the poster's two existing overlay badges (a "✓ Watched" badge top-left, a select-mode checkmark top-right). The poster is a `<button>`, and `dragHandle` makes an element a real `role="button" tabindex="0"` — an interactive element can't nest inside another `<button>` — so the relocated handle is a sibling of the poster button inside a new wrapping `<div class="relative">`, not a descendant. List rows aren't cramped the same way (full-width row, not a narrow card column), so only the arrows come out there; their drag handle stays put.
+
+Removing the buttons made `moveItem`/`moveItemInCollection` (`queue-actions.ts`) fully dead code — no callers left outside their own unit tests — so both were deleted along with the wrapper functions and prop wiring that existed only to call them.
+
+## [1.24.0] — 2026-09-09
+
+### feat: real grid/list views for personal lists, drop vestigial color dot
+
+Personal lists on `/lists` rendered a small hand-rolled thumbnail row instead of respecting the grid/list toggle shared lists and `/app` already honor. Swaps them for `QueueGridView`/`QueueListView` — personal items are already true `WatchlistItem[]`, unlike `SharedListSection`'s `CollectionItem`s, so the same components drop in directly — to get provider chips, watched/remove buttons, season chips, and drag-to-reorder for free. Also removes the list header's static color dot, redundant now that the card's border already carries the identity color.
+
+Surfaced and fixed a latent cross-zone drag bug in the process: none of the three `svelte-dnd-action` zones in the app (`QueueGridView`, `QueueListView`, `SharedListSection`'s ballot-ranking panel) opted out of accepting drops from other simultaneously-mounted zones — harmless while only one zone ever existed on a page at once, but not once multiple lists can be expanded (and dragged within) simultaneously. Fixed by adding `dropFromOthersDisabled: true` to all three.
+
+## [1.23.0] — 2026-09-09
+
+### style: unify each list's management row and accordion into one card
+
+The two-box-per-list look (a gray management row stacked directly on top of the bordered accordion) was visually redundant, and personal list items weren't clickable while shared list items already were. Merges each list into one identity-colored bordered card: the header (name/count/chevron) stays always visible, and both the titles and the management actions (Share/Rename/Delete, or Invite/Info for shared) reveal together on expand instead of the actions sitting pinned above a separate box.
+
+`SharedListSection` gains three small additive props — `footerActions`, `isRenaming`/`nameSlot`, and `newCount` — so its caller can fold rename/invite/info/color-picker chrome into the same card without the component exposing any of its internal expand/decrypt-once state. Personal list items are now clickable, opening the same minimal `DetailPanel` the queue uses, with working season-progress toggling. Collapsing a list now clears any armed delete/rename/promote state targeting it, so a "Confirm delete" button can't sit one click from firing behind a re-expand with none of the context of having just clicked it.
+
+## [1.22.0] — 2026-09-09
+
+### style: restyle Lists page as per-list accordions (#273 follow-up)
+
+Reverts the "Browse" toggle + full-width Grid/List panel from the initial #273 split in favor of the accordion style shared lists already had at the bottom of the Queue page before that split: `SharedListSection`'s non-inline mode (border-color = the list's own identity color, chevron toggle, titles revealed on expand, its own cached component instance so re-expanding doesn't re-decrypt) is simply re-added to `/lists` unchanged. Personal lists get an equivalent, lighter card — same border/chevron/count shell, poster+title rows with rank move-up/down when sorted by Rank. Multiple lists (personal or shared) can be expanded at once now, matching how shared lists always behaved.
+
+Removes what the dropped panel needed and nothing else did: `QueueGridView`/`QueueListView` usage built for it, and the filter dock's whole "List" filter section plus `queueControls.collectionFilter`/`sharedFilterId`/`sharedListOptions` — dead now that list browsing isn't dock-driven at all.
+
+### fix: TMDB attribution logo stopped loading
+
+The footer's hardcoded asset URL carried a stray `/2/` path segment (`/assets/2/v4/logos/...`) that TMDB's asset host no longer serves. Confirmed via TMDB's own current logos-attribution page that the same file still exists at `/assets/v4/logos/...`, one segment shorter.
+
+## [1.21.0] — 2026-09-09
+
+### refactor: split Queue and Lists — list browsing moves to /lists (#273)
+
+`/app` goes back to being just the flat personal queue: the "Shared Lists" browse section, the `collectionFilter`-driven inline shared-list view, and `ListHint` are all gone from it.
+
+`/lists` gains real browsing: each personal or shared list row gets a "Browse" toggle (replacing v1.20.0's rank-only "Reorder" widget) that sets `queueControls.collectionFilter` — the same value the filter dock's "List" section already wrote. A personal/Uncategorized selection renders the list's items via `QueueGridView`/`QueueListView` (reusing the same sort/filter pipeline and per-list rank reordering as the queue); a shared selection reuses `SharedListSection` unchanged. `sortBy`/`sortDir`/`viewMode` hydrate from and persist to `localStorage` from both pages now, since only whichever page was mounted previously listened for dock-driven changes.
+
+## [1.20.0] — 2026-09-08
+
+### feat: list chips, multi-select assignment, per-list rank (#274 PR2 of 2)
+
+Replaces the single-color swatch and Group toggle with per-title list chips — personal (filled) and shared-derived (outlined) as visually distinct clusters, since a promoted personal list and its same-named shared counterpart can both be active on one item at once. `DetailPanel`'s List picker and the Queue page's bulk-assign bar both become genuinely multi-select chip pickers, backed by new add/remove primitives (`addItemToCollection`, `removeItemFromCollection`, `bulkAddToCollection`, `bulkRemoveFromCollection`) that replace `setItemCollection`/`bulkSetCollection`'s old single-select "replace membership" semantics — an item can now be added to or removed from any number of lists independently. The Lists page gains move-up/move-down UI backed by new `moveItemInCollection`/`setTagRank` primitives, scoped independently per list. The Group toggle is gone from the dock now that chips show membership directly; the Gantt view's own "Group lanes by" axis is unaffected.
+
 ## [1.19.0] — 2026-09-08
 
 ### refactor: one row per title again — list membership is a map, not a duplicated row (#274, PR1 of 2)
