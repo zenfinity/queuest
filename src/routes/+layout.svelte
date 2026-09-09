@@ -40,7 +40,13 @@
 	}
 
 	let isLanding = $derived(page.url.pathname === '/');
-	let isQueue = $derived(page.url.pathname === '/app');
+	// The filter dock shows on both the Queue and Lists pages (#273) — Lists
+	// browses items too now, driven by the same dock. `isListsPage` further
+	// tells the dock which of its route-specific sections to show (list
+	// filter vs. Gantt's lane-grouping) — see QueueDock.svelte's
+	// showListFilter/showLanes props.
+	let isListsPage = $derived(page.url.pathname === '/lists');
+	let showDock = $derived(page.url.pathname === '/app' || isListsPage);
 
 	// Folder-tab curve: a single continuous line along the nav's bottom edge
 	// that rises into a smooth "hill" under whichever tab is active, instead
@@ -292,12 +298,12 @@
 
 			<div class="flex-1"></div>
 
-			{#if isQueue && queueControls.ready && queueControls.hasItems}
+			{#if showDock && queueControls.ready && queueControls.hasItems}
 				<!-- Inline nav placement (lg+ only) — the mobile/tablet floating placement lives
 				     outside <nav> below, since backdrop-filter on <nav> would otherwise confine a
 				     fixed-position dock to the nav's own box (see QueueDock.svelte). -->
 				<div class="hidden self-center lg:block">
-					<QueueDock floating={false} />
+					<QueueDock floating={false} showListFilter={isListsPage} showLanes={!isListsPage} />
 				</div>
 			{/if}
 
@@ -325,11 +331,11 @@
 		</div>
 	</nav>
 
-	{#if isQueue && queueControls.ready && queueControls.hasItems}
+	{#if showDock && queueControls.ready && queueControls.hasItems}
 		<!-- Floating placement (below lg:) — deliberately outside <nav>, see the comment
 		     on the inline instance above for why. -->
 		<div class="lg:hidden">
-			<QueueDock floating={true} />
+			<QueueDock floating={true} showListFilter={isListsPage} showLanes={!isListsPage} />
 		</div>
 	{/if}
 

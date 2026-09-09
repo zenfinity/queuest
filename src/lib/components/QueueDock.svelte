@@ -20,7 +20,17 @@
 	// `position: fixed` descendants — a fixed backdrop nested inside the nav would be
 	// confined to the nav's own (tiny) box instead of the viewport. A document click
 	// listener keyed off `data-queue-dock` sidesteps that entirely.
-	let { floating }: { floating: boolean } = $props();
+	//
+	// `showListFilter`/`showLanes` (#273) are route gates, not data gates —
+	// `queueControls.collectionNames`/`sharedListOptions` are populated by both
+	// /app (for Gantt's own "Group lanes by: List" toggle) and /lists (for its
+	// list-filter UI), so the *existence* of that data can no longer decide
+	// whether the list-filter section renders; only the caller's route can.
+	let {
+		floating,
+		showListFilter = true,
+		showLanes = true
+	}: { floating: boolean; showListFilter?: boolean; showLanes?: boolean } = $props();
 </script>
 
 <div data-queue-dock class={floating ? 'fixed bottom-4 left-1/2 z-50 -translate-x-1/2' : ''}>
@@ -76,25 +86,27 @@
 					/><rect x="1" y="10" width="12" height="2" rx="1" />
 				</svg>
 			</button>
-			<button
-				aria-label="Timeline view"
-				aria-pressed={queueControls.viewMode === 'lanes'}
-				onclick={() => (queueControls.viewMode = 'lanes')}
-				class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {queueControls.viewMode ===
-				'lanes'
-					? 'bg-orange-500 text-white'
-					: 'text-gray-500 dark:text-gray-400'}"
-			>
-				<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
-					<rect x="1" y="2" width="7" height="2.5" rx="1.2" /><rect
-						x="4"
-						y="6"
-						width="9"
-						height="2.5"
-						rx="1.2"
-					/><rect x="2" y="10" width="6" height="2.5" rx="1.2" />
-				</svg>
-			</button>
+			{#if showLanes}
+				<button
+					aria-label="Timeline view"
+					aria-pressed={queueControls.viewMode === 'lanes'}
+					onclick={() => (queueControls.viewMode = 'lanes')}
+					class="flex items-center rounded-full px-2.5 py-1.5 transition-colors {queueControls.viewMode ===
+					'lanes'
+						? 'bg-orange-500 text-white'
+						: 'text-gray-500 dark:text-gray-400'}"
+				>
+					<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+						<rect x="1" y="2" width="7" height="2.5" rx="1.2" /><rect
+							x="4"
+							y="6"
+							width="9"
+							height="2.5"
+							rx="1.2"
+						/><rect x="2" y="10" width="6" height="2.5" rx="1.2" />
+					</svg>
+				</button>
+			{/if}
 		</div>
 
 		<span class="h-4.5 w-px bg-gray-200 dark:bg-white/10"></span>
@@ -202,7 +214,7 @@
 						</button>
 					{/each}
 
-					{#if queueControls.viewMode === 'lanes' && queueControls.collectionNames.length > 0}
+					{#if showLanes && queueControls.viewMode === 'lanes' && queueControls.collectionNames.length > 0}
 						<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
 
 						<p class="px-2 py-1 panel-label">Group lanes by</p>
@@ -221,7 +233,7 @@
 						{/each}
 					{/if}
 
-					{#if queueControls.collectionNames.length > 0 || queueControls.sharedListOptions.length > 0}
+					{#if showListFilter && (queueControls.collectionNames.length > 0 || queueControls.sharedListOptions.length > 0)}
 						{@const queueColors = getQueueColors()}
 						<div class="my-1.5 h-px bg-gray-100 dark:bg-gray-800"></div>
 
