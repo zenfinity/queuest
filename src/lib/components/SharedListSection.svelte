@@ -712,7 +712,8 @@
 						items: dndBallot,
 						flipDurationMs,
 						dragDisabled: rankingBusy,
-						dropTargetStyle: {}
+						dropTargetStyle: {},
+						dropFromOthersDisabled: true
 					}}
 					onconsider={handleBallotConsider}
 					onfinalize={handleBallotFinalize}

@@ -287,6 +287,30 @@ export async function moveItemInCollection(
 }
 
 /**
+ * Drag-and-drop's counterpart to moveItemInCollection, mirroring how
+ * reorderItems relates to moveItem — takes the whole settled order from a
+ * drag gesture scoped to one list, instead of a single up/down swap.
+ * `newOrder` must be the full current order for `tag` (see
+ * moveItemInCollection's doc comment) — the caller's dragHandleZone must
+ * have dropFromOthersDisabled set so a foreign-zone drop can't violate that.
+ */
+export async function reorderCollectionItems(
+	newOrder: WatchlistItem[],
+	tag: string,
+	deps: QueueActionDeps
+): Promise<void> {
+	try {
+		await setTagRank(
+			tag,
+			newOrder.map((i) => i.id)
+		);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not reorder this list.');
+	}
+}
+
+/**
  * Personal-list assignment, genuinely multi-select (PR2) — an item can be
  * added to or removed from any number of lists independently, rather than
  * the old single-select "replace membership with exactly this one tag"

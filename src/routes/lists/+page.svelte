@@ -44,13 +44,13 @@
 		sortByField,
 		filterByService,
 		moveItemInCollection,
+		reorderCollectionItems,
 		toggleWatched,
 		removeQueueItem,
 		toggleSeasonProgress,
 		type QueueActionDeps
 	} from '$lib/queue-actions';
-	import { TMDB_IMG } from '$lib/tmdb';
-	import { DEFAULT_BUDGET_HOURS } from '$lib/progress';
+	import { DEFAULT_BUDGET_HOURS, releaseChip } from '$lib/progress';
 	import { readNumber } from '$lib/storage';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
@@ -60,6 +60,8 @@
 	import ListHint from '$lib/components/ListHint.svelte';
 	import ShareHint from '$lib/components/ShareHint.svelte';
 	import Button from '$lib/components/Button.svelte';
+	import QueueGridView from '$lib/components/QueueGridView.svelte';
+	import QueueListView from '$lib/components/QueueListView.svelte';
 
 	// Mirrors app/+page.svelte's own helper — sortBy/sortDir/viewMode are
 	// shared, persisted preferences (#273), so whichever of /app or /lists is
@@ -296,17 +298,20 @@
 	// Each list — personal or shared — is its own accordion: a card bordered
 	// in the list's identity color, with titles revealed on expand. Matches
 	// how shared lists always looked (SharedListSection's own non-inline
-	// mode, unchanged) below the queue before #273 moved them here; personal
-	// lists get an equivalent, lighter treatment since there's no per-item
-	// decrypt cost to justify SharedListSection's full card machinery for
-	// them. Multiple lists can be expanded at once, same as shared lists
-	// always allowed (each SharedListSection instance owns its own expanded
-	// state) — no single "one list at a time" restriction.
+	// mode, unchanged) below the queue before #273 moved them here. Personal
+	// lists render via QueueGridView/QueueListView, the same components /app
+	// uses, keyed by viewMode like everything else on this page — items are
+	// already true WatchlistItem[] here, so unlike SharedListSection (whose
+	// CollectionItems need their own identity scheme) these drop in directly.
+	// Multiple lists can be expanded at once, same as shared lists always
+	// allowed (each SharedListSection/QueueGridView/QueueListView instance
+	// owns its own expanded state) — no single "one list at a time" restriction.
 	let expandedCollections = new SvelteSet<string>();
 	let listItemBusy = new SvelteSet<number>();
 	let reorderError = $state('');
 	let budgetHours = $state(DEFAULT_BUDGET_HOURS);
 	let detailItem = $state<WatchlistItem | null>(null);
+	let releasePopupId: number | null = $state(null);
 
 	const listActionDeps: QueueActionDeps = {
 		setItems: (next) => {
@@ -602,6 +607,62 @@
 
 <svelte:head><title>Queuest — Lists</title></svelte:head>
 
+<svelte:document
+	onclick={(e) => {
+		const t = e.target as Element;
+		if (!t.closest('[data-release-popup]')) {
+			releasePopupId = null;
+		}
+	}}
+/>
+
+{#snippet seasonPicker(item: WatchlistItem)}
+	{@const chip = releaseChip(item.release)}
+	{#if item.media_type === 'tv' && (item.seasons?.length || chip)}
+		<div class="flex flex-wrap gap-0.5 pt-0.5">
+			{#each (item.seasons ?? []).filter((s) => s.episode_count > 0 && (!chip || item.release?.next_season == null || s.season_number < item.release.next_season)) as season (season.season_number)}
+				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
+				<button
+					class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
+						{watched
+						? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
+						: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
+					onclick={(e) => {
+						e.stopPropagation();
+						toggleSeason(item, season.season_number);
+					}}
+					title="{season.name} · {season.episode_count} eps"
+				>
+					{watched ? '✓' : 'S'}{season.season_number}
+				</button>
+			{/each}
+			{#if chip}
+				{@const isOpen = releasePopupId === item.id}
+				<button
+					class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
+						{isOpen
+						? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
+						: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
+					onclick={(e) => {
+						e.stopPropagation();
+						releasePopupId = isOpen ? null : item.id;
+					}}
+					data-release-popup
+				>
+					{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
+					{#if isOpen}
+						<div
+							class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700"
+						>
+							{chip}
+						</div>
+					{/if}
+				</button>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 <h1 class="sr-only">Lists</h1>
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
@@ -690,7 +751,6 @@
 									aria-expanded={isExpanded}
 									aria-label="Toggle {collection}"
 								>
-									<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{color}"></span>
 									<span
 										class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200"
 									>
@@ -725,52 +785,39 @@
 									<p class="text-xs text-gray-400 dark:text-gray-600">
 										{count === 0 ? 'Nothing here yet.' : 'Nothing matches these filters.'}
 									</p>
+								{:else if queueControls.viewMode === 'list'}
+									<QueueListView
+										items={sortedItems}
+										{budgetHours}
+										busy={listItemBusy}
+										rankMode={queueControls.sortBy === 'rank'}
+										onToggle={toggle}
+										onRemove={remove}
+										onOpenDetail={(item) => (detailItem = item)}
+										onMoveUp={(item) => moveListItem(item, 'up', sortedItems, collection)}
+										onMoveDown={(item) => moveListItem(item, 'down', sortedItems, collection)}
+										onReorder={(newOrder) =>
+											reorderCollectionItems(newOrder, collection, listActionDeps)}
+										{seasonPicker}
+									/>
 								{:else}
-									<ul class="space-y-1">
-										{#each sortedItems as item, i (item.id)}
-											<li class="flex items-center gap-2">
-												<button
-													onclick={() => (detailItem = item)}
-													class="flex min-w-0 flex-1 items-center gap-2 text-left"
-													data-detail-trigger
-												>
-													<div
-														class="h-10 w-7 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-700"
-													>
-														{#if item.poster_path}
-															<img
-																src="{TMDB_IMG}/w92{item.poster_path}"
-																alt=""
-																class="h-full w-full object-cover"
-															/>
-														{/if}
-													</div>
-													<span
-														class="min-w-0 flex-1 truncate text-xs text-gray-700 dark:text-gray-300"
-														>{item.title}</span
-													>
-												</button>
-												{#if queueControls.sortBy === 'rank'}
-													<button
-														disabled={listItemBusy.has(item.id) || i === 0}
-														onclick={() => moveListItem(item, 'up', sortedItems, collection)}
-														class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
-														aria-label="Move up"
-													>
-														↑
-													</button>
-													<button
-														disabled={listItemBusy.has(item.id) || i === sortedItems.length - 1}
-														onclick={() => moveListItem(item, 'down', sortedItems, collection)}
-														class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
-														aria-label="Move down"
-													>
-														↓
-													</button>
-												{/if}
-											</li>
-										{/each}
-									</ul>
+									<!-- 'grid' is the fallback branch, not 'lanes' coerced into looking
+									     like grid: this page's own effect already coerces viewMode away
+									     from 'lanes' on mount, so a third branch here would be dead code. -->
+									<QueueGridView
+										items={sortedItems}
+										{budgetHours}
+										busy={listItemBusy}
+										rankMode={queueControls.sortBy === 'rank'}
+										onToggle={toggle}
+										onRemove={remove}
+										onOpenDetail={(item) => (detailItem = item)}
+										onMoveUp={(item) => moveListItem(item, 'up', sortedItems, collection)}
+										onMoveDown={(item) => moveListItem(item, 'down', sortedItems, collection)}
+										onReorder={(newOrder) =>
+											reorderCollectionItems(newOrder, collection, listActionDeps)}
+										{seasonPicker}
+									/>
 								{/if}
 								{#if reorderError}
 									<p class="mt-1.5 text-red-600 dark:text-red-400">{reorderError}</p>
