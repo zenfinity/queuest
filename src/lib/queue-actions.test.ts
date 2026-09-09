@@ -33,12 +33,15 @@ const {
 	toggleSeasonProgress,
 	listCollections,
 	sortByRank,
+	sortByField,
+	filterByService,
 	addItemToCollection,
 	removeItemFromCollection,
 	clearItemCollections,
 	moveItem,
 	reorderItems,
 	moveItemInCollection,
+	reorderItemsInCollection,
 	bulkAddToCollection,
 	bulkRemoveFromCollection,
 	bulkClearCollections,
@@ -306,6 +309,83 @@ describe('sortByRank', () => {
 
 		expect(sortByRank([b, a], 'Drama').map((i) => i.id)).toEqual([1, 2]);
 	});
+
+	it("dir: 'desc' reverses the comparison between ranked items only", () => {
+		const a = makeItem({ id: 1, queue_tags: { Drama: { at: AT, rank: 2 } } });
+		const b = makeItem({ id: 2, queue_tags: { Drama: { at: AT, rank: 0 } } });
+		const c = makeItem({ id: 3, queue_tags: { Drama: { at: AT, rank: 1 } } });
+		const unranked = makeItem({
+			id: 4,
+			added_at: '2024-01-01T00:00:00.000Z',
+			queue_tags: tags('Drama')
+		});
+
+		const result = sortByRank([a, b, c, unranked], 'Drama', 'desc');
+
+		// Ranked items reverse (1, 3, 2 by descending rank); the unranked item
+		// still lands last, not first — direction only flips ranked comparisons.
+		expect(result.map((i) => i.id)).toEqual([1, 3, 2, 4]);
+	});
+});
+
+describe('sortByField', () => {
+	it('sorts by title, ascending and descending', () => {
+		const a = makeItem({ id: 1, title: 'Beta' });
+		const b = makeItem({ id: 2, title: 'Alpha' });
+
+		expect(sortByField([a, b], 'title', 'asc').map((i) => i.id)).toEqual([2, 1]);
+		expect(sortByField([a, b], 'title', 'desc').map((i) => i.id)).toEqual([1, 2]);
+	});
+
+	it('sorts by remaining runtime, ascending and descending', () => {
+		const short = makeItem({ id: 1, runtime_minutes: 30 });
+		const long = makeItem({ id: 2, runtime_minutes: 120 });
+
+		expect(sortByField([long, short], 'runtime', 'asc').map((i) => i.id)).toEqual([1, 2]);
+		expect(sortByField([long, short], 'runtime', 'desc').map((i) => i.id)).toEqual([2, 1]);
+	});
+
+	it('sorts by added_at, ascending and descending', () => {
+		const older = makeItem({ id: 1, added_at: '2024-01-01T00:00:00.000Z' });
+		const newer = makeItem({ id: 2, added_at: '2024-06-01T00:00:00.000Z' });
+
+		expect(sortByField([newer, older], 'added', 'asc').map((i) => i.id)).toEqual([1, 2]);
+		expect(sortByField([newer, older], 'added', 'desc').map((i) => i.id)).toEqual([2, 1]);
+	});
+});
+
+describe('filterByService', () => {
+	const providerA = { provider_id: 1, provider_name: 'A', logo_path: '' };
+	const providerB = { provider_id: 2, provider_name: 'B', logo_path: '' };
+
+	it("passes everything through for 'all'", () => {
+		const items = [makeItem({ id: 1, providers: [providerA] }), makeItem({ id: 2, providers: [] })];
+		expect(filterByService(items, 'all', new Set([1]))).toEqual(items);
+	});
+
+	it('passes everything through when nothing is subscribed yet', () => {
+		const items = [makeItem({ id: 1, providers: [providerA] })];
+		expect(filterByService(items, 'subscribed', new Set())).toEqual(items);
+	});
+
+	it("'subscribed' keeps only items with a subscribed provider", () => {
+		const withA = makeItem({ id: 1, providers: [providerA] });
+		const withB = makeItem({ id: 2, providers: [providerB] });
+
+		expect(filterByService([withA, withB], 'subscribed', new Set([1])).map((i) => i.id)).toEqual([
+			1
+		]);
+	});
+
+	it("'not-subscribed' keeps items with providers, none of which are subscribed", () => {
+		const withA = makeItem({ id: 1, providers: [providerA] });
+		const withB = makeItem({ id: 2, providers: [providerB] });
+		const noProviders = makeItem({ id: 3, providers: [] });
+
+		expect(
+			filterByService([withA, withB, noProviders], 'not-subscribed', new Set([1])).map((i) => i.id)
+		).toEqual([2]);
+	});
 });
 
 describe('addItemToCollection / removeItemFromCollection / clearItemCollections', () => {
@@ -527,6 +607,34 @@ describe('moveItemInCollection', () => {
 
 		expect(state.error).toBe('write failed');
 		expect(state.busy.has(2)).toBe(false);
+	});
+});
+
+describe('reorderItemsInCollection', () => {
+	it('persists the full settled order for one list via setTagRank and reloads', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
+		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
+		const c = makeItem({ id: 3, queue_tags: tags('Drama') });
+		setTagRank.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([c, a, b]);
+
+		await reorderItemsInCollection('Drama', [c, a, b], deps);
+
+		expect(setTagRank).toHaveBeenCalledWith('Drama', [3, 1, 2]);
+		expect(getAll).toHaveBeenCalledOnce();
+	});
+
+	it('surfaces an error without touching per-item busy state', async () => {
+		const { state, deps } = makeDeps();
+		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
+		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
+		setTagRank.mockRejectedValue(new Error('write failed'));
+
+		await reorderItemsInCollection('Drama', [b, a], deps);
+
+		expect(state.error).toBe('write failed');
+		expect(state.busy.size).toBe(0);
 	});
 });
 

@@ -1,4 +1,6 @@
 import { activeQueueTags, type WatchlistItem } from './types';
+import { remainingRuntime } from './progress';
+import type { SortKey, ServiceFilterKey } from './queue-controls.svelte';
 import {
 	getAll,
 	removeItem,
@@ -130,16 +132,73 @@ export function listCollections(items: WatchlistItem[], extraNames: string[] = [
  * item at the front instead. The first reorder of a partially-ranked list
  * stamps contiguous ranks on every item in it (moveItemInCollection always
  * passes the full array), self-healing from then on.
+ *
+ * `dir` (#273) only flips the comparison between two *ranked* items —
+ * unranked items stay appended at the end in `added_at` order regardless of
+ * direction, since that fallback placement isn't part of "rank" and
+ * shouldn't flip just because the user toggled the dock's sort arrow.
  */
-export function sortByRank(items: WatchlistItem[], tag: string): WatchlistItem[] {
+export function sortByRank(
+	items: WatchlistItem[],
+	tag: string,
+	dir: 'asc' | 'desc' = 'asc'
+): WatchlistItem[] {
+	const mul = dir === 'asc' ? 1 : -1;
 	return [...items].sort((a, b) => {
 		const ra = a.queue_tags?.[tag]?.rank;
 		const rb = b.queue_tags?.[tag]?.rank;
-		if (ra !== undefined && rb !== undefined) return ra - rb;
+		if (ra !== undefined && rb !== undefined) return (ra - rb) * mul;
 		if (ra !== undefined) return -1;
 		if (rb !== undefined) return 1;
 		return a.added_at.localeCompare(b.added_at);
 	});
+}
+
+/**
+ * Sorts by a non-rank field — the queue and per-list browse views (#273)
+ * both need identical title/runtime/added-at ordering, so this is shared
+ * rather than duplicated; 'rank' is deliberately excluded since it means
+ * different things on each surface (queue-wide sort_order vs a list's own
+ * per-tag rank via sortByRank above) and stays a caller-specific branch.
+ */
+export function sortByField(
+	list: WatchlistItem[],
+	sortBy: Exclude<SortKey, 'rank'>,
+	sortDir: 'asc' | 'desc'
+): WatchlistItem[] {
+	const mul = sortDir === 'asc' ? 1 : -1;
+	// remainingRuntime() walks the item's seasons, so compute it once per
+	// item (#246) rather than ~2·N·log N times inside the comparator.
+	const runtimeOf =
+		sortBy === 'runtime' ? new Map(list.map((item) => [item, remainingRuntime(item)])) : null;
+	return [...list].sort((a, b) => {
+		if (sortBy === 'title') return a.title.localeCompare(b.title) * mul;
+		if (runtimeOf) return ((runtimeOf.get(a) ?? 0) - (runtimeOf.get(b) ?? 0)) * mul;
+		return a.added_at.localeCompare(b.added_at) * mul;
+	});
+}
+
+/**
+ * Subscribed/not-subscribed service filtering — shared by the queue and
+ * per-list browse views (#273), which both filter the same way. `all` and
+ * "nothing subscribed yet" both pass everything through unfiltered, the
+ * same "meaningless filter falls back to showing everything" convention
+ * queue-controls.svelte.ts's serviceFilter auto-reset already relies on.
+ */
+export function filterByService(
+	items: WatchlistItem[],
+	serviceFilter: ServiceFilterKey,
+	subscribedIds: ReadonlySet<number>
+): WatchlistItem[] {
+	if (serviceFilter === 'all' || subscribedIds.size === 0) return items;
+	if (serviceFilter === 'subscribed') {
+		return items.filter((item) => item.providers.some((p) => subscribedIds.has(p.provider_id)));
+	}
+	// not-subscribed: has providers, none of which are subscribed
+	return items.filter(
+		(item) =>
+			item.providers.length > 0 && !item.providers.some((p) => subscribedIds.has(p.provider_id))
+	);
 }
 
 /**
@@ -224,6 +283,30 @@ export async function moveItemInCollection(
 		deps.setError(e instanceof Error ? e.message : 'Could not reorder this list.');
 	} finally {
 		deps.setBusy(item.id, false);
+	}
+}
+
+/**
+ * Drag-and-drop's counterpart to moveItemInCollection, for the Lists page's
+ * full-list Grid/List browse views (#273) — same shape as reorderItems, but
+ * persists through setTagRank(tag, …) instead of setSortOrder, scoped to one
+ * list's own order. `newOrder` must be the full current order for `tag` —
+ * see setTagRank's own doc comment for why a partial array would break the
+ * per-key merge's "one device's whole reorder wins atomically" property.
+ */
+export async function reorderItemsInCollection(
+	tag: string,
+	newOrder: WatchlistItem[],
+	deps: QueueActionDeps
+): Promise<void> {
+	try {
+		await setTagRank(
+			tag,
+			newOrder.map((i) => i.id)
+		);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not reorder this list.');
 	}
 }
 

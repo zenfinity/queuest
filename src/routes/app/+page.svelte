@@ -2,13 +2,15 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
-	import { activeQueueTags, hasActiveTag, itemKey, type WatchlistItem } from '$lib/types';
+	import { activeQueueTags, itemKey, type WatchlistItem } from '$lib/types';
 	import {
 		reloadQueue,
 		toggleWatched,
 		removeQueueItem,
 		toggleSeasonProgress,
 		listCollections,
+		sortByField,
+		filterByService,
 		addItemToCollection,
 		removeItemFromCollection,
 		clearItemCollections,
@@ -41,20 +43,13 @@
 	} from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
-	import SharedListSection from '$lib/components/SharedListSection.svelte';
-	import {
-		queueControls,
-		SORT_DEFAULT_DIR,
-		UNCATEGORIZED,
-		sharedFilterId
-	} from '$lib/queue-controls.svelte';
+	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import { readNumber, readRecord, readBoolean } from '$lib/storage';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
-	import ListHint from '$lib/components/ListHint.svelte';
 	import SyncHint from '$lib/components/SyncHint.svelte';
 	import Button from '$lib/components/Button.svelte';
 
@@ -81,7 +76,6 @@
 	let sharedMembership = $state<Map<string, { id: string; name: string; color: string }[]>>(
 		new Map()
 	);
-	let sharedFilterStats: { count: number; remainingMins: number } | null = $state(null);
 	let syncEnabled = $state(false);
 
 	// ── Bulk selection (#113) ────────────────────────────────────────────────
@@ -251,59 +245,21 @@
 	// have no items tagged yet so listCollections(items) alone would miss them.
 	let existingCollections = $derived(listCollections(items, Object.keys(queueColors)));
 
-	// A `shared:<id>` collectionFilter fills the main view with that one list
-	// instead of a personal-queue tag (#205) — same picker, same convention.
-	let activeSharedId = $derived(sharedFilterId(queueControls.collectionFilter));
-	let activeSharedCollection = $derived(
-		sharedCollections.find((c) => c.id === activeSharedId) ?? null
-	);
-	// The below-queue "Shared Lists" browse section excludes whichever list is
-	// already filling the main view — otherwise it'd appear twice on screen.
-	let otherSharedCollections = $derived(sharedCollections.filter((c) => c.id !== activeSharedId));
-
 	// Watched toggle is inclusive: off shows only unwatched titles, on mixes in watched titles too.
 	let baseItems = $derived(queueControls.watchedOn ? items : queued);
 
-	let serviceFiltered = $derived.by(() => {
-		if (queueControls.serviceFilter === 'all' || services.ids.size === 0) return baseItems;
-		if (queueControls.serviceFilter === 'subscribed') {
-			return baseItems.filter((item) =>
-				item.providers.some((p) => services.ids.has(p.provider_id))
-			);
-		}
-		// not-subscribed: has providers, none of which are subscribed
-		return baseItems.filter(
-			(item) =>
-				item.providers.length > 0 && !item.providers.some((p) => services.ids.has(p.provider_id))
-		);
-	});
-
-	let visibleItems = $derived.by(() => {
-		if (queueControls.collectionFilter === null) return serviceFiltered;
-		if (queueControls.collectionFilter === UNCATEGORIZED) {
-			return serviceFiltered.filter((item) => activeQueueTags(item).length === 0);
-		}
-		return serviceFiltered.filter((item) => hasActiveTag(item, queueControls.collectionFilter!));
-	});
+	// The flat personal queue, unfiltered by list (#273 — list browsing/
+	// filtering moved to /lists; this page is just the queue now).
+	let visibleItems = $derived(
+		filterByService(baseItems, queueControls.serviceFilter, services.ids)
+	);
 
 	function sorted(list: WatchlistItem[]): WatchlistItem[] {
-		const mul = queueControls.sortDir === 'asc' ? 1 : -1;
-		// remainingRuntime() walks the item's seasons, so compute it once per
-		// item (#246) rather than ~2·N·log N times inside the comparator.
-		const runtimeOf =
-			queueControls.sortBy === 'runtime'
-				? new Map(list.map((item) => [item, remainingRuntime(item)]))
-				: null;
-		return [...list].sort((a, b) => {
-			if (queueControls.sortBy === 'title') return a.title.localeCompare(b.title) * mul;
-			if (runtimeOf) {
-				return ((runtimeOf.get(a) ?? 0) - (runtimeOf.get(b) ?? 0)) * mul;
-			}
-			if (queueControls.sortBy === 'rank') {
-				return ((a.sort_order ?? 0) - (b.sort_order ?? 0)) * mul;
-			}
-			return a.added_at.localeCompare(b.added_at) * mul;
-		});
+		if (queueControls.sortBy === 'rank') {
+			const mul = queueControls.sortDir === 'asc' ? 1 : -1;
+			return [...list].sort((a, b) => ((a.sort_order ?? 0) - (b.sort_order ?? 0)) * mul);
+		}
+		return sortByField(list, queueControls.sortBy, queueControls.sortDir);
 	}
 
 	let flatItems = $derived(sorted(visibleItems));
@@ -427,7 +383,14 @@
 			if (enabled) loadSharedCollections().then(loadSharedMembership);
 		});
 
-		return () => window.removeEventListener('beforeunload', onBeforeUnload);
+		return () => {
+			window.removeEventListener('beforeunload', onBeforeUnload);
+			// Avoids a one-frame stale-dock window when navigating to /lists,
+			// which sets these independently on its own mount (#273) — queueControls
+			// is a module-level singleton that outlives this page's own lifecycle.
+			queueControls.ready = false;
+			queueControls.hasItems = false;
+		};
 	});
 
 	$effect(() => {
@@ -448,51 +411,18 @@
 	});
 
 	// Mirrors collection names into shared state so QueueDock (rendered from the
-	// layout, without direct access to `items`) can list them in its popover.
+	// layout, without direct access to `items`) can list them in its popover —
+	// still needed here even though this page no longer filters by list (#273),
+	// since the Gantt view's "Group lanes by: List" toggle reads it too.
 	$effect(() => {
 		queueControls.collectionNames = existingCollections;
 	});
 
-	// Same mirroring for shared lists, so QueueDock can offer them as filter
-	// options too (#205).
+	// Lets the nav know whether the dock has anything to show, for the lg+ inline
+	// placement. Personal items only (#273) — this page no longer renders
+	// anything shared-list-related, so shared-only accounts get no dock here.
 	$effect(() => {
-		queueControls.sharedListOptions = sharedCollections.map((c) => ({
-			id: c.id,
-			name: c.name,
-			color: sharedListColors[c.id] ?? '#9ca3af'
-		}));
-	});
-
-	// Clears a collection filter that no longer matches anything (the collection
-	// was renamed/deleted, or its last item was removed/recategorized) — same
-	// "never silently filter forever" convention as the subscribed-filter reset above.
-	// Shared filters are exempt: `sharedCollections` loads asynchronously after
-	// mount, so checking membership here would clear a just-restored `shared:`
-	// filter before the list has had a chance to load.
-	$effect(() => {
-		const f = queueControls.collectionFilter;
-		if (
-			f !== null &&
-			f !== UNCATEGORIZED &&
-			sharedFilterId(f) === null &&
-			!existingCollections.includes(f)
-		) {
-			queueControls.collectionFilter = null;
-		}
-	});
-
-	// A shared filter has no select-mode analog (bulk actions operate on
-	// personal WatchlistItems by local id) — leaving it active would show a
-	// Select button with nothing for it to do.
-	$effect(() => {
-		if (activeSharedCollection && selectMode) exitSelectMode();
-	});
-
-	// Lets the nav know whether the dock has anything to show, for the lg+ inline placement.
-	// Shared lists count too — their sections read the same sort/watched/service
-	// filters, so the dock earns its keep even when the personal queue is empty.
-	$effect(() => {
-		queueControls.hasItems = loaded && (items.length > 0 || sharedCollections.length > 0);
+		queueControls.hasItems = loaded && items.length > 0;
 	});
 
 	// ── Actions ───────────────────────────────────────────────────────────────
@@ -569,11 +499,7 @@
 
 <h1 class="sr-only">My Queue</h1>
 
-<div
-	class="space-y-4 xs:space-y-6 {(loaded && items.length > 0) || activeSharedCollection
-		? 'pb-24 lg:pb-0'
-		: ''}"
->
+<div class="space-y-4 xs:space-y-6 {loaded && items.length > 0 ? 'pb-24 lg:pb-0' : ''}">
 	<!-- Storage error -->
 	{#if dbError}
 		<div
@@ -683,26 +609,10 @@
 	{/if}
 
 	<!-- Summary line -->
-	{#if activeSharedCollection}
+	{#if loaded && items.length > 0}
 		<div class="flex items-center justify-between gap-2">
 			<p class="text-xs text-gray-500 dark:text-gray-500">
-				{activeSharedCollection.name} · {sharedFilterStats?.count ?? 0} title{(sharedFilterStats?.count ??
-					0) === 1
-					? ''
-					: 's'} · ~{hms(sharedFilterStats?.remainingMins ?? 0)} remaining{queueControls.watchedOn
-					? ' · showing watched'
-					: ''}
-			</p>
-		</div>
-	{:else if loaded && items.length > 0}
-		{@const collectionLabel =
-			queueControls.collectionFilter === UNCATEGORIZED
-				? 'Uncategorized'
-				: queueControls.collectionFilter}
-		{@const collectionPrefix = collectionLabel ? `${collectionLabel} · ` : ''}
-		<div class="flex items-center justify-between gap-2">
-			<p class="text-xs text-gray-500 dark:text-gray-500">
-				{collectionPrefix}{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(
+				{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'} · ~{hms(
 					visibleItems.reduce((s, i) => s + remainingRuntime(i), 0)
 				)} remaining{queueControls.watchedOn ? ' · showing watched' : ''}
 			</p>
@@ -720,7 +630,7 @@
 	{/if}
 
 	<!-- Bulk action bar (#113) -->
-	{#if selectMode && !activeSharedCollection}
+	{#if selectMode}
 		<div
 			class="flex flex-wrap items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-sm dark:border-orange-700/40 dark:bg-orange-950/20"
 		>
@@ -823,24 +733,8 @@
 		</div>
 	{/if}
 
-	<!-- A shared-list filter fills this whole area, same slot the personal
-	     queue would otherwise occupy — not another section to scroll to. -->
-	{#if activeSharedCollection}
-		<!-- Keyed so switching between two shared filters remounts the section —
-		     otherwise it'd keep its already-`loaded` state from the previous
-		     list and never fetch the newly selected one. -->
-		{#key activeSharedCollection.id}
-			<SharedListSection
-				inline
-				collection={activeSharedCollection}
-				color={sharedListColors[activeSharedCollection.id] ?? '#9ca3af'}
-				{budgetHours}
-				onStats={(s) => (sharedFilterStats = s)}
-			/>
-		{/key}
-
-		<!-- Loading -->
-	{:else if !loaded}
+	<!-- Loading -->
+	{#if !loaded}
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each { length: 5 } as _, i (i)}<div
 					class="aspect-[2/3] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800"
@@ -924,23 +818,6 @@
 		/>
 	{/if}
 </div>
-
-<ListHint show={loaded && items.length >= 5 && existingCollections.length === 0} />
-
-{#if otherSharedCollections.length > 0}
-	<div class="mt-6 space-y-2 xs:mt-8">
-		<h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-			Shared Lists
-		</h2>
-		{#each otherSharedCollections as coll (coll.id)}
-			<SharedListSection
-				collection={coll}
-				color={sharedListColors[coll.id] ?? '#9ca3af'}
-				{budgetHours}
-			/>
-		{/each}
-	</div>
-{/if}
 
 <SyncHint show={loaded && !syncEnabled && items.length > 0} count={items.length} />
 

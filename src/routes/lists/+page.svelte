@@ -9,7 +9,7 @@
 	// schema and API surface for zero user-facing benefit, so this is a
 	// presentation-layer rename only.
 	import { SvelteSet } from 'svelte/reactivity';
-	import { hasActiveTag, type WatchlistItem } from '$lib/types';
+	import { hasActiveTag, activeQueueTags, type WatchlistItem } from '$lib/types';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
@@ -41,12 +41,44 @@
 	import {
 		listCollections,
 		sortByRank,
+		sortByField,
+		filterByService,
 		moveItemInCollection,
-		type QueueActionDeps
+		reorderItemsInCollection,
+		toggleWatched,
+		removeQueueItem,
+		toggleSeasonProgress,
+		type QueueActionDeps,
+		type ItemChips
 	} from '$lib/queue-actions';
-	import { TMDB_IMG } from '$lib/tmdb';
+	import { remainingRuntime, releaseChip, hms, DEFAULT_BUDGET_HOURS } from '$lib/progress';
+	import { readNumber } from '$lib/storage';
+	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
+	import {
+		queueControls,
+		SORT_DEFAULT_DIR,
+		UNCATEGORIZED,
+		sharedFilterId
+	} from '$lib/queue-controls.svelte';
+	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
+	import QueueGridView from '$lib/components/QueueGridView.svelte';
+	import QueueListView from '$lib/components/QueueListView.svelte';
+	import SharedListSection from '$lib/components/SharedListSection.svelte';
+	import DetailPanel from '$lib/components/DetailPanel.svelte';
+	import ListHint from '$lib/components/ListHint.svelte';
 	import ShareHint from '$lib/components/ShareHint.svelte';
 	import Button from '$lib/components/Button.svelte';
+
+	// Mirrors app/+page.svelte's own helper — sortBy/sortDir/viewMode are
+	// shared, persisted preferences (#273), so whichever of /app or /lists is
+	// mounted needs to both hydrate and keep writing them.
+	function loadPref<T extends string>(key: string, fallback: T): T {
+		try {
+			return (localStorage.getItem(key) as T) ?? fallback;
+		} catch {
+			return fallback;
+		}
+	}
 
 	let syncEnabled = $state(false);
 
@@ -268,10 +300,18 @@
 	let manageBusy = $state(false);
 	let newCollectionInput = $state('');
 
-	// ── Per-list rank (#274 PR2) ─────────────────────────────────────────────
-	let expandedCollection = $state<string | null>(null);
+	// ── List browsing (#273) ─────────────────────────────────────────────────
+	// List browsing (personal and shared) and the filter dock moved here from
+	// /app, which is back to being just the flat queue. `queueControls.collectionFilter`
+	// (a personal tag name, UNCATEGORIZED, or `shared:<id>`) is the single
+	// source of truth for which list is currently expanded/browsed inline —
+	// the dock's "List" section already writes it, same as it used to drive
+	// /app's old inline shared-list-fill view.
 	let listItemBusy = new SvelteSet<number>();
 	let reorderError = $state('');
+	let budgetHours = $state(DEFAULT_BUDGET_HOURS);
+	let detailItem = $state<WatchlistItem | null>(null);
+	let releasePopupId: number | null = $state(null);
 
 	const listActionDeps: QueueActionDeps = {
 		setItems: (next) => {
@@ -286,13 +326,84 @@
 		}
 	};
 
-	async function moveListItem(
-		item: WatchlistItem,
-		direction: 'up' | 'down',
-		visibleOrder: WatchlistItem[],
-		tag: string
-	) {
-		await moveItemInCollection(item, tag, direction, visibleOrder, listActionDeps);
+	let activeSharedId = $derived(sharedFilterId(queueControls.collectionFilter));
+	let activeSharedCollection = $derived(
+		sharedCollections.find((c) => c.id === activeSharedId) ?? null
+	);
+	// A personal tag name or UNCATEGORIZED — null means either nothing is
+	// selected or a shared list is (activeSharedCollection covers that case).
+	let browsingTag = $derived(
+		queueControls.collectionFilter !== null && activeSharedId === null
+			? queueControls.collectionFilter
+			: null
+	);
+	let browsingLabel = $derived(
+		activeSharedCollection?.name ?? (browsingTag === UNCATEGORIZED ? 'Uncategorized' : browsingTag)
+	);
+
+	let browsingItems = $derived.by(() => {
+		if (!browsingTag) return [];
+		const tagged =
+			browsingTag === UNCATEGORIZED
+				? items.filter((i) => activeQueueTags(i).length === 0)
+				: items.filter((i) => hasActiveTag(i, browsingTag!));
+		const base = queueControls.watchedOn ? tagged : tagged.filter((i) => !i.watched_at);
+		return filterByService(base, queueControls.serviceFilter, services.ids);
+	});
+
+	// UNCATEGORIZED has no queue_tags entry to hold a rank — Rank sort falls
+	// back to added_at for it rather than pretending it has one.
+	let browsingRankMode = $derived(
+		queueControls.sortBy === 'rank' && !!browsingTag && browsingTag !== UNCATEGORIZED
+	);
+	let browsingSortedItems = $derived(
+		browsingRankMode
+			? sortByRank(browsingItems, browsingTag!, queueControls.sortDir)
+			: sortByField(
+					browsingItems,
+					queueControls.sortBy === 'rank' ? 'added' : queueControls.sortBy,
+					queueControls.sortDir
+				)
+	);
+
+	// Personal-only chips (#273) — a full shared-membership decrypt pass just
+	// to show passive chips on cards already scoped inside one list isn't
+	// worth the cost; shared membership already has its own visible cluster
+	// via the "Shared Lists" section elsewhere on this page.
+	let chipsByItemId = $derived.by(
+		() =>
+			new Map<number, ItemChips>(
+				browsingSortedItems.map((item) => [
+					item.id,
+					{
+						personal: activeQueueTags(item).map((name) => ({
+							name,
+							color: queueColors[name] ?? '#f97316'
+						})),
+						shared: []
+					}
+				])
+			)
+	);
+
+	async function moveListItem(item: WatchlistItem, direction: 'up' | 'down') {
+		if (!browsingTag || browsingTag === UNCATEGORIZED) return;
+		await moveItemInCollection(item, browsingTag, direction, browsingSortedItems, listActionDeps);
+	}
+
+	async function reorderListItems(newOrder: WatchlistItem[]) {
+		if (!browsingTag || browsingTag === UNCATEGORIZED) return;
+		await reorderItemsInCollection(browsingTag, newOrder, listActionDeps);
+	}
+
+	async function toggle(item: WatchlistItem) {
+		await toggleWatched(item, listActionDeps);
+	}
+	async function remove(item: WatchlistItem) {
+		await removeQueueItem(item, listActionDeps);
+	}
+	async function toggleSeason(item: WatchlistItem, seasonNum: number) {
+		await toggleSeasonProgress(item, seasonNum, listActionDeps);
 	}
 
 	// ── Read-only link ───────────────────────────────────────────────────────
@@ -475,20 +586,232 @@
 		collectionCounts = counts;
 	}
 
-	onMount(async () => {
-		queueColors = getQueueColors();
-		syncEnabled = await isSyncEnabled();
-		if (syncEnabled) await loadSharedCollections();
+	onMount(() => {
+		budgetHours = readNumber('sq:budget', DEFAULT_BUDGET_HOURS);
+		// sortBy/sortDir/viewMode are shared with /app (#273) — hydrate here too
+		// so landing on /lists first (without ever visiting /app this session)
+		// still picks up the saved preference rather than resetting to defaults.
+		queueControls.sortBy = loadPref<SortKey>('sq:sort', 'added');
+		queueControls.sortDir = loadPref<'asc' | 'desc'>(
+			'sq:sortDir',
+			SORT_DEFAULT_DIR[queueControls.sortBy]
+		);
+		queueControls.viewMode = loadPref<ViewKey>('sq:view', 'grid');
+		queueControls.ready = true;
 
-		items = await getAll();
-		collections = listCollections(items, Object.keys(queueColors));
-		updateCounts();
+		(async () => {
+			queueColors = getQueueColors();
+			syncEnabled = await isSyncEnabled();
+			if (syncEnabled) await loadSharedCollections();
+		})();
+
+		(async () => {
+			items = await getAll();
+			collections = listCollections(items, Object.keys(queueColors));
+			updateCounts();
+		})();
+
+		ensureSubscribedLoaded();
+
+		return () => {
+			queueControls.ready = false;
+			queueControls.hasItems = false;
+		};
+	});
+
+	// Persists sortBy/sortDir/viewMode changes made via the dock while this
+	// page is mounted — mirrors app/+page.svelte's identical effect, needed
+	// here too since only whichever page is currently mounted is listening
+	// for these changes (#273).
+	$effect(() => {
+		try {
+			localStorage.setItem('sq:sort', queueControls.sortBy);
+			localStorage.setItem('sq:sortDir', queueControls.sortDir);
+			localStorage.setItem('sq:view', queueControls.viewMode);
+		} catch {
+			// Best-effort localStorage write; app works fine without persisted preferences
+		}
+	});
+
+	// Personal-list mirrors, so QueueDock (rendered from the layout, without
+	// direct access to this page's state) can list them (#273 — this page now
+	// owns these, since /app no longer filters/browses by list).
+	$effect(() => {
+		queueControls.collectionNames = collections;
+	});
+	// Lets the nav know whether the dock has anything to show — reactive
+	// (not a one-time onMount snapshot) since promoting/removing a shared
+	// list changes this after mount, same reasoning as /app's own effect.
+	$effect(() => {
+		queueControls.hasItems = items.length > 0 || sharedCollections.length > 0;
+	});
+	$effect(() => {
+		queueControls.sharedListOptions = sharedCollections.map((c) => ({
+			id: c.id,
+			name: c.name,
+			color: sharedListColors[c.id] ?? '#9ca3af'
+		}));
+	});
+
+	// Clears a collection filter that no longer matches anything (moved from
+	// /app — this page owns collectionFilter now) — same "never silently
+	// filter forever" convention as elsewhere. Shared filters are exempt while
+	// sharedCollections is still loading, same reasoning as before.
+	$effect(() => {
+		const f = queueControls.collectionFilter;
+		if (
+			f !== null &&
+			f !== UNCATEGORIZED &&
+			sharedFilterId(f) === null &&
+			!collections.includes(f)
+		) {
+			queueControls.collectionFilter = null;
+		}
+	});
+
+	// Timeline view has no meaning here (#273) — coerce away from it rather
+	// than rendering nothing, same as the dock hiding the Timeline button.
+	$effect(() => {
+		if (queueControls.viewMode === 'lanes') queueControls.viewMode = 'grid';
 	});
 </script>
 
 <svelte:head><title>Queuest — Lists</title></svelte:head>
 
+<svelte:document
+	onclick={(e) => {
+		const t = e.target as Element;
+		if (!t.closest('[data-release-popup]')) {
+			releasePopupId = null;
+		}
+	}}
+/>
+
+{#snippet seasonPicker(item: WatchlistItem)}
+	{@const chip = releaseChip(item.release)}
+	{#if item.media_type === 'tv' && (item.seasons?.length || chip)}
+		<div class="flex flex-wrap gap-0.5 pt-0.5">
+			{#each (item.seasons ?? []).filter((s) => s.episode_count > 0 && (!chip || item.release?.next_season == null || s.season_number < item.release.next_season)) as season (season.season_number)}
+				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
+				<button
+					class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
+						{watched
+						? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
+						: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
+					onclick={(e) => {
+						e.stopPropagation();
+						toggleSeason(item, season.season_number);
+					}}
+					title="{season.name} · {season.episode_count} eps"
+				>
+					{watched ? '✓' : 'S'}{season.season_number}
+				</button>
+			{/each}
+			{#if chip}
+				{@const isOpen = releasePopupId === item.id}
+				<button
+					class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
+						{isOpen
+						? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
+						: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
+					onclick={(e) => {
+						e.stopPropagation();
+						releasePopupId = isOpen ? null : item.id;
+					}}
+					data-release-popup
+				>
+					{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
+					{#if isOpen}
+						<div
+							class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700"
+						>
+							{chip}
+						</div>
+					{/if}
+				</button>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 <h1 class="sr-only">Lists</h1>
+
+<!-- Browsing panel (#273) — a personal list's own Grid/List view, or a
+     shared list's SharedListSection, driven by queueControls.collectionFilter
+     (the same value the filter dock's "List" section writes). Breaks out of
+     the narrow max-w-md management layout below since a card grid needs the
+     full page width to not look cramped. -->
+{#if browsingLabel}
+	<div class="mb-6 xs:mb-10">
+		<div class="mx-auto max-w-5xl space-y-3">
+			<div class="flex items-center justify-between gap-2">
+				<div>
+					<h2 class="text-sm font-semibold text-gray-800 dark:text-gray-200">{browsingLabel}</h2>
+					{#if !activeSharedCollection}
+						<p class="text-xs text-gray-500 dark:text-gray-500">
+							{browsingSortedItems.length} title{browsingSortedItems.length === 1 ? '' : 's'} · ~{hms(
+								browsingSortedItems.reduce((s, i) => s + remainingRuntime(i), 0)
+							)} remaining
+						</p>
+					{/if}
+				</div>
+				<button
+					onclick={() => (queueControls.collectionFilter = null)}
+					class="shrink-0 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+				>
+					Close
+				</button>
+			</div>
+			{#if activeSharedCollection}
+				{#key activeSharedCollection.id}
+					<SharedListSection
+						inline
+						collection={activeSharedCollection}
+						color={sharedListColors[activeSharedCollection.id] ?? '#9ca3af'}
+						{budgetHours}
+					/>
+				{/key}
+			{:else if browsingTag}
+				{#if browsingSortedItems.length === 0}
+					<p class="text-sm text-gray-500 dark:text-gray-400">Nothing matches these filters.</p>
+				{:else if queueControls.viewMode === 'list'}
+					<QueueListView
+						items={browsingSortedItems}
+						{budgetHours}
+						busy={listItemBusy}
+						{chipsByItemId}
+						rankMode={browsingRankMode}
+						onToggle={toggle}
+						onRemove={remove}
+						onOpenDetail={(item) => (detailItem = item)}
+						onMoveUp={(item) => moveListItem(item, 'up')}
+						onMoveDown={(item) => moveListItem(item, 'down')}
+						onReorder={reorderListItems}
+						{seasonPicker}
+					/>
+				{:else}
+					<QueueGridView
+						items={browsingSortedItems}
+						{budgetHours}
+						busy={listItemBusy}
+						{chipsByItemId}
+						rankMode={browsingRankMode}
+						onToggle={toggle}
+						onRemove={remove}
+						onOpenDetail={(item) => (detailItem = item)}
+						onMoveUp={(item) => moveListItem(item, 'up')}
+						onMoveDown={(item) => moveListItem(item, 'down')}
+						onReorder={reorderListItems}
+						{seasonPicker}
+					/>
+				{/if}
+				{#if reorderError}
+					<p class="text-xs text-red-600 dark:text-red-400">{reorderError}</p>
+				{/if}
+			{/if}
+		</div>
+	</div>
+{/if}
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
 	<!-- Lists -->
@@ -519,6 +842,7 @@
 		</form>
 		{#if collections.length === 0}
 			<p class="text-sm text-gray-400 dark:text-gray-600">No lists yet.</p>
+			<ListHint show={items.length >= 5} />
 		{:else}
 			<div class="space-y-2">
 				{#each collections as collection (collection)}
@@ -528,7 +852,7 @@
 					{@const isDeleting = deleteArmed === collection}
 					{@const isPromoting = promoteArmed === collection}
 					{@const isReadOnlyLink = readOnlyLinkFor === collection}
-					{@const isReordering = expandedCollection === collection}
+					{@const isBrowsing = queueControls.collectionFilter === collection}
 					<div>
 						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
 							<div class="flex items-center gap-2.5 min-w-0">
@@ -634,11 +958,12 @@
 									</button>
 									<button
 										disabled={manageBusy || count === 0}
-										onclick={() => (expandedCollection = isReordering ? null : collection)}
+										onclick={() =>
+											(queueControls.collectionFilter = isBrowsing ? null : collection)}
 										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-										title={count === 0 ? 'Add a title to this list first' : 'Reorder this list'}
+										title={count === 0 ? 'Add a title to this list first' : 'Browse this list'}
 									>
-										{isReordering ? 'Hide order' : 'Reorder'}
+										{isBrowsing ? 'Hide' : 'Browse'}
 									</button>
 									<button
 										disabled={manageBusy}
@@ -754,58 +1079,6 @@
 								>
 									Close
 								</button>
-							</div>
-						{/if}
-						{#if isReordering}
-							{@const sortedItems = sortByRank(
-								items.filter((i) => hasActiveTag(i, collection)),
-								collection
-							)}
-							<div
-								class="mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/60"
-							>
-								<p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
-									This order is used only here — the Queue page's own "Rank" sort is separate.
-								</p>
-								<ul class="space-y-1">
-									{#each sortedItems as item, i (item.id)}
-										<li class="flex items-center gap-2">
-											<div
-												class="h-10 w-7 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-700"
-											>
-												{#if item.poster_path}
-													<img
-														src="{TMDB_IMG}/w92{item.poster_path}"
-														alt=""
-														class="h-full w-full object-cover"
-													/>
-												{/if}
-											</div>
-											<span class="min-w-0 flex-1 truncate text-xs text-gray-700 dark:text-gray-300"
-												>{item.title}</span
-											>
-											<button
-												disabled={listItemBusy.has(item.id) || i === 0}
-												onclick={() => moveListItem(item, 'up', sortedItems, collection)}
-												class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
-												aria-label="Move up"
-											>
-												↑
-											</button>
-											<button
-												disabled={listItemBusy.has(item.id) || i === sortedItems.length - 1}
-												onclick={() => moveListItem(item, 'down', sortedItems, collection)}
-												class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
-												aria-label="Move down"
-											>
-												↓
-											</button>
-										</li>
-									{/each}
-								</ul>
-								{#if reorderError}
-									<p class="mt-1.5 text-red-600 dark:text-red-400">{reorderError}</p>
-								{/if}
 							</div>
 						{/if}
 					</div>
@@ -974,6 +1247,17 @@
 										Cancel
 									</button>
 								{:else}
+									{@const sharedFilterValue = `shared:${coll.id}`}
+									<button
+										onclick={() =>
+											(queueControls.collectionFilter =
+												queueControls.collectionFilter === sharedFilterValue
+													? null
+													: sharedFilterValue)}
+										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+									>
+										{queueControls.collectionFilter === sharedFilterValue ? 'Hide' : 'Browse'}
+									</button>
 									<a
 										href={resolve('/lists/[id]', { id: coll.id })}
 										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
@@ -1162,3 +1446,41 @@
 		</p>
 	{/if}
 </div>
+
+<!-- ── Detail panel (#273) ────────────────────────────────────────────────
+     Minimal, same as add/+page.svelte's usage — no onAddTag/onRemoveTag/
+     onClearTags/sharedCollections/onAssignShared, so DetailPanel's List
+     section (gated on onAddTag) doesn't render here; assignment stays on
+     the Queue page. -->
+{#if detailItem}
+	{@const di = detailItem}
+	<DetailPanel
+		item={{ ...di, activeQueueTags: activeQueueTags(di) }}
+		{budgetHours}
+		showSeasons={true}
+		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
+		onClose={() => (detailItem = null)}
+	>
+		{#snippet footer(item)}
+			<button
+				class="flex-1 rounded-lg py-2 text-sm font-medium transition-colors
+					{item.watched_at
+					? 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-400 dark:hover:bg-teal-900/60'
+					: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+				disabled={listItemBusy.has(item.id)}
+				onclick={async () => {
+					await toggle(di);
+					detailItem = items.find((i) => i.id === item.id) ?? null;
+				}}>{item.watched_at ? '↩ Unwatch' : '✓ Watched'}</button
+			>
+			<button
+				class="rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
+				disabled={listItemBusy.has(item.id)}
+				onclick={async () => {
+					await remove(di);
+					detailItem = null;
+				}}>✕ Remove</button
+			>
+		{/snippet}
+	</DetailPanel>
+{/if}
