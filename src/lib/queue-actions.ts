@@ -5,8 +5,11 @@ import {
 	setWatched,
 	updateShowProgress,
 	setQueueTag,
+	addQueueTag,
+	removeQueueTag,
 	setNote,
 	setSortOrder,
+	setTagRank,
 	gcTombstones
 } from './db';
 
@@ -19,6 +22,25 @@ export interface QueueActionDeps {
 	setItems: (items: WatchlistItem[]) => void;
 	setBusy: (id: number, busy: boolean) => void;
 	setError: (message: string) => void;
+}
+
+/** One name+color pair for a list-membership chip. */
+export interface Chip {
+	name: string;
+	color: string;
+}
+
+/** Per-item chip data for the Queue view's card/row list chips (#274 PR2) —
+ *  `personal` (this device's own queue_tags, writable via DetailPanel's
+ *  toggle chips) and `shared` (derived from loaded shared-collection
+ *  contents, read-only display here) are kept as separate clusters rather
+ *  than one flat list: a promoted personal list and its same-named shared
+ *  counterpart can both be active on one item at once (promotion is
+ *  additive, see collection-actions.ts's promoteCollection), and a flat
+ *  mixed row would render that as two identical-looking chips. */
+export interface ItemChips {
+	personal: Chip[];
+	shared: Chip[];
 }
 
 export async function reloadQueue(
@@ -98,59 +120,26 @@ export function listCollections(items: WatchlistItem[], extraNames: string[] = [
 	return Array.from(names).sort();
 }
 
-export interface CollectionSection {
-	/** Display name; 'Uncategorized' for the synthetic no-tag section. */
-	name: string;
-	/** The underlying list name (a queue_tags key), or null for the Uncategorized section. */
-	tag: string | null;
-	color: string | null;
-	items: WatchlistItem[];
-}
-
 /**
- * Groups items (in their existing order — this doesn't re-sort) into one
- * section per collection, alphabetical by name, with an Uncategorized
- * section (no active tags) pinned last — mirroring how the Gantt view pins
- * its synthetic "Not Streaming" lane.
- *
- * An item can carry more than one active tag (#274 — list membership is a
- * map, not a single field), so it legitimately appears in more than one
- * section here; that's correct, not a duplicate — it really is in both
- * lists. This grouping view is temporary scaffolding for PR2, which replaces
- * it with per-title list chips and drops the Group toggle entirely.
+ * Sorts a list's items by that list's own per-tag rank (PR2's Lists-page
+ * ordering) — ranked items first by `rank`, then any unranked items
+ * (queue_tags[tag].rank is only ever assigned once something reorders that
+ * list — see setTagRank in db.ts) appended at the end ordered by `added_at`,
+ * matching "new items join at the end" everywhere else in this app rather
+ * than falling back to `rank ?? 0`, which would collide every untouched
+ * item at the front instead. The first reorder of a partially-ranked list
+ * stamps contiguous ranks on every item in it (moveItemInCollection always
+ * passes the full array), self-healing from then on.
  */
-export function groupIntoCollections(
-	items: WatchlistItem[],
-	queueColors: Record<string, string>
-): CollectionSection[] {
-	const byTag = new Map<string, WatchlistItem[]>();
-	const uncategorized: WatchlistItem[] = [];
-	for (const item of items) {
-		const tags = activeQueueTags(item);
-		if (tags.length === 0) {
-			uncategorized.push(item);
-			continue;
-		}
-		for (const tag of tags) {
-			if (!byTag.has(tag)) byTag.set(tag, []);
-			byTag.get(tag)!.push(item);
-		}
-	}
-
-	const sections: CollectionSection[] = [...byTag.entries()]
-		.sort((a, b) => a[0].localeCompare(b[0]))
-		.map(([name, sectionItems]) => ({
-			name,
-			tag: name,
-			color: queueColors[name] ?? null,
-			items: sectionItems
-		}));
-
-	if (uncategorized.length > 0) {
-		sections.push({ name: 'Uncategorized', tag: null, color: null, items: uncategorized });
-	}
-
-	return sections;
+export function sortByRank(items: WatchlistItem[], tag: string): WatchlistItem[] {
+	return [...items].sort((a, b) => {
+		const ra = a.queue_tags?.[tag]?.rank;
+		const rb = b.queue_tags?.[tag]?.rank;
+		if (ra !== undefined && rb !== undefined) return ra - rb;
+		if (ra !== undefined) return -1;
+		if (rb !== undefined) return 1;
+		return a.added_at.localeCompare(b.added_at);
+	});
 }
 
 /**
@@ -201,17 +190,94 @@ export async function reorderItems(
 	}
 }
 
-export async function setItemCollection(
+/**
+ * Per-list counterpart to moveItem, for the Lists page's move-up/move-down
+ * (PR2) — same neighbor-swap shape, but persists through setTagRank(tag, …)
+ * instead of setSortOrder, scoped to one list's own order rather than the
+ * queue's. `visibleOrder` must be the *full* current order for `tag` (see
+ * setTagRank's own doc comment for why a partial array would break the
+ * per-key merge's "one device's whole reorder wins atomically" property) —
+ * always call this with the same full, sorted array the list is rendering,
+ * never a subset.
+ */
+export async function moveItemInCollection(
 	item: WatchlistItem,
-	tag: string | null,
+	tag: string,
+	direction: 'up' | 'down',
+	visibleOrder: WatchlistItem[],
+	deps: QueueActionDeps
+): Promise<void> {
+	const idx = visibleOrder.findIndex((i) => i.id === item.id);
+	const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+	if (idx === -1 || swapIdx < 0 || swapIdx >= visibleOrder.length) return;
+
+	deps.setBusy(item.id, true);
+	try {
+		const reordered = [...visibleOrder];
+		[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+		await setTagRank(
+			tag,
+			reordered.map((i) => i.id)
+		);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not reorder this list.');
+	} finally {
+		deps.setBusy(item.id, false);
+	}
+}
+
+/**
+ * Personal-list assignment, genuinely multi-select (PR2) — an item can be
+ * added to or removed from any number of lists independently, rather than
+ * the old single-select "replace membership with exactly this one tag"
+ * (setItemCollection, pre-PR2). `clearItemCollections` is the one remaining
+ * case that still wants "replace with nothing" semantics — it's the direct
+ * successor of picking "None" in the old dropdown, and setQueueTag(id, null)
+ * is still exactly the right primitive for it.
+ */
+export async function addItemToCollection(
+	item: WatchlistItem,
+	tag: string,
 	deps: QueueActionDeps
 ): Promise<void> {
 	deps.setBusy(item.id, true);
 	try {
-		await setQueueTag(item.id, tag);
+		await addQueueTag(item.id, tag);
 		await reloadQueue(deps);
 	} catch (e) {
-		deps.setError(e instanceof Error ? e.message : 'Could not update collection.');
+		deps.setError(e instanceof Error ? e.message : 'Could not add to that list.');
+	} finally {
+		deps.setBusy(item.id, false);
+	}
+}
+
+export async function removeItemFromCollection(
+	item: WatchlistItem,
+	tag: string,
+	deps: QueueActionDeps
+): Promise<void> {
+	deps.setBusy(item.id, true);
+	try {
+		await removeQueueTag(item.id, tag);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not remove from that list.');
+	} finally {
+		deps.setBusy(item.id, false);
+	}
+}
+
+export async function clearItemCollections(
+	item: WatchlistItem,
+	deps: QueueActionDeps
+): Promise<void> {
+	deps.setBusy(item.id, true);
+	try {
+		await setQueueTag(item.id, null);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not clear lists.');
 	} finally {
 		deps.setBusy(item.id, false);
 	}
@@ -234,26 +300,66 @@ export async function setItemNote(
 }
 
 /**
- * Bulk versions of setItemCollection/toggleWatched/removeItem (#113) — same
- * shape, applied to many items at once from the queue's selection mode.
- * Each writes sequentially (no cross-item atomicity requirement: a failure
- * partway through still leaves every item that succeeded in its new state,
- * which is what "3 of 5 assigned, one had an error" should look like), then
- * reloads once at the end rather than once per item.
+ * Bulk versions of addItemToCollection/removeItemFromCollection/
+ * toggleWatched/removeItem (#113) — same shape, applied to many items at
+ * once from the queue's selection mode. Each writes sequentially (no
+ * cross-item atomicity requirement: a failure partway through still leaves
+ * every item that succeeded in its new state, which is what "3 of 5
+ * assigned, one had an error" should look like), then reloads once at the
+ * end rather than once per item.
  */
-export async function bulkSetCollection(
+export async function bulkAddToCollection(
 	items: WatchlistItem[],
-	tag: string | null,
+	tag: string,
 	deps: QueueActionDeps
 ): Promise<void> {
 	try {
 		for (const item of items) {
 			deps.setBusy(item.id, true);
-			await setQueueTag(item.id, tag);
+			await addQueueTag(item.id, tag);
 		}
 		await reloadQueue(deps);
 	} catch (e) {
-		deps.setError(e instanceof Error ? e.message : 'Could not update collection.');
+		deps.setError(e instanceof Error ? e.message : 'Could not add to that list.');
+	} finally {
+		for (const item of items) deps.setBusy(item.id, false);
+	}
+}
+
+export async function bulkRemoveFromCollection(
+	items: WatchlistItem[],
+	tag: string,
+	deps: QueueActionDeps
+): Promise<void> {
+	try {
+		for (const item of items) {
+			deps.setBusy(item.id, true);
+			await removeQueueTag(item.id, tag);
+		}
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not remove from that list.');
+	} finally {
+		for (const item of items) deps.setBusy(item.id, false);
+	}
+}
+
+/** Removes every active list from every given item — the bulk successor of
+ *  the old "Clear list" action, now that assignment is additive rather than
+ *  "each item has at most one list" (so there's no longer a single list to
+ *  target for a bulk clear; this clears all of them, per item). */
+export async function bulkClearCollections(
+	items: WatchlistItem[],
+	deps: QueueActionDeps
+): Promise<void> {
+	try {
+		for (const item of items) {
+			deps.setBusy(item.id, true);
+			await setQueueTag(item.id, null);
+		}
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not clear lists.');
 	} finally {
 		for (const item of items) deps.setBusy(item.id, false);
 	}

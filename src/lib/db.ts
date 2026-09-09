@@ -472,7 +472,14 @@ export async function gcTombstones(now: Date = new Date()): Promise<number> {
  */
 async function mutateItem(
 	id: number,
-	mutate: (item: WatchlistItem, now: string) => void,
+	// A callback that returns `false` signals "nothing to change" — mutateItem
+	// skips the write and the updated_at bump entirely rather than persisting
+	// a no-op edit, which would otherwise hand the item a fresh timestamp that
+	// could win a future sync LWW race against a real concurrent edit for
+	// reasons having nothing to do with an actual change (see removeQueueTag).
+	// Every existing caller's callback implicitly returns undefined, which
+	// isn't `=== false`, so this is additive and changes no existing behavior.
+	mutate: (item: WatchlistItem, now: string) => void | false,
 	opts: { stampUpdatedAt?: boolean } = {}
 ): Promise<void> {
 	const { stampUpdatedAt = true } = opts;
@@ -488,7 +495,10 @@ async function mutateItem(
 				return;
 			}
 			const now = nowIso();
-			mutate(item, now);
+			if (mutate(item, now) === false) {
+				resolve();
+				return;
+			}
 			if (stampUpdatedAt) item.updated_at = now;
 			const put = store.put(item);
 			put.onsuccess = () => {
@@ -570,14 +580,41 @@ export async function setQueueTag(id: number, tag: string | null): Promise<void>
 /**
  * Adds one active tag to an existing item without touching its other tags —
  * the "already queued, also file it under X" case an addItem() ConstraintError
- * represents now that identity is global again (#274): a collision no longer
- * means "already in this exact list," just "already in the queue somewhere."
- * Distinct from setQueueTag, which replaces *all* membership — using that
- * here would strip whatever lists the item was already in.
+ * represents now that identity is global again (#274), and (PR2) the
+ * personal-chip-toggle-on primitive `addItemToCollection` calls. Distinct
+ * from setQueueTag, which replaces *all* membership — using that here would
+ * strip whatever lists the item was already in.
+ *
+ * Preserves the tag's existing rank (if any) rather than resetting it — same
+ * reason setQueueTag already does this: a chip toggled off and back on
+ * shouldn't lose its position in that list's order.
  */
 export async function addQueueTag(id: number, tag: string): Promise<void> {
 	return mutateItem(id, (item, now) => {
-		item.queue_tags = { ...(item.queue_tags ?? {}), [tag]: { at: now } };
+		const existingRank = item.queue_tags?.[tag]?.rank;
+		item.queue_tags = {
+			...(item.queue_tags ?? {}),
+			[tag]: { at: now, ...(existingRank !== undefined ? { rank: existingRank } : {}) }
+		};
+	});
+}
+
+/**
+ * Tombstones one active tag without touching the item's other tags — the
+ * symmetric counterpart to addQueueTag, and the personal-chip-toggle-off
+ * primitive `removeItemFromCollection` calls (PR2). No-ops (no write, no
+ * updated_at bump) if the tag is already inactive or absent — a toggle
+ * double-fired or racing itself shouldn't hand a stale tombstone a fresh
+ * `at` for no reason. Preserves the existing entry's rank on the tombstone
+ * (spread, not overwrite), same as every other tombstoning path in this
+ * file (setQueueTag's loop, renameCollectionTag, clearCollectionTag) — if
+ * the tag is re-added later, its position in that list shouldn't be lost.
+ */
+export async function removeQueueTag(id: number, tag: string): Promise<void> {
+	return mutateItem(id, (item, now) => {
+		const existing = item.queue_tags?.[tag];
+		if (!existing || existing.deleted) return false;
+		item.queue_tags = { ...item.queue_tags, [tag]: { ...existing, deleted: true, at: now } };
 	});
 }
 
@@ -601,6 +638,64 @@ export async function setSortOrder(orderedIds: number[]): Promise<void> {
 				const item = get.result as WatchlistItem | undefined;
 				if (!item) return;
 				item.sort_order = index;
+				item.updated_at = now;
+				store.put(item);
+			};
+		});
+		tx.oncomplete = () => {
+			notifyMutation();
+			resolve();
+		};
+		tx.onerror = () => reject(tx.error);
+	});
+}
+
+/**
+ * Bulk-reassigns queue_tags[tag].rank to match `orderedIds`'s array position
+ * — the per-list counterpart to setSortOrder above, backing the Lists page's
+ * per-list move-up/move-down (PR2). Same shape: one transaction, get→mutate→
+ * put per id, tx.oncomplete resolves. Ids outside the array keep whatever
+ * rank they have; an id in the array whose item doesn't currently have `tag`
+ * active is left untouched rather than resurrecting or corrupting a
+ * membership it doesn't have — callers only ever pass ids just rendered
+ * under that list's own expanded section, but a stale id slipping through
+ * (e.g. a concurrent removal mid-reorder) must not write anything.
+ *
+ * Bumps both the item's top-level updated_at and this tag entry's own `at`
+ * — same as every other tag-mutation in this file, since `at` (not
+ * updated_at) is what the per-key queue_tags merge in sync.ts compares.
+ *
+ * Correctness note for callers: this MUST always be called with the full,
+ * currently-known ordered id list for `tag` — never a partial delta — or
+ * the "one device's whole reorder wins atomically on conflict" merge
+ * property breaks down into a field-by-field interleave neither device
+ * actually produced. moveItemInCollection (queue-actions.ts) enforces this
+ * by construction, same as moveItem already does for setSortOrder.
+ *
+ * Accepted tradeoff: reordering touches every item in the list, not just
+ * the ones that moved, which widens (vs. a single-item edit) the odds this
+ * races and overwrites a concurrent removal of one of those items from the
+ * same list on another device — that removal's older `at` loses to the
+ * reorder's newer `at` for that one item's key, resurrecting the
+ * membership. Rare (needs a removal and a reorder of overlapping data
+ * racing across two offline devices before either syncs) and low-stakes
+ * (redo the reorder or the removal, no data destroyed) — not fixed here,
+ * see sync.test.ts for a named regression test making this explicit.
+ */
+export async function setTagRank(tag: string, orderedIds: number[]): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const now = nowIso();
+		orderedIds.forEach((id, index) => {
+			const get = store.get(id);
+			get.onsuccess = () => {
+				const item = get.result as WatchlistItem | undefined;
+				if (!item) return;
+				const existing = item.queue_tags?.[tag];
+				if (!existing || existing.deleted) return;
+				item.queue_tags = { ...item.queue_tags, [tag]: { ...existing, rank: index, at: now } };
 				item.updated_at = now;
 				store.put(item);
 			};

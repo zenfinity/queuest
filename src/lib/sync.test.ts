@@ -263,6 +263,53 @@ describe('mergeItems', () => {
 			expect(merged[0].queue_tags?.Horror.deleted).toBeUndefined();
 		});
 
+		// #274 PR2 — an accepted tradeoff, not a bug: reordering a list touches
+		// every item in it (a fresh `at` on each one's Horror entry), which
+		// widens the blast radius for racing a *removal* of one of those items
+		// on another device, versus a targeted single-item edit. If the
+		// reorder's `at` is newer, it wins per-key for that one item too — its
+		// removal gets silently undone, since nothing about a reorder's write
+		// distinguishes "I touched this key because I moved it" from "I
+		// touched this key because I'm rewriting the whole list's order." Rare
+		// (needs an offline removal AND an offline reorder of overlapping data
+		// racing before either syncs) and low-stakes (redo the reorder or the
+		// removal — no data destroyed) — documented here as a named
+		// characterization test rather than left as an undiscovered property.
+		it('a reorder touching every item in a list can win over, and undo, a concurrent removal of one of them', () => {
+			const local = [
+				// Device A: reordered Horror (both items got a fresh `at`), never
+				// learned about B's removal of item 20.
+				makeItem({
+					id: 1,
+					tmdb_id: 10,
+					queue_tags: { Horror: { at: '2024-06-01T00:00:00.000Z', rank: 0 } }
+				}),
+				makeItem({
+					id: 2,
+					tmdb_id: 20,
+					queue_tags: { Horror: { at: '2024-06-01T00:00:00.000Z', rank: 1 } }
+				})
+			];
+			const remote = [
+				// Device B: removed tmdb_id 20 from Horror before A's reorder.
+				makeBackupItem({
+					tmdb_id: 10,
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z', rank: 0 } }
+				}),
+				makeBackupItem({
+					tmdb_id: 20,
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z', deleted: true } }
+				})
+			];
+
+			const merged = mergeItems(local, remote);
+
+			const item20 = merged.find((i) => i.tmdb_id === 20)!;
+			// The reorder's newer `at` wins per-key, resurrecting the
+			// membership B had just removed — accepted, not fixed.
+			expect(item20.queue_tags?.Horror.deleted).toBeUndefined();
+		});
+
 		it('omits queue_tags entirely when neither side has any', () => {
 			const local = [makeItem({ id: 1, tmdb_id: 10 })];
 			const remote = [makeBackupItem({ tmdb_id: 10 })];

@@ -2,21 +2,25 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
-	import { activeQueueTags, hasActiveTag, representativeTag, type WatchlistItem } from '$lib/types';
+	import { activeQueueTags, hasActiveTag, itemKey, type WatchlistItem } from '$lib/types';
 	import {
 		reloadQueue,
 		toggleWatched,
 		removeQueueItem,
 		toggleSeasonProgress,
 		listCollections,
-		setItemCollection,
+		addItemToCollection,
+		removeItemFromCollection,
+		clearItemCollections,
+		bulkAddToCollection,
+		bulkClearCollections,
 		setItemNote,
 		moveItem,
 		reorderItems,
-		bulkSetCollection,
 		bulkSetWatched,
 		bulkRemove,
-		type QueueActionDeps
+		type QueueActionDeps,
+		type ItemChips
 	} from '$lib/queue-actions';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import {
@@ -31,6 +35,7 @@
 	import {
 		listCollections as listSharedCollections,
 		addItemsToSharedCollection,
+		loadCollectionItems,
 		type SharedCollection,
 		type CollectionActionDeps
 	} from '$lib/collection-actions';
@@ -68,22 +73,35 @@
 	let busy = new SvelteSet<number>();
 	let sharedCollections = $state<SharedCollection[]>([]);
 	let sharedListColors = $state<Record<string, string>>({});
+	// Per-title shared-collection membership (#274 PR2), keyed by itemKey —
+	// derived by pulling each shared collection's own items, independent of
+	// the personal queue_tags map (promotion is additive, see
+	// collection-actions.ts's promoteCollection). Used only for display
+	// (chips) and DetailPanel's active/inactive shared state.
+	let sharedMembership = $state<Map<string, { id: string; name: string; color: string }[]>>(
+		new Map()
+	);
 	let sharedFilterStats: { count: number; remainingMins: number } | null = $state(null);
 	let syncEnabled = $state(false);
 
 	// ── Bulk selection (#113) ────────────────────────────────────────────────
 	let selectMode = $state(false);
 	let selectedIds = new SvelteSet<number>();
-	let bulkTargetTag = $state('');
-	let bulkNewTag = $state('');
+	// Multi-select bulk assignment (#274 PR2) — staged personal-list names and
+	// shared-collection ids, committed together on "Assign" rather than the
+	// old single-target picker. Mirrors DetailPanel's own chip-toggle idiom.
+	let stagedTags = new SvelteSet<string>();
+	let stagedSharedIds = new SvelteSet<string>();
+	let bulkNewTagInput = $state('');
 	let bulkRemoveArmed = $state(false);
 	let bulkBusy = $state(false);
 
 	function exitSelectMode() {
 		selectMode = false;
 		selectedIds.clear();
-		bulkTargetTag = '';
-		bulkNewTag = '';
+		stagedTags.clear();
+		stagedSharedIds.clear();
+		bulkNewTagInput = '';
 		bulkRemoveArmed = false;
 	}
 
@@ -97,19 +115,39 @@
 		return items.filter((i) => selectedIds.has(i.id));
 	}
 
+	function toggleStagedTag(tag: string) {
+		if (stagedTags.has(tag)) stagedTags.delete(tag);
+		else stagedTags.add(tag);
+	}
+
+	function toggleStagedShared(id: string) {
+		if (stagedSharedIds.has(id)) stagedSharedIds.delete(id);
+		else stagedSharedIds.add(id);
+	}
+
+	// Typed-but-not-yet-staged text still counts as intent to assign — folded
+	// into the staged set right before committing so a click on "Assign"
+	// without pressing Enter first doesn't silently drop it.
+	function stageTypedTag() {
+		const trimmed = bulkNewTagInput.trim();
+		if (!trimmed) return;
+		stagedTags.add(trimmed);
+		bulkNewTagInput = '';
+	}
+
 	async function bulkAssign() {
+		stageTypedTag();
 		bulkBusy = true;
 		try {
-			if (bulkTargetTag.startsWith('shared:') && !bulkNewTag.trim()) {
-				const coll = sharedCollections.find((c) => c.id === bulkTargetTag.slice(7));
-				if (coll) {
-					const ok = await addItemsToSharedCollection(coll, selectedItems(), collectionActionDeps);
-					if (ok) await reload();
-				}
-			} else {
-				const tag = bulkNewTag.trim() || bulkTargetTag || null;
-				await bulkSetCollection(selectedItems(), tag, actionDeps);
+			const targets = selectedItems();
+			for (const tag of stagedTags) {
+				await bulkAddToCollection(targets, tag, actionDeps);
 			}
+			for (const id of stagedSharedIds) {
+				const coll = sharedCollections.find((c) => c.id === id);
+				if (coll) await addItemsToSharedCollection(coll, targets, collectionActionDeps);
+			}
+			if (stagedSharedIds.size > 0) await loadSharedMembership();
 		} finally {
 			bulkBusy = false;
 		}
@@ -119,7 +157,7 @@
 	async function bulkClearCollection() {
 		bulkBusy = true;
 		try {
-			await bulkSetCollection(selectedItems(), null, actionDeps);
+			await bulkClearCollections(selectedItems(), actionDeps);
 		} finally {
 			bulkBusy = false;
 		}
@@ -270,11 +308,30 @@
 
 	let flatItems = $derived(sorted(visibleItems));
 
-	// Move-up/down (#216) only has a clear meaning against a single flat
-	// order — grouped-by-collection sections are alphabetical, and
-	// reordering "across" them isn't a defined operation, so the controls
-	// are suppressed rather than picking an arbitrary one.
-	let rankMode = $derived(queueControls.sortBy === 'rank' && !queueControls.groupByCollection);
+	// Move-up/down (#216) shows only in the custom "Rank" sort mode.
+	let rankMode = $derived(queueControls.sortBy === 'rank');
+
+	// Per-item list chips (#274 PR2) — personal (from this item's own
+	// queue_tags) plus shared-derived (from sharedMembership) — precomputed
+	// once here rather than re-derived per card/row in the Grid/List views.
+	let chipsByItemId = $derived.by(
+		() =>
+			new Map<number, ItemChips>(
+				visibleItems.map((item) => [
+					item.id,
+					{
+						personal: activeQueueTags(item).map((name) => ({
+							name,
+							color: queueColors[name] ?? '#f97316'
+						})),
+						shared: (sharedMembership.get(itemKey(item)) ?? []).map((c) => ({
+							name: c.name,
+							color: c.color
+						}))
+					}
+				])
+			)
+	);
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	let dbError = $state('');
@@ -320,6 +377,24 @@
 		sharedListColors = updated;
 	}
 
+	// Best-effort background enhancement (chip display only) — silent-error
+	// deps so one stale-key/transient decrypt failure never surfaces a scary
+	// banner on the whole Queue page, matching lists/+page.svelte's
+	// loadActivityCount precedent.
+	async function loadSharedMembership() {
+		const silentDeps: CollectionActionDeps = { setBusy: () => {}, setError: () => {} };
+		const grouped: Record<string, { id: string; name: string; color: string }[]> = {};
+		for (const coll of sharedCollections) {
+			const { items: collItems } = await loadCollectionItems(coll, silentDeps);
+			const color = sharedListColors[coll.id] ?? sharedListColor(coll);
+			for (const ci of collItems) {
+				const key = itemKey(ci);
+				(grouped[key] ??= []).push({ id: coll.id, name: coll.name, color });
+			}
+		}
+		sharedMembership = new Map(Object.entries(grouped));
+	}
+
 	onMount(() => {
 		queueControls.sortBy = loadPref<SortKey>('sq:sort', 'added');
 		queueControls.sortDir = loadPref<'asc' | 'desc'>(
@@ -349,7 +424,7 @@
 
 		isSyncEnabled().then((enabled) => {
 			syncEnabled = enabled;
-			if (enabled) loadSharedCollections();
+			if (enabled) loadSharedCollections().then(loadSharedMembership);
 		});
 
 		return () => window.removeEventListener('beforeunload', onBeforeUnload);
@@ -652,38 +727,67 @@
 			<span class="font-medium text-orange-800 dark:text-orange-300">
 				{selectedIds.size} selected
 			</span>
-			<div class="ml-auto flex flex-wrap items-center gap-1.5">
-				<select
-					bind:value={bulkTargetTag}
-					disabled={bulkBusy || selectedIds.size === 0}
-					aria-label="Assign to list"
-					class="min-w-0 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
-				>
-					<option value="">Assign to…</option>
-					{#each existingCollections as collection (collection)}
-						<option value={collection}>{collection}</option>
-					{/each}
-					{#if sharedCollections.length > 0}
-						<optgroup label="Shared">
-							{#each sharedCollections as coll (coll.id)}
-								<option value={`shared:${coll.id}`}>{coll.name}</option>
-							{/each}
-						</optgroup>
-					{/if}
-				</select>
+			<!-- Multi-select assignment picker (#274 PR2) — chips toggle staged
+			     targets, committed together on "Assign". -->
+			<div class="flex w-full flex-wrap items-center gap-1.5">
+				{#each existingCollections as collection (collection)}
+					{@const staged = stagedTags.has(collection)}
+					<button
+						type="button"
+						disabled={bulkBusy || selectedIds.size === 0}
+						aria-pressed={staged}
+						onclick={() => toggleStagedTag(collection)}
+						class="rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 {staged
+							? 'text-white'
+							: 'bg-white text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700'}"
+						style={staged ? `background:${queueColors[collection] ?? '#f97316'}` : ''}
+					>
+						{collection}
+					</button>
+				{/each}
+				{#each sharedCollections as coll (coll.id)}
+					{@const staged = stagedSharedIds.has(coll.id)}
+					{@const color = sharedListColors[coll.id] ?? '#9ca3af'}
+					<button
+						type="button"
+						disabled={bulkBusy || selectedIds.size === 0}
+						aria-pressed={staged}
+						onclick={() => toggleStagedShared(coll.id)}
+						class="rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 {staged
+							? 'text-white'
+							: 'hover:bg-gray-50 dark:hover:bg-gray-800'}"
+						style={staged
+							? `background:${color}; border-color:${color};`
+							: `border-color:${color}; color:${color};`}
+					>
+						{coll.name}
+					</button>
+				{/each}
 				<input
 					type="text"
-					placeholder="or new name…"
-					bind:value={bulkNewTag}
+					placeholder="new list…"
+					bind:value={bulkNewTagInput}
 					disabled={bulkBusy || selectedIds.size === 0}
-					class="w-24 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							stageTypedTag();
+						}
+					}}
+					class="w-20 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
 				/>
+			</div>
+			<div class="ml-auto flex flex-wrap items-center gap-1.5">
 				<button
-					disabled={bulkBusy || selectedIds.size === 0 || (!bulkTargetTag && !bulkNewTag.trim())}
+					disabled={bulkBusy ||
+						selectedIds.size === 0 ||
+						(stagedTags.size === 0 && stagedSharedIds.size === 0 && !bulkNewTagInput.trim())}
 					onclick={bulkAssign}
 					class="rounded bg-orange-500 px-2 py-1 text-xs font-medium text-white hover:bg-orange-400 disabled:opacity-40"
 				>
-					Assign
+					Assign{stagedTags.size + stagedSharedIds.size > 0
+						? ` (${stagedTags.size + stagedSharedIds.size})`
+						: ''}
 				</button>
 				<button
 					disabled={bulkBusy || selectedIds.size === 0}
@@ -773,8 +877,7 @@
 			items={flatItems}
 			{budgetHours}
 			{busy}
-			{queueColors}
-			groupByCollection={queueControls.groupByCollection}
+			{chipsByItemId}
 			{selectMode}
 			selected={selectedIds}
 			{rankMode}
@@ -794,8 +897,7 @@
 			items={flatItems}
 			{budgetHours}
 			{busy}
-			{queueColors}
-			groupByCollection={queueControls.groupByCollection}
+			{chipsByItemId}
 			{selectMode}
 			selected={selectedIds}
 			{rankMode}
@@ -846,14 +948,23 @@
 {#if detailItem}
 	{@const di = detailItem}
 	<DetailPanel
-		item={{ ...di, queue_tag: representativeTag(di) }}
+		item={{ ...di, activeQueueTags: activeQueueTags(di) }}
 		{budgetHours}
 		showSeasons={true}
 		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
 		onClose={() => (detailItem = null)}
 		{existingCollections}
-		onSetCollection={async (tag) => {
-			await setItemCollection(di, tag, actionDeps);
+		{queueColors}
+		onAddTag={async (tag) => {
+			await addItemToCollection(di, tag, actionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
+		onRemoveTag={async (tag) => {
+			await removeItemFromCollection(di, tag, actionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
+		onClearTags={async () => {
+			await clearItemCollections(di, actionDeps);
 			detailItem = items.find((i) => i.id === di.id) ?? null;
 		}}
 		onSetNote={async (notes) => {
@@ -861,14 +972,13 @@
 			detailItem = items.find((i) => i.id === di.id) ?? null;
 		}}
 		{sharedCollections}
+		activeSharedCollectionIds={sharedMembership.get(itemKey(di))?.map((c) => c.id) ?? []}
+		{sharedListColors}
 		onAssignShared={async (collectionId) => {
 			const coll = sharedCollections.find((c) => c.id === collectionId);
 			if (!coll) return;
 			const ok = await addItemsToSharedCollection(coll, [di], collectionActionDeps);
-			if (ok) {
-				await reload();
-				detailItem = null;
-			}
+			if (ok) await loadSharedMembership();
 		}}
 	>
 		{#snippet footer(item)}

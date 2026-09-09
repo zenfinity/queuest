@@ -2,20 +2,19 @@
 	import type { Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
-	import { representativeTag, type WatchlistItem } from '$lib/types';
+	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
 	import { remainingRuntime, releaseChip, hms, DEFAULT_RUNTIME } from '$lib/progress';
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
-	import { groupIntoCollections, type CollectionSection } from '$lib/queue-actions';
+	import type { ItemChips } from '$lib/queue-actions';
 
 	let {
 		items,
 		budgetHours,
 		busy,
-		queueColors,
-		groupByCollection = false,
+		chipsByItemId = new Map<number, ItemChips>(),
 		selectMode = false,
 		selected = new Set<number>(),
 		rankMode = false,
@@ -31,13 +30,14 @@
 		items: WatchlistItem[];
 		budgetHours: number;
 		busy: Set<number>;
-		queueColors: Record<string, string>;
-		groupByCollection?: boolean;
+		/** Per-item list chips (personal stored + shared derived), keyed by
+		 * item.id — precomputed by the caller once per visible-items recompute
+		 * rather than re-derived per row (#274 PR2). */
+		chipsByItemId?: Map<number, ItemChips>;
 		selectMode?: boolean;
 		selected?: Set<number>;
-		/** Custom "Rank" sort is active (#216) — shows move up/down (always) and
-		 * a drag handle (#231). Only ever true when ungrouped — see rankMode's
-		 * derivation in +page.svelte — so drag is wired only on that branch. */
+		/** Custom "Rank" sort is active (#216) — shows move up/down and a drag
+		 * handle (#231). */
 		rankMode?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
@@ -53,12 +53,6 @@
 	} = $props();
 
 	let libraryPopupId: number | null = $state(null);
-
-	// See QueueGridView.svelte for why grouping needs its own #each/flip scope
-	// per section rather than one flat each with interleaved headers.
-	let sections = $derived<CollectionSection[]>(
-		groupByCollection ? groupIntoCollections(items, queueColors) : []
-	);
 
 	// See QueueGridView.svelte for why this is a writable $derived rather
 	// than plain $state.
@@ -81,6 +75,7 @@
 />
 
 {#snippet rowContent(item: WatchlistItem, isFirst: boolean, isLast: boolean)}
+	{@const chips = chipsByItemId.get(item.id)}
 	{@const rt = remainingRuntime(item)}
 	{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
 	{@const hue = resolvedHue(item.providers[0]?.provider_id ?? null)}
@@ -291,92 +286,71 @@
 			{@render seasonPicker(item)}
 		</div>
 	{/if}
-{/snippet}
 
-{#if groupByCollection}
-	<div class="space-y-4">
-		{#each sections as section (section.name)}
-			{@const sectionRemainingMins = section.items.reduce((sum, i) => sum + remainingRuntime(i), 0)}
-			<div>
-				<div class="flex items-center gap-2 pb-1.5">
-					<span
-						class="h-2.5 w-2.5 shrink-0 rounded-full"
-						style="background:{section.color ?? '#9ca3af'}"
-					></span>
-					<h3
-						class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-					>
-						{section.name}
-					</h3>
-					<span class="text-[10px] text-gray-500 dark:text-gray-400">{section.items.length}</span>
-					<span class="text-[10px] text-gray-500 dark:text-gray-400"
-						>· {hms(sectionRemainingMins)}</span
-					>
-				</div>
-				<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
-					{#each section.items as item, i (item.id)}
-						{@const tagColor = representativeTag(item)
-							? (queueColors[representativeTag(item)!] ?? null)
-							: null}
-						<!-- Row click is a convenience only — the title button inside rowContent
-						     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
-						     action, so this div is deliberately not a second, nested interactive element. -->
-						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div
-							animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-							class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer {selectMode &&
-							selected.has(item.id)
-								? '!bg-orange-50 dark:!bg-orange-950/30'
-								: ''}"
-							style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
-							onclick={(e) => {
-								e.stopPropagation();
-								if (selectMode) onToggleSelect?.(item);
-								else onOpenDetail(item);
-							}}
+	<!-- Row 5: list chips (#274 PR2) — personal (filled) and shared-derived
+	     (outlined) as visually distinct clusters, since a promoted personal
+	     list and its same-named shared counterpart can both be active on one
+	     item at once and would otherwise look like an accidental duplicate. -->
+	{#if chips && (chips.personal.length || chips.shared.length)}
+		<div class="ml-11 mt-1 flex flex-col gap-1">
+			{#if chips.personal.length}
+				<div class="flex flex-wrap gap-1">
+					{#each chips.personal as chip (chip.name)}
+						<span
+							class="rounded-full px-1.5 py-0.5 text-[9px] font-medium text-white"
+							style="background:{chip.color}"
 						>
-							{@render rowContent(item, i === 0, i === section.items.length - 1)}
-						</div>
+							{chip.name}
+						</span>
 					{/each}
 				</div>
-			</div>
-		{/each}
-	</div>
-{:else}
-	<div
-		class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60"
-		use:dragHandleZone={{
-			items: dndItems,
-			flipDurationMs,
-			dragDisabled: !rankMode,
-			dropTargetStyle: {}
-		}}
-		onconsider={handleDndConsider}
-		onfinalize={handleDndFinalize}
-	>
-		{#each dndItems as item, i (item.id)}
-			{@const tagColor = representativeTag(item)
-				? (queueColors[representativeTag(item)!] ?? null)
-				: null}
-			<!-- Row click is a convenience only — see the grouped branch above. -->
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				animate:flip={{ duration: flipDurationMs }}
-				class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer {selectMode &&
-				selected.has(item.id)
-					? '!bg-orange-50 dark:!bg-orange-950/30'
-					: ''}"
-				style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
-				onclick={(e) => {
-					e.stopPropagation();
-					if (selectMode) onToggleSelect?.(item);
-					else onOpenDetail(item);
-				}}
-			>
-				{@render rowContent(item, i === 0, i === dndItems.length - 1)}
-			</div>
-		{/each}
-	</div>
-{/if}
+			{/if}
+			{#if chips.shared.length}
+				<div class="flex flex-wrap gap-1">
+					{#each chips.shared as chip (chip.name)}
+						<span
+							class="rounded-full border px-1.5 py-0.5 text-[9px] font-medium"
+							style="border-color:{chip.color}; color:{chip.color}"
+						>
+							{chip.name}
+						</span>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
+<div
+	class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60"
+	use:dragHandleZone={{
+		items: dndItems,
+		flipDurationMs,
+		dragDisabled: !rankMode,
+		dropTargetStyle: {}
+	}}
+	onconsider={handleDndConsider}
+	onfinalize={handleDndFinalize}
+>
+	{#each dndItems as item, i (item.id)}
+		<!-- Row click is a convenience only — the title button inside rowContent
+		     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
+		     action, so this div is deliberately not a second, nested interactive element. -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			animate:flip={{ duration: flipDurationMs }}
+			class="flex flex-col bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 dark:bg-gray-900/40 dark:hover:bg-gray-900/80 cursor-pointer {selectMode &&
+			selected.has(item.id)
+				? '!bg-orange-50 dark:!bg-orange-950/30'
+				: ''}"
+			onclick={(e) => {
+				e.stopPropagation();
+				if (selectMode) onToggleSelect?.(item);
+				else onOpenDetail(item);
+			}}
+		>
+			{@render rowContent(item, i === 0, i === dndItems.length - 1)}
+		</div>
+	{/each}
+</div>
