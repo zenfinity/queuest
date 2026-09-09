@@ -17,7 +17,6 @@
 		bulkAddToCollection,
 		bulkClearCollections,
 		setItemNote,
-		moveItem,
 		reorderItems,
 		bulkSetWatched,
 		bulkRemove,
@@ -309,12 +308,6 @@
 		await reloadQueue(actionDeps);
 	}
 
-	async function moveUp(item: WatchlistItem) {
-		await moveItem(item, 'up', flatItems, actionDeps);
-	}
-	async function moveDown(item: WatchlistItem) {
-		await moveItem(item, 'down', flatItems, actionDeps);
-	}
 	async function reorderRankedItems(newOrder: WatchlistItem[]) {
 		await reorderItems(newOrder, actionDeps);
 	}
@@ -779,8 +772,6 @@
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
 			onToggleSelect={toggleSelected}
-			onMoveUp={moveUp}
-			onMoveDown={moveDown}
 			onReorder={reorderRankedItems}
 			{seasonPicker}
 		/>
@@ -799,8 +790,6 @@
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
 			onToggleSelect={toggleSelected}
-			onMoveUp={moveUp}
-			onMoveDown={moveDown}
 			onReorder={reorderRankedItems}
 			{seasonPicker}
 		/>

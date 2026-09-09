@@ -22,8 +22,6 @@
 		onRemove,
 		onOpenDetail,
 		onToggleSelect,
-		onMoveUp,
-		onMoveDown,
 		onReorder,
 		seasonPicker
 	}: {
@@ -36,18 +34,14 @@
 		chipsByItemId?: Map<number, ItemChips>;
 		selectMode?: boolean;
 		selected?: Set<number>;
-		/** Custom "Rank" sort is active (#216) — shows move up/down and a drag
-		 * handle (#231) for reordering. */
+		/** Custom "Rank" sort is active (#216) — shows a poster-corner drag
+		 * handle for reordering. */
 		rankMode?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
 		onOpenDetail: (item: WatchlistItem) => void;
 		onToggleSelect?: (item: WatchlistItem) => void;
-		onMoveUp?: (item: WatchlistItem) => void;
-		onMoveDown?: (item: WatchlistItem) => void;
-		/** Fires once a drag gesture settles, with the full new order — the
-		 * accessible move up/down buttons call onMoveUp/onMoveDown instead and
-		 * never touch this. */
+		/** Fires once a drag gesture settles, with the full new order. */
 		onReorder?: (newOrder: WatchlistItem[]) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
@@ -78,56 +72,82 @@
 	}}
 />
 
-{#snippet cardContent(item: WatchlistItem, isFirst: boolean, isLast: boolean)}
+{#snippet cardContent(item: WatchlistItem)}
 	{@const chips = chipsByItemId.get(item.id)}
 	{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null)}
 	{@const cardPct = Math.min(100, (remainingRuntime(item) / (budgetHours * 60)) * 100)}
 	{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 	{@const cardDot = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 	{@const isSelected = selected.has(item.id)}
-	<button
-		class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
-		onclick={(e) => {
-			e.stopPropagation();
-			if (selectMode) onToggleSelect?.(item);
-			else onOpenDetail(item);
-		}}
-		data-detail-trigger
-		aria-label={selectMode
-			? `${isSelected ? 'Deselect' : 'Select'} ${item.title}`
-			: `View details for ${item.title}`}
-	>
-		{#if item.poster_path}
-			<img
-				src="{TMDB_IMG}/w300{item.poster_path}"
-				alt={item.title}
-				loading="lazy"
-				decoding="async"
-				class="h-full w-full object-cover"
-			/>
-		{:else}
+	<div class="relative">
+		<button
+			class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
+			onclick={(e) => {
+				e.stopPropagation();
+				if (selectMode) onToggleSelect?.(item);
+				else onOpenDetail(item);
+			}}
+			data-detail-trigger
+			aria-label={selectMode
+				? `${isSelected ? 'Deselect' : 'Select'} ${item.title}`
+				: `View details for ${item.title}`}
+		>
+			{#if item.poster_path}
+				<img
+					src="{TMDB_IMG}/w300{item.poster_path}"
+					alt={item.title}
+					loading="lazy"
+					decoding="async"
+					class="h-full w-full object-cover"
+				/>
+			{:else}
+				<div
+					class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600"
+				>
+					🎬
+				</div>
+			{/if}
+			{#if selectMode}
+				<span
+					class="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs font-bold {isSelected
+						? 'border-orange-500 bg-orange-500 text-white'
+						: 'border-white bg-black/40 text-transparent'}"
+				>
+					✓
+				</span>
+			{/if}
+			{#if queueControls.watchedOn && item.watched_at}
+				<span
+					class="absolute top-2 left-2 rounded bg-teal-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-teal-400"
+					>✓ Watched</span
+				>
+			{/if}
+		</button>
+		{#if rankMode && !selectMode}
+			<!-- svelte-dnd-action's dragHandle action makes this a real
+			     role="button" tabindex="0" element unconditionally (its own
+			     keyboard mode — pick up with space/enter, move with arrow keys,
+			     drop with space/enter). It's a SIBLING of the poster <button>
+			     above, not a descendant — an interactive element can't nest
+			     inside a <button> (invalid HTML) — but dragHandle only needs to
+			     be somewhere inside the draggable item's bounding rect, not a
+			     direct child of the drag zone's item root, so this still works
+			     with no changes to the {#each} item div below. This wrapping div's
+			     own `relative` is required, not decorative: without it the
+			     absolutely-positioned handle would resolve against a distant
+			     ancestor instead of the poster. -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
-				class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600"
+				use:dragHandle
+				aria-label="Drag to reorder {item.title}"
+				class="absolute bottom-2 right-2 flex h-6 w-6 touch-none cursor-grab items-center justify-center rounded-full bg-black/40 text-xs text-white select-none active:cursor-grabbing"
+				onclick={(e) => e.stopPropagation()}
 			>
-				🎬
+				⠿
 			</div>
 		{/if}
-		{#if selectMode}
-			<span
-				class="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs font-bold {isSelected
-					? 'border-orange-500 bg-orange-500 text-white'
-					: 'border-white bg-black/40 text-transparent'}"
-			>
-				✓
-			</span>
-		{/if}
-		{#if queueControls.watchedOn && item.watched_at}
-			<span
-				class="absolute top-2 left-2 rounded bg-teal-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-teal-400"
-				>✓ Watched</span
-			>
-		{/if}
-	</button>
+	</div>
 	<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
 		<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
 		<!-- Runtime sparkline -->
@@ -248,45 +268,6 @@
 		{/if}
 		{#if !selectMode}
 			<div class="mt-auto flex gap-1.5 pt-1">
-				{#if rankMode}
-					<!-- svelte-dnd-action's dragHandle action makes this a real
-					     role="button" tabindex="0" element unconditionally (it has
-					     its own keyboard mode — pick up with space/enter, move with
-					     arrow keys, drop with space/enter), so it's given a proper
-					     label rather than hidden — the move up/down buttons beside
-					     it remain a second, simpler accessible path (#231). The
-					     role/tabindex/keydown handling the linter wants are all
-					     supplied at runtime by the action, invisible to static
-					     analysis. -->
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div
-						use:dragHandle
-						aria-label="Drag to reorder {item.title}"
-						class="touch-none cursor-grab rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 select-none active:cursor-grabbing dark:bg-gray-800 dark:text-gray-400"
-						onclick={(e) => e.stopPropagation()}
-					>
-						⠿
-					</div>
-					<button
-						class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-						disabled={isFirst}
-						onclick={(e) => {
-							e.stopPropagation();
-							onMoveUp?.(item);
-						}}
-						aria-label="Move up">↑</button
-					>
-					<button
-						class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-						disabled={isLast}
-						onclick={(e) => {
-							e.stopPropagation();
-							onMoveDown?.(item);
-						}}
-						aria-label="Move down">↓</button
-					>
-				{/if}
 				<button
 					class="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:hover:bg-gray-700"
 					disabled={busy.has(item.id)}
@@ -327,7 +308,7 @@
 		onconsider={handleDndConsider}
 		onfinalize={handleDndFinalize}
 	>
-		{#each dndItems as item, i (item.id)}
+		{#each dndItems as item (item.id)}
 			<!-- Card click is a convenience only — the poster button inside cardContent
 			     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
 			     action, so this div is deliberately not a second, nested interactive element. -->
@@ -345,7 +326,7 @@
 					else onOpenDetail(item);
 				}}
 			>
-				{@render cardContent(item, i === 0, i === dndItems.length - 1)}
+				{@render cardContent(item)}
 			</div>
 		{/each}
 	</div>

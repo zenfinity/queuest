@@ -22,8 +22,6 @@
 		onRemove,
 		onOpenDetail,
 		onToggleSelect,
-		onMoveUp,
-		onMoveDown,
 		onReorder,
 		seasonPicker
 	}: {
@@ -36,18 +34,14 @@
 		chipsByItemId?: Map<number, ItemChips>;
 		selectMode?: boolean;
 		selected?: Set<number>;
-		/** Custom "Rank" sort is active (#216) — shows move up/down and a drag
-		 * handle (#231). */
+		/** Custom "Rank" sort is active (#216) — shows a drag handle for
+		 * reordering (#231). */
 		rankMode?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
 		onOpenDetail: (item: WatchlistItem) => void;
 		onToggleSelect?: (item: WatchlistItem) => void;
-		onMoveUp?: (item: WatchlistItem) => void;
-		onMoveDown?: (item: WatchlistItem) => void;
-		/** Fires once a drag gesture settles, with the full new order — the
-		 * accessible move up/down buttons call onMoveUp/onMoveDown instead and
-		 * never touch this. */
+		/** Fires once a drag gesture settles, with the full new order. */
 		onReorder?: (newOrder: WatchlistItem[]) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
@@ -74,7 +68,7 @@
 	}}
 />
 
-{#snippet rowContent(item: WatchlistItem, isFirst: boolean, isLast: boolean)}
+{#snippet rowContent(item: WatchlistItem)}
 	{@const chips = chipsByItemId.get(item.id)}
 	{@const rt = remainingRuntime(item)}
 	{@const pct = Math.min(100, (rt / (budgetHours * 60)) * 100)}
@@ -132,11 +126,9 @@
 					     role="button" tabindex="0" element unconditionally (it has
 					     its own keyboard mode — pick up with space/enter, move with
 					     arrow keys, drop with space/enter), so it's given a proper
-					     label rather than hidden — the move up/down buttons beside
-					     it remain a second, simpler accessible path (#231). The
-					     role/tabindex/keydown handling the linter wants are all
-					     supplied at runtime by the action, invisible to static
-					     analysis. -->
+					     label rather than hidden. The role/tabindex/keydown handling
+					     the linter wants are all supplied at runtime by the action,
+					     invisible to static analysis. -->
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
@@ -147,24 +139,6 @@
 					>
 						⠿
 					</div>
-					<button
-						class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-						disabled={isFirst}
-						onclick={(e) => {
-							e.stopPropagation();
-							onMoveUp?.(item);
-						}}
-						aria-label="Move up">↑</button
-					>
-					<button
-						class="rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-500 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-						disabled={isLast}
-						onclick={(e) => {
-							e.stopPropagation();
-							onMoveDown?.(item);
-						}}
-						aria-label="Move down">↓</button
-					>
 				{/if}
 				<button
 					class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
@@ -333,7 +307,7 @@
 	onconsider={handleDndConsider}
 	onfinalize={handleDndFinalize}
 >
-	{#each dndItems as item, i (item.id)}
+	{#each dndItems as item (item.id)}
 		<!-- Row click is a convenience only — the title button inside rowContent
 		     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
 		     action, so this div is deliberately not a second, nested interactive element. -->
@@ -351,7 +325,7 @@
 				else onOpenDetail(item);
 			}}
 		>
-			{@render rowContent(item, i === 0, i === dndItems.length - 1)}
+			{@render rowContent(item)}
 		</div>
 	{/each}
 </div>

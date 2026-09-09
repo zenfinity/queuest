@@ -43,7 +43,6 @@
 		sortByRank,
 		sortByField,
 		filterByService,
-		moveItemInCollection,
 		reorderCollectionItems,
 		toggleWatched,
 		removeQueueItem,
@@ -343,15 +342,6 @@
 		} else {
 			expandedCollections.add(name);
 		}
-	}
-
-	async function moveListItem(
-		item: WatchlistItem,
-		direction: 'up' | 'down',
-		visibleOrder: WatchlistItem[],
-		tag: string
-	) {
-		await moveItemInCollection(item, tag, direction, visibleOrder, listActionDeps);
 	}
 
 	async function toggle(item: WatchlistItem) {
@@ -794,8 +784,6 @@
 										onToggle={toggle}
 										onRemove={remove}
 										onOpenDetail={(item) => (detailItem = item)}
-										onMoveUp={(item) => moveListItem(item, 'up', sortedItems, collection)}
-										onMoveDown={(item) => moveListItem(item, 'down', sortedItems, collection)}
 										onReorder={(newOrder) =>
 											reorderCollectionItems(newOrder, collection, listActionDeps)}
 										{seasonPicker}
@@ -812,8 +800,6 @@
 										onToggle={toggle}
 										onRemove={remove}
 										onOpenDetail={(item) => (detailItem = item)}
-										onMoveUp={(item) => moveListItem(item, 'up', sortedItems, collection)}
-										onMoveDown={(item) => moveListItem(item, 'down', sortedItems, collection)}
 										onReorder={(newOrder) =>
 											reorderCollectionItems(newOrder, collection, listActionDeps)}
 										{seasonPicker}

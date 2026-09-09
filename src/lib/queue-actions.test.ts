@@ -38,9 +38,7 @@ const {
 	addItemToCollection,
 	removeItemFromCollection,
 	clearItemCollections,
-	moveItem,
 	reorderItems,
-	moveItemInCollection,
 	bulkAddToCollection,
 	bulkRemoveFromCollection,
 	bulkClearCollections,
@@ -459,67 +457,6 @@ describe('addItemToCollection / removeItemFromCollection / clearItemCollections'
 	});
 });
 
-describe('moveItem', () => {
-	it('swaps with the previous item and persists the new order', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1 });
-		const b = makeItem({ id: 2 });
-		const c = makeItem({ id: 3 });
-		setSortOrder.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([a, b, c]);
-
-		await moveItem(b, 'up', [a, b, c], deps);
-
-		expect(setSortOrder).toHaveBeenCalledWith([2, 1, 3]);
-		expect(getAll).toHaveBeenCalledOnce();
-	});
-
-	it('swaps with the next item on move down', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1 });
-		const b = makeItem({ id: 2 });
-		const c = makeItem({ id: 3 });
-		setSortOrder.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([a, c, b]);
-
-		await moveItem(b, 'down', [a, b, c], deps);
-
-		expect(setSortOrder).toHaveBeenCalledWith([1, 3, 2]);
-	});
-
-	it('no-ops at the top of the list rather than wrapping', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1 });
-		const b = makeItem({ id: 2 });
-
-		await moveItem(a, 'up', [a, b], deps);
-
-		expect(setSortOrder).not.toHaveBeenCalled();
-	});
-
-	it('no-ops at the bottom of the list rather than wrapping', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1 });
-		const b = makeItem({ id: 2 });
-
-		await moveItem(b, 'down', [a, b], deps);
-
-		expect(setSortOrder).not.toHaveBeenCalled();
-	});
-
-	it('surfaces an error and clears busy state when the write fails', async () => {
-		const { state, deps } = makeDeps();
-		const a = makeItem({ id: 1 });
-		const b = makeItem({ id: 2 });
-		setSortOrder.mockRejectedValue(new Error('write failed'));
-
-		await moveItem(b, 'up', [a, b], deps);
-
-		expect(state.error).toBe('write failed');
-		expect(state.busy.has(2)).toBe(false);
-	});
-});
-
 describe('reorderItems', () => {
 	it('persists the full settled order from a drag and reloads', async () => {
 		const { deps } = makeDeps();
@@ -545,67 +482,6 @@ describe('reorderItems', () => {
 
 		expect(state.error).toBe('write failed');
 		expect(state.busy.size).toBe(0);
-	});
-});
-
-describe('moveItemInCollection', () => {
-	it('swaps with the previous item in the list and persists via setTagRank', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
-		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
-		const c = makeItem({ id: 3, queue_tags: tags('Drama') });
-		setTagRank.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([a, b, c]);
-
-		await moveItemInCollection(b, 'Drama', 'up', [a, b, c], deps);
-
-		expect(setTagRank).toHaveBeenCalledWith('Drama', [2, 1, 3]);
-		expect(getAll).toHaveBeenCalledOnce();
-	});
-
-	it('swaps with the next item on move down', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
-		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
-		const c = makeItem({ id: 3, queue_tags: tags('Drama') });
-		setTagRank.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([a, c, b]);
-
-		await moveItemInCollection(b, 'Drama', 'down', [a, b, c], deps);
-
-		expect(setTagRank).toHaveBeenCalledWith('Drama', [1, 3, 2]);
-	});
-
-	it('no-ops at the top of the list rather than wrapping', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
-		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
-
-		await moveItemInCollection(a, 'Drama', 'up', [a, b], deps);
-
-		expect(setTagRank).not.toHaveBeenCalled();
-	});
-
-	it('no-ops at the bottom of the list rather than wrapping', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
-		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
-
-		await moveItemInCollection(b, 'Drama', 'down', [a, b], deps);
-
-		expect(setTagRank).not.toHaveBeenCalled();
-	});
-
-	it('surfaces an error and clears busy state when the write fails', async () => {
-		const { state, deps } = makeDeps();
-		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
-		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
-		setTagRank.mockRejectedValue(new Error('write failed'));
-
-		await moveItemInCollection(b, 'Drama', 'up', [a, b], deps);
-
-		expect(state.error).toBe('write failed');
-		expect(state.busy.has(2)).toBe(false);
 	});
 });
 
