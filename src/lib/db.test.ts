@@ -77,7 +77,7 @@ describe('db: watchlist items', () => {
 		});
 	});
 
-	describe('setQueueTag / addQueueTag (#274)', () => {
+	describe('setQueueTag / addQueueTag / removeQueueTag / setTagRank (#274 PR2)', () => {
 		it('setQueueTag activates the given tag and tombstones every other active tag', async () => {
 			await db.addItem(
 				makeItem({
@@ -143,6 +143,169 @@ describe('db: watchlist items', () => {
 			const [item] = await db.getAll();
 			expect(item.queue_tags?.Horror?.deleted).toBeUndefined();
 			expect(item.queue_tags?.Comedy?.deleted).toBeUndefined();
+		});
+
+		it('addQueueTag preserves an existing rank when re-adding a previously-tombstoned tag', async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					media_type: 'movie',
+					queue_tags: { Comedy: { at: '2024-01-01T00:00:00.000Z', rank: 3, deleted: true } }
+				})
+			);
+			const [{ id }] = await db.getAll();
+
+			await db.addQueueTag(id, 'Comedy');
+
+			const [item] = await db.getAll();
+			expect(item.queue_tags?.Comedy).toMatchObject({ rank: 3 });
+			expect(item.queue_tags?.Comedy?.deleted).toBeUndefined();
+		});
+
+		it('removeQueueTag tombstones only the target tag, leaving other active tags untouched', async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					media_type: 'movie',
+					queue_tags: {
+						Horror: { at: '2024-01-01T00:00:00.000Z' },
+						Comedy: { at: '2024-01-01T00:00:00.000Z' }
+					}
+				})
+			);
+			const [{ id }] = await db.getAll();
+
+			await db.removeQueueTag(id, 'Horror');
+
+			const [item] = await db.getAll();
+			expect(item.queue_tags?.Horror?.deleted).toBe(true);
+			expect(item.queue_tags?.Comedy?.deleted).toBeUndefined();
+		});
+
+		it('removeQueueTag preserves the existing rank on the tombstone', async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					media_type: 'movie',
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z', rank: 7 } }
+				})
+			);
+			const [{ id }] = await db.getAll();
+
+			await db.removeQueueTag(id, 'Horror');
+
+			const [item] = await db.getAll();
+			expect(item.queue_tags?.Horror).toMatchObject({ rank: 7, deleted: true });
+		});
+
+		it('removeQueueTag no-ops (no write) when the tag is already inactive', async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					media_type: 'movie',
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z', deleted: true } }
+				})
+			);
+			const [{ id, updated_at: before }] = await db.getAll();
+
+			await db.removeQueueTag(id, 'Horror');
+
+			const [item] = await db.getAll();
+			expect(item.updated_at).toBe(before);
+		});
+
+		it('removeQueueTag no-ops (no write) when the tag was never present', async () => {
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie' }));
+			const [{ id, updated_at: before }] = await db.getAll();
+
+			await db.removeQueueTag(id, 'Horror');
+
+			const [item] = await db.getAll();
+			expect(item.updated_at).toBe(before);
+			expect(item.queue_tags?.Horror).toBeUndefined();
+		});
+
+		it('setTagRank renumbers exactly the given ids to array position', async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					title: 'A',
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z' } }
+				})
+			);
+			await db.addItem(
+				makeItem({
+					tmdb_id: 2,
+					title: 'B',
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z' } }
+				})
+			);
+			const all = await db.getAll();
+			const a = all.find((i) => i.title === 'A')!;
+			const b = all.find((i) => i.title === 'B')!;
+
+			await db.setTagRank('Horror', [b.id, a.id]);
+
+			const after = await db.getAll();
+			expect(after.find((i) => i.title === 'B')!.queue_tags?.Horror?.rank).toBe(0);
+			expect(after.find((i) => i.title === 'A')!.queue_tags?.Horror?.rank).toBe(1);
+		});
+
+		it("setTagRank bumps both updated_at and the tag entry's own at", async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					queue_tags: { Horror: { at: '2020-01-01T00:00:00.000Z' } }
+				})
+			);
+			const [{ id }] = await db.getAll();
+
+			await db.setTagRank('Horror', [id]);
+
+			const [item] = await db.getAll();
+			expect(item.updated_at).not.toBe('2020-01-01T00:00:00.000Z');
+			expect(item.queue_tags?.Horror?.at).not.toBe('2020-01-01T00:00:00.000Z');
+		});
+
+		it('setTagRank leaves ids outside the array untouched', async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					title: 'A',
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z', rank: 9 } }
+				})
+			);
+			await db.addItem(
+				makeItem({
+					tmdb_id: 2,
+					title: 'B',
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z' } }
+				})
+			);
+			const all = await db.getAll();
+			const b = all.find((i) => i.title === 'B')!;
+
+			await db.setTagRank('Horror', [b.id]);
+
+			const after = await db.getAll();
+			expect(after.find((i) => i.title === 'A')!.queue_tags?.Horror?.rank).toBe(9);
+			expect(after.find((i) => i.title === 'B')!.queue_tags?.Horror?.rank).toBe(0);
+		});
+
+		it('setTagRank skips an id in the array whose item does not currently have that tag active', async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z', deleted: true } }
+				})
+			);
+			const [{ id, updated_at: before }] = await db.getAll();
+
+			await db.setTagRank('Horror', [id]);
+
+			const [item] = await db.getAll();
+			expect(item.queue_tags?.Horror?.rank).toBeUndefined();
+			expect(item.updated_at).toBe(before);
 		});
 	});
 
