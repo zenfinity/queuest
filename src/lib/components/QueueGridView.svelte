@@ -321,7 +321,8 @@
 			items: dndItems,
 			flipDurationMs,
 			dragDisabled: !rankMode,
-			dropTargetStyle: {}
+			dropTargetStyle: {},
+			dropFromOthersDisabled: true
 		}}
 		onconsider={handleDndConsider}
 		onfinalize={handleDndFinalize}
