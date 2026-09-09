@@ -287,30 +287,6 @@ export async function moveItemInCollection(
 }
 
 /**
- * Drag-and-drop's counterpart to moveItemInCollection, for the Lists page's
- * full-list Grid/List browse views (#273) — same shape as reorderItems, but
- * persists through setTagRank(tag, …) instead of setSortOrder, scoped to one
- * list's own order. `newOrder` must be the full current order for `tag` —
- * see setTagRank's own doc comment for why a partial array would break the
- * per-key merge's "one device's whole reorder wins atomically" property.
- */
-export async function reorderItemsInCollection(
-	tag: string,
-	newOrder: WatchlistItem[],
-	deps: QueueActionDeps
-): Promise<void> {
-	try {
-		await setTagRank(
-			tag,
-			newOrder.map((i) => i.id)
-		);
-		await reloadQueue(deps);
-	} catch (e) {
-		deps.setError(e instanceof Error ? e.message : 'Could not reorder this list.');
-	}
-}
-
-/**
  * Personal-list assignment, genuinely multi-select (PR2) — an item can be
  * added to or removed from any number of lists independently, rather than
  * the old single-select "replace membership with exactly this one tag"

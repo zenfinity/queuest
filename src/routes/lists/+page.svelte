@@ -9,7 +9,7 @@
 	// schema and API surface for zero user-facing benefit, so this is a
 	// presentation-layer rename only.
 	import { SvelteSet } from 'svelte/reactivity';
-	import { hasActiveTag, activeQueueTags, type WatchlistItem } from '$lib/types';
+	import { hasActiveTag, type WatchlistItem } from '$lib/types';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
@@ -44,27 +44,15 @@
 		sortByField,
 		filterByService,
 		moveItemInCollection,
-		reorderItemsInCollection,
-		toggleWatched,
-		removeQueueItem,
-		toggleSeasonProgress,
-		type QueueActionDeps,
-		type ItemChips
+		type QueueActionDeps
 	} from '$lib/queue-actions';
-	import { remainingRuntime, releaseChip, hms, DEFAULT_BUDGET_HOURS } from '$lib/progress';
+	import { TMDB_IMG } from '$lib/tmdb';
+	import { DEFAULT_BUDGET_HOURS } from '$lib/progress';
 	import { readNumber } from '$lib/storage';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
-	import {
-		queueControls,
-		SORT_DEFAULT_DIR,
-		UNCATEGORIZED,
-		sharedFilterId
-	} from '$lib/queue-controls.svelte';
+	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
-	import QueueGridView from '$lib/components/QueueGridView.svelte';
-	import QueueListView from '$lib/components/QueueListView.svelte';
 	import SharedListSection from '$lib/components/SharedListSection.svelte';
-	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import ListHint from '$lib/components/ListHint.svelte';
 	import ShareHint from '$lib/components/ShareHint.svelte';
 	import Button from '$lib/components/Button.svelte';
@@ -300,18 +288,20 @@
 	let manageBusy = $state(false);
 	let newCollectionInput = $state('');
 
-	// ── List browsing (#273) ─────────────────────────────────────────────────
-	// List browsing (personal and shared) and the filter dock moved here from
-	// /app, which is back to being just the flat queue. `queueControls.collectionFilter`
-	// (a personal tag name, UNCATEGORIZED, or `shared:<id>`) is the single
-	// source of truth for which list is currently expanded/browsed inline —
-	// the dock's "List" section already writes it, same as it used to drive
-	// /app's old inline shared-list-fill view.
+	// ── Per-list rank / titles (#274 PR2, restyled #273) ─────────────────────
+	// Each list — personal or shared — is its own accordion: a card bordered
+	// in the list's identity color, with titles revealed on expand. Matches
+	// how shared lists always looked (SharedListSection's own non-inline
+	// mode, unchanged) below the queue before #273 moved them here; personal
+	// lists get an equivalent, lighter treatment since there's no per-item
+	// decrypt cost to justify SharedListSection's full card machinery for
+	// them. Multiple lists can be expanded at once, same as shared lists
+	// always allowed (each SharedListSection instance owns its own expanded
+	// state) — no single "one list at a time" restriction.
+	let expandedCollections = new SvelteSet<string>();
 	let listItemBusy = new SvelteSet<number>();
 	let reorderError = $state('');
 	let budgetHours = $state(DEFAULT_BUDGET_HOURS);
-	let detailItem = $state<WatchlistItem | null>(null);
-	let releasePopupId: number | null = $state(null);
 
 	const listActionDeps: QueueActionDeps = {
 		setItems: (next) => {
@@ -326,84 +316,18 @@
 		}
 	};
 
-	let activeSharedId = $derived(sharedFilterId(queueControls.collectionFilter));
-	let activeSharedCollection = $derived(
-		sharedCollections.find((c) => c.id === activeSharedId) ?? null
-	);
-	// A personal tag name or UNCATEGORIZED — null means either nothing is
-	// selected or a shared list is (activeSharedCollection covers that case).
-	let browsingTag = $derived(
-		queueControls.collectionFilter !== null && activeSharedId === null
-			? queueControls.collectionFilter
-			: null
-	);
-	let browsingLabel = $derived(
-		activeSharedCollection?.name ?? (browsingTag === UNCATEGORIZED ? 'Uncategorized' : browsingTag)
-	);
-
-	let browsingItems = $derived.by(() => {
-		if (!browsingTag) return [];
-		const tagged =
-			browsingTag === UNCATEGORIZED
-				? items.filter((i) => activeQueueTags(i).length === 0)
-				: items.filter((i) => hasActiveTag(i, browsingTag!));
-		const base = queueControls.watchedOn ? tagged : tagged.filter((i) => !i.watched_at);
-		return filterByService(base, queueControls.serviceFilter, services.ids);
-	});
-
-	// UNCATEGORIZED has no queue_tags entry to hold a rank — Rank sort falls
-	// back to added_at for it rather than pretending it has one.
-	let browsingRankMode = $derived(
-		queueControls.sortBy === 'rank' && !!browsingTag && browsingTag !== UNCATEGORIZED
-	);
-	let browsingSortedItems = $derived(
-		browsingRankMode
-			? sortByRank(browsingItems, browsingTag!, queueControls.sortDir)
-			: sortByField(
-					browsingItems,
-					queueControls.sortBy === 'rank' ? 'added' : queueControls.sortBy,
-					queueControls.sortDir
-				)
-	);
-
-	// Personal-only chips (#273) — a full shared-membership decrypt pass just
-	// to show passive chips on cards already scoped inside one list isn't
-	// worth the cost; shared membership already has its own visible cluster
-	// via the "Shared Lists" section elsewhere on this page.
-	let chipsByItemId = $derived.by(
-		() =>
-			new Map<number, ItemChips>(
-				browsingSortedItems.map((item) => [
-					item.id,
-					{
-						personal: activeQueueTags(item).map((name) => ({
-							name,
-							color: queueColors[name] ?? '#f97316'
-						})),
-						shared: []
-					}
-				])
-			)
-	);
-
-	async function moveListItem(item: WatchlistItem, direction: 'up' | 'down') {
-		if (!browsingTag || browsingTag === UNCATEGORIZED) return;
-		await moveItemInCollection(item, browsingTag, direction, browsingSortedItems, listActionDeps);
+	function toggleExpanded(name: string) {
+		if (expandedCollections.has(name)) expandedCollections.delete(name);
+		else expandedCollections.add(name);
 	}
 
-	async function reorderListItems(newOrder: WatchlistItem[]) {
-		if (!browsingTag || browsingTag === UNCATEGORIZED) return;
-		await reorderItemsInCollection(browsingTag, newOrder, listActionDeps);
-	}
-
-	async function toggle(item: WatchlistItem) {
-		await toggleWatched(item, listActionDeps);
-	}
-	async function remove(item: WatchlistItem) {
-		await removeQueueItem(item, listActionDeps);
-	}
-	async function toggleSeason(item: WatchlistItem, seasonNum: number) {
-		await toggleSeasonProgress(item, seasonNum, listActionDeps);
+	async function moveListItem(
+		item: WatchlistItem,
+		direction: 'up' | 'down',
+		visibleOrder: WatchlistItem[],
+		tag: string
+	) {
+		await moveItemInCollection(item, tag, direction, visibleOrder, listActionDeps);
 	}
 
 	// ── Read-only link ───────────────────────────────────────────────────────
@@ -633,40 +557,11 @@
 		}
 	});
 
-	// Personal-list mirrors, so QueueDock (rendered from the layout, without
-	// direct access to this page's state) can list them (#273 — this page now
-	// owns these, since /app no longer filters/browses by list).
-	$effect(() => {
-		queueControls.collectionNames = collections;
-	});
 	// Lets the nav know whether the dock has anything to show — reactive
 	// (not a one-time onMount snapshot) since promoting/removing a shared
 	// list changes this after mount, same reasoning as /app's own effect.
 	$effect(() => {
 		queueControls.hasItems = items.length > 0 || sharedCollections.length > 0;
-	});
-	$effect(() => {
-		queueControls.sharedListOptions = sharedCollections.map((c) => ({
-			id: c.id,
-			name: c.name,
-			color: sharedListColors[c.id] ?? '#9ca3af'
-		}));
-	});
-
-	// Clears a collection filter that no longer matches anything (moved from
-	// /app — this page owns collectionFilter now) — same "never silently
-	// filter forever" convention as elsewhere. Shared filters are exempt while
-	// sharedCollections is still loading, same reasoning as before.
-	$effect(() => {
-		const f = queueControls.collectionFilter;
-		if (
-			f !== null &&
-			f !== UNCATEGORIZED &&
-			sharedFilterId(f) === null &&
-			!collections.includes(f)
-		) {
-			queueControls.collectionFilter = null;
-		}
 	});
 
 	// Timeline view has no meaning here (#273) — coerce away from it rather
@@ -678,140 +573,7 @@
 
 <svelte:head><title>Queuest — Lists</title></svelte:head>
 
-<svelte:document
-	onclick={(e) => {
-		const t = e.target as Element;
-		if (!t.closest('[data-release-popup]')) {
-			releasePopupId = null;
-		}
-	}}
-/>
-
-{#snippet seasonPicker(item: WatchlistItem)}
-	{@const chip = releaseChip(item.release)}
-	{#if item.media_type === 'tv' && (item.seasons?.length || chip)}
-		<div class="flex flex-wrap gap-0.5 pt-0.5">
-			{#each (item.seasons ?? []).filter((s) => s.episode_count > 0 && (!chip || item.release?.next_season == null || s.season_number < item.release.next_season)) as season (season.season_number)}
-				{@const watched = (item.watched_seasons ?? []).includes(season.season_number)}
-				<button
-					class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors
-						{watched
-						? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-400'
-						: 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'}"
-					onclick={(e) => {
-						e.stopPropagation();
-						toggleSeason(item, season.season_number);
-					}}
-					title="{season.name} · {season.episode_count} eps"
-				>
-					{watched ? '✓' : 'S'}{season.season_number}
-				</button>
-			{/each}
-			{#if chip}
-				{@const isOpen = releasePopupId === item.id}
-				<button
-					class="relative inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition-colors
-						{isOpen
-						? 'bg-orange-100 text-orange-700 ring-orange-400 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-500'
-						: 'text-orange-600 ring-orange-300 hover:bg-orange-50 dark:text-orange-500 dark:ring-orange-700 dark:hover:bg-orange-950/30'}"
-					onclick={(e) => {
-						e.stopPropagation();
-						releasePopupId = isOpen ? null : item.id;
-					}}
-					data-release-popup
-				>
-					{item.release?.next_season != null ? `S${item.release.next_season}` : 'Next'}
-					{#if isOpen}
-						<div
-							class="absolute top-full left-0 z-20 mt-1 w-max max-w-[14rem] rounded-lg bg-white px-2.5 py-1.5 text-[10px] leading-snug text-gray-700 shadow-lg ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700"
-						>
-							{chip}
-						</div>
-					{/if}
-				</button>
-			{/if}
-		</div>
-	{/if}
-{/snippet}
-
 <h1 class="sr-only">Lists</h1>
-
-<!-- Browsing panel (#273) — a personal list's own Grid/List view, or a
-     shared list's SharedListSection, driven by queueControls.collectionFilter
-     (the same value the filter dock's "List" section writes). Breaks out of
-     the narrow max-w-md management layout below since a card grid needs the
-     full page width to not look cramped. -->
-{#if browsingLabel}
-	<div class="mb-6 xs:mb-10">
-		<div class="mx-auto max-w-5xl space-y-3">
-			<div class="flex items-center justify-between gap-2">
-				<div>
-					<h2 class="text-sm font-semibold text-gray-800 dark:text-gray-200">{browsingLabel}</h2>
-					{#if !activeSharedCollection}
-						<p class="text-xs text-gray-500 dark:text-gray-500">
-							{browsingSortedItems.length} title{browsingSortedItems.length === 1 ? '' : 's'} · ~{hms(
-								browsingSortedItems.reduce((s, i) => s + remainingRuntime(i), 0)
-							)} remaining
-						</p>
-					{/if}
-				</div>
-				<button
-					onclick={() => (queueControls.collectionFilter = null)}
-					class="shrink-0 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-				>
-					Close
-				</button>
-			</div>
-			{#if activeSharedCollection}
-				{#key activeSharedCollection.id}
-					<SharedListSection
-						inline
-						collection={activeSharedCollection}
-						color={sharedListColors[activeSharedCollection.id] ?? '#9ca3af'}
-						{budgetHours}
-					/>
-				{/key}
-			{:else if browsingTag}
-				{#if browsingSortedItems.length === 0}
-					<p class="text-sm text-gray-500 dark:text-gray-400">Nothing matches these filters.</p>
-				{:else if queueControls.viewMode === 'list'}
-					<QueueListView
-						items={browsingSortedItems}
-						{budgetHours}
-						busy={listItemBusy}
-						{chipsByItemId}
-						rankMode={browsingRankMode}
-						onToggle={toggle}
-						onRemove={remove}
-						onOpenDetail={(item) => (detailItem = item)}
-						onMoveUp={(item) => moveListItem(item, 'up')}
-						onMoveDown={(item) => moveListItem(item, 'down')}
-						onReorder={reorderListItems}
-						{seasonPicker}
-					/>
-				{:else}
-					<QueueGridView
-						items={browsingSortedItems}
-						{budgetHours}
-						busy={listItemBusy}
-						{chipsByItemId}
-						rankMode={browsingRankMode}
-						onToggle={toggle}
-						onRemove={remove}
-						onOpenDetail={(item) => (detailItem = item)}
-						onMoveUp={(item) => moveListItem(item, 'up')}
-						onMoveDown={(item) => moveListItem(item, 'down')}
-						onReorder={reorderListItems}
-						{seasonPicker}
-					/>
-				{/if}
-				{#if reorderError}
-					<p class="text-xs text-red-600 dark:text-red-400">{reorderError}</p>
-				{/if}
-			{/if}
-		</div>
-	</div>
-{/if}
 
 <div class="mx-auto max-w-md space-y-6 xs:space-y-10">
 	<!-- Lists -->
@@ -852,8 +614,8 @@
 					{@const isDeleting = deleteArmed === collection}
 					{@const isPromoting = promoteArmed === collection}
 					{@const isReadOnlyLink = readOnlyLinkFor === collection}
-					{@const isBrowsing = queueControls.collectionFilter === collection}
-					<div>
+					{@const isExpanded = expandedCollections.has(collection)}
+					<div class="space-y-1">
 						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
 							<div class="flex items-center gap-2.5 min-w-0">
 								<label class="relative shrink-0 cursor-pointer" title="Change color">
@@ -955,15 +717,6 @@
 											: "Get a link anyone can open to view this list — no account needed, and it won't update after they open it"}
 									>
 										Read-only link
-									</button>
-									<button
-										disabled={manageBusy || count === 0}
-										onclick={() =>
-											(queueControls.collectionFilter = isBrowsing ? null : collection)}
-										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-										title={count === 0 ? 'Add a title to this list first' : 'Browse this list'}
-									>
-										{isBrowsing ? 'Hide' : 'Browse'}
 									</button>
 									<button
 										disabled={manageBusy}
@@ -1081,6 +834,94 @@
 								</button>
 							</div>
 						{/if}
+						<!-- Titles accordion (#273) — border-color is the list's own identity
+						     color, same shell SharedListSection already uses for shared
+						     lists below; expand reveals titles, ranked/reordered the same
+						     way as the dock-driven sort elsewhere. -->
+						<div class="rounded-xl border-2" style="border-color: {color}">
+							<button
+								onclick={() => toggleExpanded(collection)}
+								class="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+								aria-expanded={isExpanded}
+							>
+								<span
+									class="text-gray-400 transition-transform dark:text-gray-500 {isExpanded
+										? 'rotate-90'
+										: ''}">▸</span
+								>
+								<span
+									class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200"
+								>
+									{collection}
+								</span>
+								<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+									{count} title{count === 1 ? '' : 's'}
+								</span>
+							</button>
+							{#if isExpanded}
+								{@const filtered = filterByService(
+									(queueControls.watchedOn ? items : items.filter((i) => !i.watched_at)).filter(
+										(i) => hasActiveTag(i, collection)
+									),
+									queueControls.serviceFilter,
+									services.ids
+								)}
+								{@const sortedItems =
+									queueControls.sortBy === 'rank'
+										? sortByRank(filtered, collection, queueControls.sortDir)
+										: sortByField(filtered, queueControls.sortBy, queueControls.sortDir)}
+								<div class="border-t border-gray-100 p-3 dark:border-gray-800/60">
+									{#if sortedItems.length === 0}
+										<p class="text-xs text-gray-400 dark:text-gray-600">
+											{count === 0 ? 'Nothing here yet.' : 'Nothing matches these filters.'}
+										</p>
+									{:else}
+										<ul class="space-y-1">
+											{#each sortedItems as item, i (item.id)}
+												<li class="flex items-center gap-2">
+													<div
+														class="h-10 w-7 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-700"
+													>
+														{#if item.poster_path}
+															<img
+																src="{TMDB_IMG}/w92{item.poster_path}"
+																alt=""
+																class="h-full w-full object-cover"
+															/>
+														{/if}
+													</div>
+													<span
+														class="min-w-0 flex-1 truncate text-xs text-gray-700 dark:text-gray-300"
+														>{item.title}</span
+													>
+													{#if queueControls.sortBy === 'rank'}
+														<button
+															disabled={listItemBusy.has(item.id) || i === 0}
+															onclick={() => moveListItem(item, 'up', sortedItems, collection)}
+															class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
+															aria-label="Move up"
+														>
+															↑
+														</button>
+														<button
+															disabled={listItemBusy.has(item.id) || i === sortedItems.length - 1}
+															onclick={() => moveListItem(item, 'down', sortedItems, collection)}
+															class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
+															aria-label="Move down"
+														>
+															↓
+														</button>
+													{/if}
+												</li>
+											{/each}
+										</ul>
+									{/if}
+									{#if reorderError}
+										<p class="mt-1.5 text-red-600 dark:text-red-400">{reorderError}</p>
+									{/if}
+								</div>
+							{/if}
+						</div>
 					</div>
 				{/each}
 			</div>
@@ -1166,275 +1007,274 @@
 				<div class="space-y-2">
 					{#each sharedCollections as coll (coll.id)}
 						{@const isRenamingShared = renamingSharedId === coll.id}
-						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
-							<div class="flex items-center justify-between gap-2">
-								<div class="min-w-0 flex items-center gap-2">
-									{#if coll.role === 'owner'}
-										<label class="relative shrink-0 cursor-pointer" title="Change color">
-											<span
-												class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
-												style="background:{sharedListColors[coll.id] ?? '#888888'};"
-											></span>
-											<input
-												type="color"
-												aria-label="List color"
-												value={sharedListColors[coll.id] ?? '#888888'}
-												oninput={(e) =>
-													updateSharedListColor(coll, (e.currentTarget as HTMLInputElement).value)}
-												class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-											/>
-										</label>
-									{:else}
-										<span
-											class="block h-4 w-4 shrink-0 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
-											style="background:{sharedListColors[coll.id] ?? '#888888'};"
-											title="List color — only the owner can change this"
-										></span>
-									{/if}
-									{#if isRenamingShared}
-										<!-- svelte-ignore a11y_autofocus -->
-										<input
-											type="text"
-											aria-label="New list name"
-											maxlength="100"
-											value={sharedRenameInput}
-											oninput={(e) => (sharedRenameInput = e.currentTarget.value)}
-											onkeydown={(e) => {
-												if (e.key === 'Enter') saveSharedRename(coll);
-												if (e.key === 'Escape') renamingSharedId = null;
-											}}
-											autofocus
-											class="min-w-0 flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-										/>
-									{:else}
-										<p
-											class="min-w-0 flex items-center gap-1.5 text-sm font-medium text-gray-800 dark:text-gray-200"
-										>
-											<span class="truncate">{coll.name}</span>
-											{#if newActivityCounts[coll.id]}
+						<div class="space-y-1">
+							<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
+								<div class="flex items-center justify-between gap-2">
+									<div class="min-w-0 flex items-center gap-2">
+										{#if coll.role === 'owner'}
+											<label class="relative shrink-0 cursor-pointer" title="Change color">
 												<span
-													class="shrink-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
-												>
-													{newActivityCounts[coll.id]} new
-												</span>
-											{/if}
-										</p>
-									{/if}
-								</div>
-								{#if !isRenamingShared}
-									<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
-										{coll.role === 'owner' ? 'You own this' : 'Member'}
-									</span>
-								{/if}
-							</div>
-							{#if sharedRenameError && isRenamingShared}
-								<p class="mt-1 text-xs text-red-600 dark:text-red-400">{sharedRenameError}</p>
-							{/if}
-							<div class="mt-2 flex flex-wrap items-center gap-1">
-								{#if isRenamingShared}
-									<button
-										disabled={sharedRenameBusy}
-										onclick={() => saveSharedRename(coll)}
-										class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-									>
-										Save
-									</button>
-									<button
-										disabled={sharedRenameBusy}
-										onclick={() => (renamingSharedId = null)}
-										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-									>
-										Cancel
-									</button>
-								{:else}
-									{@const sharedFilterValue = `shared:${coll.id}`}
-									<button
-										onclick={() =>
-											(queueControls.collectionFilter =
-												queueControls.collectionFilter === sharedFilterValue
-													? null
-													: sharedFilterValue)}
-										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-									>
-										{queueControls.collectionFilter === sharedFilterValue ? 'Hide' : 'Browse'}
-									</button>
-									<a
-										href={resolve('/lists/[id]', { id: coll.id })}
-										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-									>
-										Open
-									</a>
-									{#if coll.role === 'owner'}
-										<button
-											onclick={async () => {
-												openCollection = coll;
-												await generateInviteLink();
-											}}
-											class="text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
-										>
-											Invite
-										</button>
-										<button
-											onclick={() => startSharedRename(coll)}
-											class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-										>
-											Rename
-										</button>
-									{/if}
-									<button
-										onclick={() => {
-											if (openCollection?.id === coll.id) {
-												openCollection = null;
-											} else {
-												openCollection = coll;
-												openMembers = [];
-												outstandingInvites = [];
-												revokingInviteId = null;
-												revokeError = '';
-												loadOpenMembers();
-												loadOutstandingInvites();
-											}
-										}}
-										class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-									>
-										{openCollection?.id === coll.id ? 'Hide' : 'Info'}
-									</button>
-								{/if}
-							</div>
-						</div>
-						{#if openCollection?.id === coll.id}
-							<div
-								class="ml-3 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2 text-xs text-gray-600 dark:text-gray-400"
-							>
-								{#if inviteLink && openCollection.id === coll.id}
-									<div class="flex gap-1">
-										<input
-											type="text"
-											readonly
-											value={inviteLink}
-											class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
-										/>
-										<button
-											onclick={copyInviteLink}
-											class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
-										>
-											{inviteCopied ? '✓' : 'Copy'}
-										</button>
-										<button
-											onclick={toggleInviteQr}
-											class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-										>
-											{showInviteQr ? 'Hide QR' : 'QR code'}
-										</button>
-									</div>
-									{#if showInviteQr}
-										<div class="flex justify-center rounded bg-white p-2">
-											{#if inviteQr}
-												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-												{@html inviteQr}
-											{:else}
-												<p class="py-8 text-gray-500">Generating…</p>
-											{/if}
-										</div>
-									{/if}
-								{/if}
-								{#if inviteError}
-									<p class="text-red-600 dark:text-red-400">{inviteError}</p>
-								{/if}
-								{#if coll.role === 'owner'}
-									{#if loadingInvites}
-										<p>Loading invites…</p>
-									{:else if outstandingInvites.length > 0}
-										<div>
-											<p class="font-medium text-gray-500 dark:text-gray-400">Pending invites</p>
-											<ul class="mt-1 space-y-1">
-												{#each outstandingInvites as invite (invite.id)}
-													<li class="flex items-center justify-between gap-2">
-														<span class="truncate">
-															Sent {new Date(invite.createdAt).toLocaleDateString()}, expires {new Date(
-																invite.expiresAt
-															).toLocaleDateString()}
-														</span>
-														{#if revokingInviteId === invite.id}
-															<span class="shrink-0 flex items-center gap-1">
-																<button
-																	onclick={() => doRevokeInvite(invite)}
-																	class="text-red-500 hover:underline"
-																>
-																	Confirm
-																</button>
-																<button
-																	onclick={() => (revokingInviteId = null)}
-																	class="text-gray-500 hover:underline"
-																>
-																	Cancel
-																</button>
-															</span>
-														{:else}
-															<button
-																onclick={() => doRevokeInvite(invite)}
-																class="shrink-0 text-red-500 hover:underline"
-															>
-																Revoke
-															</button>
-														{/if}
-													</li>
-												{/each}
-											</ul>
-											{#if revokeError}
-												<p class="mt-1 text-red-600 dark:text-red-400">{revokeError}</p>
-											{/if}
-										</div>
-									{/if}
-								{/if}
-								{#if loadingMembers}
-									<p>Loading members…</p>
-								{:else if removingMember?.collectionId !== coll.id}
-									<ul class="space-y-1">
-										{#each openMembers as member (member.userId)}
-											<li class="flex items-center justify-between gap-2">
-												<span class="truncate"
-													>{member.email}{member.role === 'owner' ? ' (owner)' : ''}</span
-												>
-												{#if coll.role === 'owner' && member.role !== 'owner'}
-													<button
-														onclick={() => {
-															removingMember = { collectionId: coll.id, userId: member.userId };
-															removalError = '';
-														}}
-														class="shrink-0 text-red-500 hover:underline"
+													class="block h-4 w-4 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+													style="background:{sharedListColors[coll.id] ?? '#888888'};"
+												></span>
+												<input
+													type="color"
+													aria-label="List color"
+													value={sharedListColors[coll.id] ?? '#888888'}
+													oninput={(e) =>
+														updateSharedListColor(
+															coll,
+															(e.currentTarget as HTMLInputElement).value
+														)}
+													class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+												/>
+											</label>
+										{:else}
+											<span
+												class="block h-4 w-4 shrink-0 rounded-full border border-gray-300 shadow-sm dark:border-gray-600"
+												style="background:{sharedListColors[coll.id] ?? '#888888'};"
+												title="List color — only the owner can change this"
+											></span>
+										{/if}
+										{#if isRenamingShared}
+											<!-- svelte-ignore a11y_autofocus -->
+											<input
+												type="text"
+												aria-label="New list name"
+												maxlength="100"
+												value={sharedRenameInput}
+												oninput={(e) => (sharedRenameInput = e.currentTarget.value)}
+												onkeydown={(e) => {
+													if (e.key === 'Enter') saveSharedRename(coll);
+													if (e.key === 'Escape') renamingSharedId = null;
+												}}
+												autofocus
+												class="min-w-0 flex-1 rounded px-1 py-0.5 text-sm bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+											/>
+										{:else}
+											<p
+												class="min-w-0 flex items-center gap-1.5 text-sm font-medium text-gray-800 dark:text-gray-200"
+											>
+												<span class="truncate">{coll.name}</span>
+												{#if newActivityCounts[coll.id]}
+													<span
+														class="shrink-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
 													>
-														Remove
-													</button>
+														{newActivityCounts[coll.id]} new
+													</span>
 												{/if}
-											</li>
-										{/each}
-									</ul>
-								{/if}
-								{#if removingMember?.collectionId === coll.id}
-									<div class="bg-red-50 dark:bg-red-900/20 rounded p-2 space-y-1">
-										<p>Remove member and rotate key?</p>
-										<div class="flex gap-1">
-											<button
-												onclick={doRemoveMember}
-												class="px-2 py-1 rounded text-white text-xs bg-red-600 hover:bg-red-700"
-											>
-												Confirm
-											</button>
-											<button
-												onclick={() => (removingMember = null)}
-												class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-											>
-												Cancel
-											</button>
-										</div>
-										{#if removalError}
-											<p class="text-red-600 dark:text-red-400">{removalError}</p>
+											</p>
 										{/if}
 									</div>
+									{#if !isRenamingShared}
+										<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
+											{coll.role === 'owner' ? 'You own this' : 'Member'}
+										</span>
+									{/if}
+								</div>
+								{#if sharedRenameError && isRenamingShared}
+									<p class="mt-1 text-xs text-red-600 dark:text-red-400">{sharedRenameError}</p>
 								{/if}
+								<div class="mt-2 flex flex-wrap items-center gap-1">
+									{#if isRenamingShared}
+										<button
+											disabled={sharedRenameBusy}
+											onclick={() => saveSharedRename(coll)}
+											class="text-xs px-2 py-1 rounded text-orange-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+										>
+											Save
+										</button>
+										<button
+											disabled={sharedRenameBusy}
+											onclick={() => (renamingSharedId = null)}
+											class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+										>
+											Cancel
+										</button>
+									{:else}
+										<a
+											href={resolve('/lists/[id]', { id: coll.id })}
+											class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+										>
+											Open
+										</a>
+										{#if coll.role === 'owner'}
+											<button
+												onclick={async () => {
+													openCollection = coll;
+													await generateInviteLink();
+												}}
+												class="text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+											>
+												Invite
+											</button>
+											<button
+												onclick={() => startSharedRename(coll)}
+												class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+											>
+												Rename
+											</button>
+										{/if}
+										<button
+											onclick={() => {
+												if (openCollection?.id === coll.id) {
+													openCollection = null;
+												} else {
+													openCollection = coll;
+													openMembers = [];
+													outstandingInvites = [];
+													revokingInviteId = null;
+													revokeError = '';
+													loadOpenMembers();
+													loadOutstandingInvites();
+												}
+											}}
+											class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+										>
+											{openCollection?.id === coll.id ? 'Hide' : 'Info'}
+										</button>
+									{/if}
+								</div>
 							</div>
-						{/if}
+							{#if openCollection?.id === coll.id}
+								<div
+									class="ml-3 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2 text-xs text-gray-600 dark:text-gray-400"
+								>
+									{#if inviteLink && openCollection.id === coll.id}
+										<div class="flex gap-1">
+											<input
+												type="text"
+												readonly
+												value={inviteLink}
+												class="flex-1 rounded px-2 py-1 bg-white border border-gray-300 text-gray-900 dark:bg-gray-900 dark:border-gray-600 dark:text-white"
+											/>
+											<button
+												onclick={copyInviteLink}
+												class="px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+											>
+												{inviteCopied ? '✓' : 'Copy'}
+											</button>
+											<button
+												onclick={toggleInviteQr}
+												class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+											>
+												{showInviteQr ? 'Hide QR' : 'QR code'}
+											</button>
+										</div>
+										{#if showInviteQr}
+											<div class="flex justify-center rounded bg-white p-2">
+												{#if inviteQr}
+													<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+													{@html inviteQr}
+												{:else}
+													<p class="py-8 text-gray-500">Generating…</p>
+												{/if}
+											</div>
+										{/if}
+									{/if}
+									{#if inviteError}
+										<p class="text-red-600 dark:text-red-400">{inviteError}</p>
+									{/if}
+									{#if coll.role === 'owner'}
+										{#if loadingInvites}
+											<p>Loading invites…</p>
+										{:else if outstandingInvites.length > 0}
+											<div>
+												<p class="font-medium text-gray-500 dark:text-gray-400">Pending invites</p>
+												<ul class="mt-1 space-y-1">
+													{#each outstandingInvites as invite (invite.id)}
+														<li class="flex items-center justify-between gap-2">
+															<span class="truncate">
+																Sent {new Date(invite.createdAt).toLocaleDateString()}, expires {new Date(
+																	invite.expiresAt
+																).toLocaleDateString()}
+															</span>
+															{#if revokingInviteId === invite.id}
+																<span class="shrink-0 flex items-center gap-1">
+																	<button
+																		onclick={() => doRevokeInvite(invite)}
+																		class="text-red-500 hover:underline"
+																	>
+																		Confirm
+																	</button>
+																	<button
+																		onclick={() => (revokingInviteId = null)}
+																		class="text-gray-500 hover:underline"
+																	>
+																		Cancel
+																	</button>
+																</span>
+															{:else}
+																<button
+																	onclick={() => doRevokeInvite(invite)}
+																	class="shrink-0 text-red-500 hover:underline"
+																>
+																	Revoke
+																</button>
+															{/if}
+														</li>
+													{/each}
+												</ul>
+												{#if revokeError}
+													<p class="mt-1 text-red-600 dark:text-red-400">{revokeError}</p>
+												{/if}
+											</div>
+										{/if}
+									{/if}
+									{#if loadingMembers}
+										<p>Loading members…</p>
+									{:else if removingMember?.collectionId !== coll.id}
+										<ul class="space-y-1">
+											{#each openMembers as member (member.userId)}
+												<li class="flex items-center justify-between gap-2">
+													<span class="truncate"
+														>{member.email}{member.role === 'owner' ? ' (owner)' : ''}</span
+													>
+													{#if coll.role === 'owner' && member.role !== 'owner'}
+														<button
+															onclick={() => {
+																removingMember = { collectionId: coll.id, userId: member.userId };
+																removalError = '';
+															}}
+															class="shrink-0 text-red-500 hover:underline"
+														>
+															Remove
+														</button>
+													{/if}
+												</li>
+											{/each}
+										</ul>
+									{/if}
+									{#if removingMember?.collectionId === coll.id}
+										<div class="bg-red-50 dark:bg-red-900/20 rounded p-2 space-y-1">
+											<p>Remove member and rotate key?</p>
+											<div class="flex gap-1">
+												<button
+													onclick={doRemoveMember}
+													class="px-2 py-1 rounded text-white text-xs bg-red-600 hover:bg-red-700"
+												>
+													Confirm
+												</button>
+												<button
+													onclick={() => (removingMember = null)}
+													class="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+												>
+													Cancel
+												</button>
+											</div>
+											{#if removalError}
+												<p class="text-red-600 dark:text-red-400">{removalError}</p>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							{/if}
+							<SharedListSection
+								collection={coll}
+								color={sharedListColors[coll.id] ?? '#9ca3af'}
+								{budgetHours}
+							/>
+						</div>
 					{/each}
 				</div>
 			{/if}
@@ -1446,41 +1286,3 @@
 		</p>
 	{/if}
 </div>
-
-<!-- ── Detail panel (#273) ────────────────────────────────────────────────
-     Minimal, same as add/+page.svelte's usage — no onAddTag/onRemoveTag/
-     onClearTags/sharedCollections/onAssignShared, so DetailPanel's List
-     section (gated on onAddTag) doesn't render here; assignment stays on
-     the Queue page. -->
-{#if detailItem}
-	{@const di = detailItem}
-	<DetailPanel
-		item={{ ...di, activeQueueTags: activeQueueTags(di) }}
-		{budgetHours}
-		showSeasons={true}
-		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
-		onClose={() => (detailItem = null)}
-	>
-		{#snippet footer(item)}
-			<button
-				class="flex-1 rounded-lg py-2 text-sm font-medium transition-colors
-					{item.watched_at
-					? 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-400 dark:hover:bg-teal-900/60'
-					: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
-				disabled={listItemBusy.has(item.id)}
-				onclick={async () => {
-					await toggle(di);
-					detailItem = items.find((i) => i.id === item.id) ?? null;
-				}}>{item.watched_at ? '↩ Unwatch' : '✓ Watched'}</button
-			>
-			<button
-				class="rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400"
-				disabled={listItemBusy.has(item.id)}
-				onclick={async () => {
-					await remove(di);
-					detailItem = null;
-				}}>✕ Remove</button
-			>
-		{/snippet}
-	</DetailPanel>
-{/if}

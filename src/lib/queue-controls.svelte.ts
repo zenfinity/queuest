@@ -23,19 +23,16 @@ export const queueControls = $state({
 	sortDir: 'desc' as 'asc' | 'desc',
 	viewMode: 'grid' as ViewKey,
 	serviceFilter: 'all' as ServiceFilterKey,
-	collectionFilter: null as string | null,
 	// Gantt lane grouping axis — provider lanes are the default (what the budget
 	// feature is built around); collection is an alternative axis, not a
 	// replacement.
 	ganttGroupBy: 'provider' as GanttGroupKey,
 	// Mirrors the queue's current collection names so QueueDock — rendered from
-	// the layout, without direct access to queue items — can list them. Kept in
-	// sync by the queue page via an $effect.
+	// the layout, without direct access to queue items — can list them (for
+	// Gantt's "Group lanes by: List" toggle). Kept in sync by the queue page
+	// via an $effect. List *browsing/filtering* itself lives on /lists now as
+	// per-list accordions, not dock-driven (#273 follow-up).
 	collectionNames: [] as string[],
-	// Same mirroring, for shared lists — kept separate from collectionNames
-	// rather than merged in since a shared-list filter needs its own `shared:`
-	// id form (see sharedFilterId below), not a plain name.
-	sharedListOptions: [] as { id: string; name: string; color: string }[],
 	watchedOn: false,
 	filterOpen: false,
 	ready: false, // true once the queue page has hydrated sort/view prefs from localStorage
@@ -54,19 +51,10 @@ export function clearSort() {
 	queueControls.sortDir = SORT_DEFAULT_DIR.added;
 }
 
-// `collectionFilter` doubles as the shared-list filter, prefixed `shared:` —
-// same convention the DetailPanel and bulk-assign pickers already use, so a
-// filter value means the same thing everywhere it's read. Returns the
-// collection id, or null if `filter` isn't a shared-list filter.
-export function sharedFilterId(filter: string | null): string | null {
-	return filter?.startsWith('shared:') ? filter.slice(7) : null;
-}
-
 export function hasActiveFilters(): boolean {
 	return (
 		queueControls.sortBy !== 'added' ||
 		queueControls.sortDir !== SORT_DEFAULT_DIR[queueControls.sortBy] ||
-		queueControls.serviceFilter !== 'all' ||
-		queueControls.collectionFilter !== null
+		queueControls.serviceFilter !== 'all'
 	);
 }
