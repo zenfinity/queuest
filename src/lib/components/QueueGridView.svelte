@@ -2,20 +2,19 @@
 	import type { Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
-	import { representativeTag, type WatchlistItem } from '$lib/types';
+	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
-	import { remainingRuntime, releaseChip, hms } from '$lib/progress';
+	import { remainingRuntime, releaseChip } from '$lib/progress';
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
-	import { groupIntoCollections, type CollectionSection } from '$lib/queue-actions';
+	import type { ItemChips } from '$lib/queue-actions';
 
 	let {
 		items,
 		budgetHours,
 		busy,
-		queueColors,
-		groupByCollection = false,
+		chipsByItemId = new Map<number, ItemChips>(),
 		selectMode = false,
 		selected = new Set<number>(),
 		rankMode = false,
@@ -31,14 +30,14 @@
 		items: WatchlistItem[];
 		budgetHours: number;
 		busy: Set<number>;
-		queueColors: Record<string, string>;
-		groupByCollection?: boolean;
+		/** Per-item list chips (personal stored + shared derived), keyed by
+		 * item.id — precomputed by the caller once per visible-items recompute
+		 * rather than re-derived per card (#274 PR2). */
+		chipsByItemId?: Map<number, ItemChips>;
 		selectMode?: boolean;
 		selected?: Set<number>;
-		/** Custom "Rank" sort is active (#216) — shows move up/down (always) and
-		 * a drag handle (#231) for reordering. Only ever true when ungrouped —
-		 * see rankMode's derivation in +page.svelte — so drag is wired only on
-		 * the ungrouped branch below. */
+		/** Custom "Rank" sort is active (#216) — shows move up/down and a drag
+		 * handle (#231) for reordering. */
 		rankMode?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
@@ -70,16 +69,6 @@
 		dndItems = e.detail.items;
 		onReorder?.(dndItems);
 	}
-
-	// Svelte requires an animate:-directive element to be the sole direct child
-	// of its keyed #each block, so a section header can't be interleaved into
-	// the same #each as the cards. Grouping therefore gives each section its own
-	// #each/flip scope: cards animate within a section, but not across a section
-	// boundary. Card markup itself lives in the cardContent snippet below so
-	// it isn't duplicated between the grouped/ungrouped branches.
-	let sections = $derived<CollectionSection[]>(
-		groupByCollection ? groupIntoCollections(items, queueColors) : []
-	);
 </script>
 
 <svelte:document
@@ -90,6 +79,7 @@
 />
 
 {#snippet cardContent(item: WatchlistItem, isFirst: boolean, isLast: boolean)}
+	{@const chips = chipsByItemId.get(item.id)}
 	{@const cardHue = resolvedHue(item.providers[0]?.provider_id ?? null)}
 	{@const cardPct = Math.min(100, (remainingRuntime(item) / (budgetHours * 60)) * 100)}
 	{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
@@ -218,6 +208,39 @@
 				{/if}
 			{/if}
 		</div>
+		<!-- List chips (#274 PR2) — personal (filled) and shared-derived
+		     (outlined) rendered as visually distinct clusters, since a
+		     promoted personal list and its same-named shared counterpart can
+		     both be active on one item at once and would otherwise look like
+		     an accidental duplicate chip. -->
+		{#if chips && (chips.personal.length || chips.shared.length)}
+			<div class="flex flex-col gap-1">
+				{#if chips.personal.length}
+					<div class="flex flex-wrap gap-1">
+						{#each chips.personal as chip (chip.name)}
+							<span
+								class="rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+								style="background:{chip.color}"
+							>
+								{chip.name}
+							</span>
+						{/each}
+					</div>
+				{/if}
+				{#if chips.shared.length}
+					<div class="flex flex-wrap gap-1">
+						{#each chips.shared as chip (chip.name)}
+							<span
+								class="rounded-full border px-2 py-0.5 text-[10px] font-medium"
+								style="border-color:{chip.color}; color:{chip.color}"
+							>
+								{chip.name}
+							</span>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
 		{#if item.media_type === 'movie' && releaseChip(item.release)}
 			<p class="text-xs leading-snug text-amber-600 dark:text-amber-400">
 				{releaseChip(item.release)}
@@ -289,86 +312,40 @@
 {/snippet}
 
 <div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-	{#if groupByCollection}
-		{#each sections as section (section.name)}
-			{@const sectionRemainingMins = section.items.reduce((sum, i) => sum + remainingRuntime(i), 0)}
-			<div class="col-span-full flex items-center gap-2 pt-3 first:pt-0">
-				<span
-					class="h-2.5 w-2.5 shrink-0 rounded-full"
-					style="background:{section.color ?? '#9ca3af'}"
-				></span>
-				<h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-					{section.name}
-				</h3>
-				<span class="text-[10px] text-gray-500 dark:text-gray-400">{section.items.length}</span>
-				<span class="text-[10px] text-gray-500 dark:text-gray-400"
-					>· {hms(sectionRemainingMins)}</span
-				>
+	<!-- class="contents" keeps this wrapper out of the CSS grid layout (#231)
+	     so cards still lay out as direct grid children, while giving
+	     svelte-dnd-action a single element to own as the drag zone. -->
+	<div
+		class="contents"
+		use:dragHandleZone={{
+			items: dndItems,
+			flipDurationMs,
+			dragDisabled: !rankMode,
+			dropTargetStyle: {}
+		}}
+		onconsider={handleDndConsider}
+		onfinalize={handleDndFinalize}
+	>
+		{#each dndItems as item, i (item.id)}
+			<!-- Card click is a convenience only — the poster button inside cardContent
+			     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
+			     action, so this div is deliberately not a second, nested interactive element. -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				animate:flip={{ duration: flipDurationMs }}
+				class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
+				selected.has(item.id)
+					? '!ring-2 !ring-orange-500'
+					: ''}"
+				onclick={(e) => {
+					e.stopPropagation();
+					if (selectMode) onToggleSelect?.(item);
+					else onOpenDetail(item);
+				}}
+			>
+				{@render cardContent(item, i === 0, i === dndItems.length - 1)}
 			</div>
-			{#each section.items as item, i (item.id)}
-				{@const tagColor = representativeTag(item)
-					? (queueColors[representativeTag(item)!] ?? null)
-					: null}
-				<!-- Card click is a convenience only — the poster button inside cardContent
-				     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
-				     action, so this div is deliberately not a second, nested interactive element. -->
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					animate:flip={{ duration: motion.reduced ? 0 : 250 }}
-					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
-					selected.has(item.id)
-						? '!ring-2 !ring-orange-500'
-						: ''}"
-					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
-					onclick={(e) => {
-						e.stopPropagation();
-						if (selectMode) onToggleSelect?.(item);
-						else onOpenDetail(item);
-					}}
-				>
-					{@render cardContent(item, i === 0, i === section.items.length - 1)}
-				</div>
-			{/each}
 		{/each}
-	{:else}
-		<!-- class="contents" keeps this wrapper out of the CSS grid layout (#231)
-		     so cards still lay out as direct grid children, while giving
-		     svelte-dnd-action a single element to own as the drag zone. -->
-		<div
-			class="contents"
-			use:dragHandleZone={{
-				items: dndItems,
-				flipDurationMs,
-				dragDisabled: !rankMode,
-				dropTargetStyle: {}
-			}}
-			onconsider={handleDndConsider}
-			onfinalize={handleDndFinalize}
-		>
-			{#each dndItems as item, i (item.id)}
-				{@const tagColor = representativeTag(item)
-					? (queueColors[representativeTag(item)!] ?? null)
-					: null}
-				<!-- Card click is a convenience only — see the grouped branch above. -->
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					animate:flip={{ duration: flipDurationMs }}
-					class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
-					selected.has(item.id)
-						? '!ring-2 !ring-orange-500'
-						: ''}"
-					style={tagColor ? `border-left: 3px solid ${tagColor}` : ''}
-					onclick={(e) => {
-						e.stopPropagation();
-						if (selectMode) onToggleSelect?.(item);
-						else onOpenDetail(item);
-					}}
-				>
-					{@render cardContent(item, i === 0, i === dndItems.length - 1)}
-				</div>
-			{/each}
-		</div>
-	{/if}
+	</div>
 </div>

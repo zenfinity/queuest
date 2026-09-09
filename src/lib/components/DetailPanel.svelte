@@ -35,7 +35,10 @@
 		added_at?: string;
 		year?: string | null;
 		watched_at?: string | null;
-		queue_tag?: string | null;
+		/** This item's currently active personal list names (#274 PR2) —
+		 * caller-precomputed via activeQueueTags(item), same convention as
+		 * addedByEmail/addedByColor below. */
+		activeQueueTags?: string[];
 		notes?: string;
 		// Shared-list attribution (#236) — who added this title, resolved to a
 		// display email + the same color used for its border in the list view.
@@ -52,8 +55,13 @@
 		onClose,
 		footer,
 		existingCollections = [],
-		onSetCollection,
+		queueColors = {},
+		onAddTag,
+		onRemoveTag,
+		onClearTags,
 		sharedCollections = [],
+		activeSharedCollectionIds = [],
+		sharedListColors = {},
 		onAssignShared,
 		onSetNote
 	}: {
@@ -64,8 +72,25 @@
 		onClose: () => void;
 		footer: Snippet<[DetailPanelItem]>;
 		existingCollections?: string[];
-		onSetCollection?: (tag: string | null) => Promise<void>;
+		/** Colors for the personal-list chips below, keyed by list name. */
+		queueColors?: Record<string, string>;
+		// Multi-select personal-list toggling (#274 PR2) — replaces the old
+		// single onSetCollection(tag | null) "replace membership" callback.
+		// Rendering this section at all is still gated on onAddTag being
+		// provided (mirrors the old onSetCollection gate) — add/+page.svelte's
+		// DetailPanel usage passes none of these, so its List section simply
+		// doesn't render there, same as before.
+		onAddTag?: (tag: string) => Promise<void>;
+		onRemoveTag?: (tag: string) => Promise<void>;
+		onClearTags?: () => Promise<void>;
 		sharedCollections?: { id: string; name: string }[];
+		/** Which of `sharedCollections` this item is already a member of —
+		 * shared chips render as active-but-not-toggleable for these (removal
+		 * from a shared collection stays its own separate, more consequential
+		 * flow, not folded into this toggle). */
+		activeSharedCollectionIds?: string[];
+		/** Colors for the shared-list chips below, keyed by collection id. */
+		sharedListColors?: Record<string, string>;
 		onAssignShared?: (collectionId: string) => Promise<void>;
 		// Omitted entirely for a shared item the viewer doesn't own (#155/#236)
 		// — the note still renders, read-only, from item.notes.
@@ -296,52 +321,102 @@
 		</div>
 
 		<div class="space-y-4 px-4 pb-4">
-			<!-- List -->
-			{#if onSetCollection}
-				<div class="flex items-center justify-between gap-2">
-					<span
-						class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-						>List</span
-					>
-					<div class="flex min-w-0 items-center gap-2">
-						<select
-							value={item.queue_tag ?? ''}
-							disabled={collectionBusy}
-							aria-label="List"
-							onchange={async (e) => {
-								const value = e.currentTarget.value;
-								if (value === '__manage__') {
-									e.currentTarget.value = item.queue_tag ?? '';
-									await goto(resolve('/lists'));
-									return;
-								}
-								collectionBusy = true;
-								try {
-									if (value.startsWith('shared:')) {
-										await onAssignShared?.(value.slice('shared:'.length));
-									} else {
-										await onSetCollection(value || null);
-									}
-								} finally {
-									collectionBusy = false;
-								}
-							}}
-							class="min-w-0 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
+			<!-- List (#274 PR2 — genuinely multi-select: each chip toggles that one
+			     list independently, replacing the old single <select> that could
+			     only ever replace an item's whole membership with one tag). -->
+			{#if onAddTag}
+				{@const active = item.activeQueueTags ?? []}
+				<div>
+					<div class="flex items-center justify-between gap-2">
+						<span
+							class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+							>List</span
 						>
-							<option value="">None</option>
-							{#each existingCollections as collection (collection)}
-								<option value={collection}>{collection}</option>
-							{/each}
-							{#if onAssignShared && sharedCollections.length > 0}
-								<optgroup label="Shared">
-									{#each sharedCollections as coll (coll.id)}
-										<option value={`shared:${coll.id}`}>{coll.name}</option>
-									{/each}
-								</optgroup>
-							{/if}
-							<option value="__manage__">Manage lists…</option>
-						</select>
+						{#if active.length > 0}
+							<button
+								type="button"
+								disabled={collectionBusy}
+								onclick={async () => {
+									collectionBusy = true;
+									try {
+										await onClearTags?.();
+									} finally {
+										collectionBusy = false;
+									}
+								}}
+								class="text-[10px] font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
+							>
+								Clear all
+							</button>
+						{/if}
 					</div>
+					{#if existingCollections.length > 0}
+						<div class="mt-1.5 flex flex-wrap gap-1">
+							{#each existingCollections as name (name)}
+								{@const isActive = active.includes(name)}
+								<button
+									type="button"
+									disabled={collectionBusy}
+									aria-pressed={isActive}
+									onclick={async () => {
+										collectionBusy = true;
+										try {
+											if (isActive) await onRemoveTag?.(name);
+											else await onAddTag(name);
+										} finally {
+											collectionBusy = false;
+										}
+									}}
+									class="rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 {isActive
+										? 'text-white'
+										: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
+									style={isActive ? `background:${queueColors[name] ?? '#f97316'}` : ''}
+								>
+									{name}
+								</button>
+							{/each}
+						</div>
+					{/if}
+					{#if onAssignShared && sharedCollections.length > 0}
+						<div class="mt-2">
+							<p
+								class="text-[9px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500"
+							>
+								Shared
+							</p>
+							<div class="mt-1 flex flex-wrap gap-1">
+								{#each sharedCollections as coll (coll.id)}
+									{@const isActive = activeSharedCollectionIds.includes(coll.id)}
+									{@const sharedColor = sharedListColors[coll.id] ?? '#9ca3af'}
+									<button
+										type="button"
+										disabled={collectionBusy || isActive}
+										class="rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:cursor-default {isActive
+											? ''
+											: 'hover:bg-gray-50 dark:hover:bg-gray-800'}"
+										style="border-color:{sharedColor}; color:{sharedColor};"
+										onclick={async () => {
+											collectionBusy = true;
+											try {
+												await onAssignShared(coll.id);
+											} finally {
+												collectionBusy = false;
+											}
+										}}
+									>
+										{coll.name}{isActive ? ' ✓' : ''}
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/if}
+					<button
+						type="button"
+						onclick={() => goto(resolve('/lists'))}
+						class="mt-2 text-[10px] font-medium text-orange-500 hover:text-orange-400"
+					>
+						Manage lists →
+					</button>
 				</div>
 			{/if}
 

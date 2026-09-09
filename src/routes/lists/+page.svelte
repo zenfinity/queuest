@@ -8,6 +8,7 @@
 	// `collection` throughout the codebase — renaming those touches the crypto
 	// schema and API surface for zero user-facing benefit, so this is a
 	// presentation-layer rename only.
+	import { SvelteSet } from 'svelte/reactivity';
 	import { hasActiveTag, type WatchlistItem } from '$lib/types';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
@@ -37,7 +38,13 @@
 		deleteCollectionColor,
 		sharedListColor
 	} from '$lib/queue-colors';
-	import { listCollections } from '$lib/queue-actions';
+	import {
+		listCollections,
+		sortByRank,
+		moveItemInCollection,
+		type QueueActionDeps
+	} from '$lib/queue-actions';
+	import { TMDB_IMG } from '$lib/tmdb';
 	import ShareHint from '$lib/components/ShareHint.svelte';
 	import Button from '$lib/components/Button.svelte';
 
@@ -260,6 +267,33 @@
 	let deleteArmed = $state<string | null>(null);
 	let manageBusy = $state(false);
 	let newCollectionInput = $state('');
+
+	// ── Per-list rank (#274 PR2) ─────────────────────────────────────────────
+	let expandedCollection = $state<string | null>(null);
+	let listItemBusy = new SvelteSet<number>();
+	let reorderError = $state('');
+
+	const listActionDeps: QueueActionDeps = {
+		setItems: (next) => {
+			items = next;
+		},
+		setBusy: (id, isBusy) => {
+			if (isBusy) listItemBusy.add(id);
+			else listItemBusy.delete(id);
+		},
+		setError: (message) => {
+			reorderError = message;
+		}
+	};
+
+	async function moveListItem(
+		item: WatchlistItem,
+		direction: 'up' | 'down',
+		visibleOrder: WatchlistItem[],
+		tag: string
+	) {
+		await moveItemInCollection(item, tag, direction, visibleOrder, listActionDeps);
+	}
 
 	// ── Read-only link ───────────────────────────────────────────────────────
 	// The account-free counterpart to Share/promote: a disposable, one-way
@@ -494,6 +528,7 @@
 					{@const isDeleting = deleteArmed === collection}
 					{@const isPromoting = promoteArmed === collection}
 					{@const isReadOnlyLink = readOnlyLinkFor === collection}
+					{@const isReordering = expandedCollection === collection}
 					<div>
 						<div class="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800/60">
 							<div class="flex items-center gap-2.5 min-w-0">
@@ -596,6 +631,14 @@
 											: "Get a link anyone can open to view this list — no account needed, and it won't update after they open it"}
 									>
 										Read-only link
+									</button>
+									<button
+										disabled={manageBusy || count === 0}
+										onclick={() => (expandedCollection = isReordering ? null : collection)}
+										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+										title={count === 0 ? 'Add a title to this list first' : 'Reorder this list'}
+									>
+										{isReordering ? 'Hide order' : 'Reorder'}
 									</button>
 									<button
 										disabled={manageBusy}
@@ -711,6 +754,58 @@
 								>
 									Close
 								</button>
+							</div>
+						{/if}
+						{#if isReordering}
+							{@const sortedItems = sortByRank(
+								items.filter((i) => hasActiveTag(i, collection)),
+								collection
+							)}
+							<div
+								class="mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/60"
+							>
+								<p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+									This order is used only here — the Queue page's own "Rank" sort is separate.
+								</p>
+								<ul class="space-y-1">
+									{#each sortedItems as item, i (item.id)}
+										<li class="flex items-center gap-2">
+											<div
+												class="h-10 w-7 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-700"
+											>
+												{#if item.poster_path}
+													<img
+														src="{TMDB_IMG}/w92{item.poster_path}"
+														alt=""
+														class="h-full w-full object-cover"
+													/>
+												{/if}
+											</div>
+											<span class="min-w-0 flex-1 truncate text-xs text-gray-700 dark:text-gray-300"
+												>{item.title}</span
+											>
+											<button
+												disabled={listItemBusy.has(item.id) || i === 0}
+												onclick={() => moveListItem(item, 'up', sortedItems, collection)}
+												class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
+												aria-label="Move up"
+											>
+												↑
+											</button>
+											<button
+												disabled={listItemBusy.has(item.id) || i === sortedItems.length - 1}
+												onclick={() => moveListItem(item, 'down', sortedItems, collection)}
+												class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-400"
+												aria-label="Move down"
+											>
+												↓
+											</button>
+										</li>
+									{/each}
+								</ul>
+								{#if reorderError}
+									<p class="mt-1.5 text-red-600 dark:text-red-400">{reorderError}</p>
+								{/if}
 							</div>
 						{/if}
 					</div>

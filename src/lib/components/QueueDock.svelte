@@ -227,18 +227,6 @@
 
 						<div class="flex items-center justify-between px-2 py-1">
 							<span class="panel-label">List</span>
-							{#if queueControls.collectionNames.length > 0}
-								<button
-									onclick={() =>
-										(queueControls.groupByCollection = !queueControls.groupByCollection)}
-									aria-pressed={queueControls.groupByCollection}
-									class="text-[10px] font-medium transition-colors {queueControls.groupByCollection
-										? 'text-orange-500 hover:text-orange-400'
-										: 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}"
-								>
-									{queueControls.groupByCollection ? '✓ Grouped' : 'Group'}
-								</button>
-							{/if}
 						</div>
 
 						<button
