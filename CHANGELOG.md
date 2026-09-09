@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.26.0] — 2026-09-09
+
+### fix: forward-migrate version-2 sync/backup payloads instead of rejecting them forever
+
+`APP_STATE_VERSION` bumped 2→3 in v1.19.0 (#274 PR1) when list membership moved from a scalar `queue_tag` field to a `queue_tags` map, and `deserializeAppState`'s version gate started throwing "Unsupported backup format version" for anything stamped version 2. That gate fires on the sync engine's pull step, before merge or push ever runs — so any account whose last-pushed server blob predates the bump gets stuck in a permanent sync-error loop with no path to recovery, and any `.queuest` backup file exported before v1.19.0 fails to import the same way.
+
+Forward-migrates version 2 instead: parses the legacy scalar `queue_tag` field and re-runs it through the exact same duplicate-row collapsing logic the v5→v6 IndexedDB migration already uses (`collapseGroup`/`collapseNotes`, relocated from that migration's closure to module scope in `db.ts` and reused, rather than reimplemented, in `app-state.ts`'s new `migrateV2Items`). A title that was in two lists — two rows under the old shape — becomes one row with both tags active, same as the IndexedDB migration already does for a device's own local data. Both callers of `deserializeAppState` (the sync engine, and backup-file restore) get this fix for free, since neither has any version-specific logic of its own.
+
 ## [1.19.0] — 2026-09-08
 
 ### refactor: one row per title again — list membership is a map, not a duplicated row (#274, PR1 of 2)

@@ -211,14 +211,6 @@ describe('deserializeAppState', () => {
 		);
 	});
 
-	// #274 — a device that hasn't upgraded yet still sends the old version
-	// number, which must fail loudly rather than have its now-unrecognized
-	// queue_tags field silently stripped and the stale queue_tag shape pushed
-	// back as if it were current.
-	it('rejects a pre-#274 version 2 payload rather than silently reading it as current', () => {
-		expect(() => deserializeAppState({ version: 2, items: [] })).toThrow('Unsupported');
-	});
-
 	it('preserves real added_at/watched_at from the payload', () => {
 		const result = deserializeAppState({
 			items: [
@@ -371,6 +363,53 @@ describe('deserializeAppState', () => {
 		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
 		expect((result.items[0] as unknown as Record<string, unknown>).polluted).toBeUndefined();
 		expect((result.items[0] as unknown as Record<string, unknown>).unknownField).toBeUndefined();
+	});
+});
+
+describe('deserializeAppState migrates version 2 (pre-#274 scalar queue_tag) payloads', () => {
+	it("translates a single item's legacy queue_tag into an equivalent queue_tags entry", () => {
+		const result = deserializeAppState({
+			version: 2,
+			items: [{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', queue_tag: 'Horror' }]
+		});
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0].queue_tags?.Horror).toBeTruthy();
+		expect(result.items[0].queue_tags?.Horror?.deleted).toBeUndefined();
+	});
+
+	it('collapses two v2 rows sharing tmdb_id+media_type but different queue_tags into one item with both tags active', () => {
+		const result = deserializeAppState({
+			version: 2,
+			items: [
+				{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', queue_tag: 'Horror' },
+				{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', queue_tag: 'Comedy' }
+			]
+		});
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0].queue_tags?.Horror).toBeTruthy();
+		expect(result.items[0].queue_tags?.Comedy).toBeTruthy();
+	});
+
+	it('still parses a v2 item with no queue_tag at all', () => {
+		const result = deserializeAppState({
+			version: 2,
+			items: [{ tmdb_id: 1, media_type: 'movie', title: 'Arrival' }]
+		});
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0].queue_tags).toBeUndefined();
+	});
+
+	it('counts a genuinely invalid item as rejected, not the row collapsing', () => {
+		const result = deserializeAppState({
+			version: 2,
+			items: [
+				{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', queue_tag: 'Horror' },
+				{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', queue_tag: 'Comedy' }, // collapses, not rejected
+				{ tmdb_id: 2, media_type: 'movie' } // missing title -> genuinely rejected
+			]
+		});
+		expect(result.items).toHaveLength(1);
+		expect(result.rejectedItemCount).toBe(1);
 	});
 });
 

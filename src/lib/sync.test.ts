@@ -517,4 +517,45 @@ describe('syncNow', () => {
 		const all = await db.getAll();
 		expect(all.map((i) => i.title)).toEqual(['Valid Item']);
 	});
+
+	it('migrates a stale version-2 remote blob (pre-#274 scalar queue_tag) instead of failing forever', async () => {
+		const dek = await generateShareKey();
+		await enableSyncWithDek(dek, 'user@example.com');
+
+		// A pre-#274 remote snapshot: two rows for the same title, one per list
+		// membership, using the old scalar queue_tag field — exactly what an
+		// account whose last sync predates the v1.19.0 version bump still has
+		// sitting on the server.
+		const remoteBlob = await buildRemoteBlob(dek, {
+			version: 2,
+			prefs: {},
+			items: [
+				{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', queue_tag: 'Horror' },
+				{ tmdb_id: 1, media_type: 'movie', title: 'Arrival', queue_tag: 'Comedy' }
+			],
+			services: []
+		});
+
+		vi.stubGlobal(
+			'fetch',
+			mockFetchSequence([
+				async () => new Response(remoteBlob, { headers: { 'X-Sync-Version': '1' } }),
+				async () =>
+					new Response(JSON.stringify({ version: 2 }), {
+						status: 200,
+						headers: { Date: new Date().toUTCString() }
+					})
+			])
+		);
+
+		// Before this fix, deserializeAppState threw "Unsupported backup format
+		// version" on the pull step and the whole cycle aborted — this asserts
+		// it completes instead.
+		await expect(syncNow()).resolves.toBeUndefined();
+
+		const all = await db.getAll();
+		expect(all).toHaveLength(1);
+		expect(all[0].queue_tags?.Horror).toBeTruthy();
+		expect(all[0].queue_tags?.Comedy).toBeTruthy();
+	});
 });

@@ -133,7 +133,7 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 						if (oldVersion < 6) collapseQueueTags();
 						return;
 					}
-					const item = cursor.value as LegacyV5Row;
+					const item = cursor.value as LegacyQueueTagRow;
 					if (item.queue_tag === undefined || item.queue_tag === null) {
 						item.queue_tag = QUEUE_TAG_NONE;
 						cursor.update(item);
@@ -141,14 +141,6 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 					cursor.continue();
 				};
 			}
-
-			// A row as it exists once normalizeQueueTagsAndReindex has run:
-			// every row's queue_tag is a real string (the sentinel for "no
-			// list", or a real list name) — never undefined/null. This is the
-			// guaranteed input shape collapseQueueTags below reads, regardless
-			// of whether a device is jumping from v1 all the way to v6 or was
-			// already sitting at v5.
-			type LegacyV5Row = Omit<WatchlistItem, 'queue_tags'> & { queue_tag: string };
 
 			/**
 			 * Collapses row-per-list-membership back to one row per title
@@ -177,17 +169,17 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 			 */
 			function collapseQueueTags() {
 				const store = tx.objectStore(STORE);
-				const rows: LegacyV5Row[] = [];
+				const rows: LegacyQueueTagRow[] = [];
 				const cursorReq = store.openCursor();
 				cursorReq.onsuccess = () => {
 					const cursor = cursorReq.result;
 					if (cursor) {
-						rows.push(cursor.value as LegacyV5Row);
+						rows.push(cursor.value as LegacyQueueTagRow);
 						cursor.continue();
 						return;
 					}
 
-					const groups = new Map<string, LegacyV5Row[]>();
+					const groups = new Map<string, LegacyQueueTagRow[]>();
 					for (const row of rows) {
 						const key = `${row.media_type}:${row.tmdb_id}`;
 						const group = groups.get(key);
@@ -205,95 +197,6 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 						store.createIndex(TMDB_MEDIA_INDEX, ['tmdb_id', 'media_type'], { unique: true });
 					}
 				};
-			}
-
-			function collapseGroup(rows: LegacyV5Row[]): WatchlistItem {
-				if (rows.length === 1) {
-					// Trivial case: nothing to merge. A literal passthrough — not
-					// just "produces the same values" but genuinely untouched, so
-					// re-running this over already-one-row-per-title data (the
-					// common case, and what every upgrade converges to) never
-					// bumps updated_at. Bumping it here would hand every
-					// un-duplicated row an artificially fresh timestamp on
-					// upgrade, which could beat a real pending edit sitting
-					// unsynced on another device that hasn't upgraded yet.
-					const { queue_tag, ...rest } = rows[0];
-					return {
-						...rest,
-						queue_tags: queue_tag
-							? { [queue_tag]: { at: rows[0].updated_at ?? rows[0].added_at } }
-							: undefined
-					};
-				}
-
-				const anyLive = rows.some((r) => !r.deleted_at);
-				const survivor = [...rows].sort((a, b) => {
-					const byAdded = a.added_at.localeCompare(b.added_at);
-					return byAdded !== 0 ? byAdded : a.id - b.id;
-				})[0];
-
-				// Each row's tag is unique within the group (see the function's
-				// own doc comment), so this can never overwrite a key it just
-				// set. A tombstoned row's tag becomes a tombstone entry, not a
-				// live one — otherwise a title removed from a list could
-				// resurrect that membership purely by sharing a collapse group
-				// with a live row under a different list.
-				const queue_tags: NonNullable<WatchlistItem['queue_tags']> = {};
-				for (const row of rows) {
-					if (!row.queue_tag) continue; // the "no list" sentinel
-					const at = row.updated_at ?? row.added_at;
-					queue_tags[row.queue_tag] = row.deleted_at
-						? { at: row.deleted_at, deleted: true }
-						: { at, rank: row.sort_order };
-				}
-
-				const watchedTimes = rows
-					.map((r) => r.watched_at)
-					.filter((t): t is string => !!t)
-					.sort();
-				const watched_seasons = Array.from(
-					new Set(rows.flatMap((r) => r.watched_seasons ?? []))
-				).sort((a, b) => a - b);
-				const added_at = rows.reduce(
-					(min, r) => (r.added_at < min ? r.added_at : min),
-					rows[0].added_at
-				);
-				const tombstoneDates = rows
-					.map((r) => r.deleted_at)
-					.filter((d): d is string => !!d)
-					.sort();
-
-				const { queue_tag: _tag, notes: _notes, ...rest } = survivor;
-				const notes = collapseNotes(rows);
-				return {
-					...rest,
-					added_at,
-					deleted_at: anyLive ? null : (tombstoneDates.at(-1) ?? nowIso()),
-					watched_at: watchedTimes[0] ?? null,
-					watched_seasons,
-					queue_tags: Object.keys(queue_tags).length ? queue_tags : undefined,
-					updated_at: nowIso(),
-					...(notes ? { notes } : {})
-				};
-			}
-
-			/** Concatenates every distinct, non-empty note across a collapsed
-			 *  group, oldest-edited first, truncated at NOTE_MAX_LENGTH with a
-			 *  visible marker — the one field in this migration that can
-			 *  otherwise destroy something the user actually typed. */
-			function collapseNotes(rows: LegacyV5Row[]): string | undefined {
-				const seen = new Set<string>();
-				const distinct = rows
-					.filter((r) => r.notes && r.notes.trim())
-					.sort((a, b) => (a.updated_at ?? a.added_at).localeCompare(b.updated_at ?? b.added_at))
-					.map((r) => r.notes!.trim())
-					.filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
-
-				if (distinct.length === 0) return undefined;
-				const joined = distinct.join('\n\n---\n\n');
-				if (joined.length <= NOTE_MAX_LENGTH) return joined;
-				const marker = '\n\n[…truncated]';
-				return joined.slice(0, NOTE_MAX_LENGTH - marker.length) + marker;
 			}
 
 			if (oldVersion < 3) {
@@ -334,6 +237,115 @@ function open(name = DB_NAME): Promise<IDBDatabase> {
 	});
 	if (name === DB_NAME) _dbPromise = promise;
 	return promise;
+}
+
+/** A row as it exists once every per-list-membership row has been
+ *  normalized to a real queue_tag string (never undefined/null) — the
+ *  guaranteed input shape both the v5->v6 IndexedDB migration (#274,
+ *  above) and app-state.ts's version-2 sync/backup-payload migration
+ *  (migrateV2Items) collapse from. No longer v5-specific once shared
+ *  between the two — see collapseGroup/collapseNotes below. */
+export type LegacyQueueTagRow = Omit<WatchlistItem, 'queue_tags'> & { queue_tag: string };
+
+/**
+ * Collapses row-per-list-membership back to one row per title (#274) —
+ * #221 let the same title occupy more than one row (one per list), and
+ * each row's watched_at/notes/watched_seasons/sort_order diverged
+ * independently between them. Every row within one title's group is
+ * guaranteed a *distinct* queue_tag by whichever caller assembled the
+ * group (the v5 IndexedDB migration's now-live per-list unique index; a
+ * version-2 sync payload's own per-list-row shape) — so folding a group's
+ * tags into one map can never collide on a key.
+ *
+ * Pure and IndexedDB-agnostic — reads/returns plain values only, so it's
+ * shared by both the IndexedDB migration (open()'s onupgradeneeded, above)
+ * and app-state.ts's version-2 payload migration.
+ */
+export function collapseGroup(rows: LegacyQueueTagRow[]): WatchlistItem {
+	if (rows.length === 1) {
+		// Trivial case: nothing to merge. A literal passthrough — not
+		// just "produces the same values" but genuinely untouched, so
+		// re-running this over already-one-row-per-title data (the
+		// common case, and what every upgrade converges to) never
+		// bumps updated_at. Bumping it here would hand every
+		// un-duplicated row an artificially fresh timestamp on
+		// upgrade, which could beat a real pending edit sitting
+		// unsynced on another device that hasn't upgraded yet.
+		const { queue_tag, ...rest } = rows[0];
+		return {
+			...rest,
+			queue_tags: queue_tag
+				? { [queue_tag]: { at: rows[0].updated_at ?? rows[0].added_at } }
+				: undefined
+		};
+	}
+
+	const anyLive = rows.some((r) => !r.deleted_at);
+	const survivor = [...rows].sort((a, b) => {
+		const byAdded = a.added_at.localeCompare(b.added_at);
+		return byAdded !== 0 ? byAdded : a.id - b.id;
+	})[0];
+
+	// Each row's tag is unique within the group (see the function's
+	// own doc comment), so this can never overwrite a key it just
+	// set. A tombstoned row's tag becomes a tombstone entry, not a
+	// live one — otherwise a title removed from a list could
+	// resurrect that membership purely by sharing a collapse group
+	// with a live row under a different list.
+	const queue_tags: NonNullable<WatchlistItem['queue_tags']> = {};
+	for (const row of rows) {
+		if (!row.queue_tag) continue; // the "no list" sentinel
+		const at = row.updated_at ?? row.added_at;
+		queue_tags[row.queue_tag] = row.deleted_at
+			? { at: row.deleted_at, deleted: true }
+			: { at, rank: row.sort_order };
+	}
+
+	const watchedTimes = rows
+		.map((r) => r.watched_at)
+		.filter((t): t is string => !!t)
+		.sort();
+	const watched_seasons = Array.from(new Set(rows.flatMap((r) => r.watched_seasons ?? []))).sort(
+		(a, b) => a - b
+	);
+	const added_at = rows.reduce((min, r) => (r.added_at < min ? r.added_at : min), rows[0].added_at);
+	const tombstoneDates = rows
+		.map((r) => r.deleted_at)
+		.filter((d): d is string => !!d)
+		.sort();
+
+	const { queue_tag: _tag, notes: _notes, ...rest } = survivor;
+	const notes = collapseNotes(rows);
+	return {
+		...rest,
+		added_at,
+		deleted_at: anyLive ? null : (tombstoneDates.at(-1) ?? nowIso()),
+		watched_at: watchedTimes[0] ?? null,
+		watched_seasons,
+		queue_tags: Object.keys(queue_tags).length ? queue_tags : undefined,
+		updated_at: nowIso(),
+		...(notes ? { notes } : {})
+	};
+}
+
+/** Concatenates every distinct, non-empty note across a collapsed
+ *  group, oldest-edited first, truncated at NOTE_MAX_LENGTH with a
+ *  visible marker — the one field in this migration that can
+ *  otherwise destroy something the user actually typed. Pure and
+ *  IndexedDB-agnostic, same as collapseGroup above. */
+export function collapseNotes(rows: LegacyQueueTagRow[]): string | undefined {
+	const seen = new Set<string>();
+	const distinct = rows
+		.filter((r) => r.notes && r.notes.trim())
+		.sort((a, b) => (a.updated_at ?? a.added_at).localeCompare(b.updated_at ?? b.added_at))
+		.map((r) => r.notes!.trim())
+		.filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
+
+	if (distinct.length === 0) return undefined;
+	const joined = distinct.join('\n\n---\n\n');
+	if (joined.length <= NOTE_MAX_LENGTH) return joined;
+	const marker = '\n\n[…truncated]';
+	return joined.slice(0, NOTE_MAX_LENGTH - marker.length) + marker;
 }
 
 export async function getAll(): Promise<WatchlistItem[]> {

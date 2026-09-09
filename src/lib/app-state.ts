@@ -34,8 +34,22 @@
 // exactly one of the two sets below — app-state.test.ts greps the whole
 // source tree for sq: string literals and fails if one exists in neither
 // (or both).
-import type { WatchlistItem, Provider, SeasonSummary, CastMember, ReleaseInfo } from './types';
-import { getAll, getAllIncludingDeleted, getServices, NOTE_MAX_LENGTH } from './db';
+import {
+	itemKey,
+	type WatchlistItem,
+	type Provider,
+	type SeasonSummary,
+	type CastMember,
+	type ReleaseInfo
+} from './types';
+import {
+	getAll,
+	getAllIncludingDeleted,
+	getServices,
+	NOTE_MAX_LENGTH,
+	collapseGroup,
+	type LegacyQueueTagRow
+} from './db';
 import { getQueueName, getQueueColors, setQueueName } from './queue-colors';
 import { readBoolean } from './storage';
 import {
@@ -396,6 +410,66 @@ function parseQueueTags(raw: unknown): WatchlistItem['queue_tags'] {
 	return count > 0 ? out : undefined;
 }
 
+/** Extracts the pre-#274 scalar queue_tag field from a raw v2 item — same
+ *  40-char cap the old field enforced (matches MAX_TAG_NAME_LENGTH above). */
+function extractLegacyQueueTag(raw: unknown): string | undefined {
+	if (!raw || typeof raw !== 'object') return undefined;
+	const item = raw as Record<string, unknown>;
+	return typeof item.queue_tag === 'string'
+		? item.queue_tag.slice(0, MAX_TAG_NAME_LENGTH)
+		: undefined;
+}
+
+/**
+ * Forward-migrates a version-2 payload's items: pre-#274 sync pulls and
+ * .queuest exports carried one row per list membership (scalar queue_tag),
+ * not one row per title. Parses each candidate through the existing,
+ * unchanged parseBackupItem, then re-runs the exact collapse logic the
+ * v5->v6 IndexedDB migration already uses (db.ts's collapseGroup) so a
+ * title in two lists becomes one row with both tags in queue_tags, instead
+ * of two duplicate rows or a thrown "Unsupported backup format version".
+ *
+ * rejectedCount is counted here (parseBackupItem returning null), not as
+ * candidates.length - items.length — two valid rows collapsing into one
+ * output row via collapseGroup must not be miscounted as a rejection.
+ *
+ * Note: parseBackupItem never parses sort_order (true for the current v3
+ * format too), so every migrated tag's rank comes out undefined — old
+ * per-list order doesn't survive migration. Not a regression introduced
+ * here; a v3 sync pull already loses sort_order the same way.
+ */
+function migrateV2Items(candidates: unknown[]): { items: BackupItem[]; rejectedCount: number } {
+	let rejectedCount = 0;
+	const groups = new Map<string, LegacyQueueTagRow[]>();
+
+	candidates.forEach((raw, index) => {
+		const item = parseBackupItem(raw);
+		if (!item) {
+			rejectedCount++;
+			return;
+		}
+		// A v2-labeled item shouldn't carry a queue_tags map at all (the field
+		// didn't exist yet) — strip it defensively rather than trust it.
+		const { queue_tags: _ignored, ...bare } = item;
+		const row: LegacyQueueTagRow = {
+			...bare,
+			id: index, // synthetic; preserves original-array order for collapseGroup's added_at tie-break
+			queue_tag: extractLegacyQueueTag(raw) ?? ''
+		};
+		const key = itemKey(row);
+		const group = groups.get(key);
+		if (group) group.push(row);
+		else groups.set(key, [row]);
+	});
+
+	const items: BackupItem[] = [];
+	for (const group of groups.values()) {
+		const { id: _id, ...rest } = collapseGroup(group);
+		items.push(rest);
+	}
+	return { items, rejectedCount };
+}
+
 /** TMDB's imdb_id format is always "tt" + digits (e.g. "tt0111161"). */
 function validateImdbId(val: unknown): string | null {
 	if (typeof val !== 'string' || !/^tt\d+$/.test(val)) return null;
@@ -445,10 +519,12 @@ function parsePrefs(raw: unknown): AppStatePrefs | undefined {
 
 /**
  * Parses an untrusted app-state payload — a backup file today, a sync
- * snapshot from another device later. Accepts the current version, the
- * legacy v1 shape (no sortDir/cancelAlerts — callers fall back to defaults),
- * and the pre-versioning bare-array format. Anything else is rejected
- * outright rather than silently half-parsed.
+ * snapshot from another device later. Accepts the current version, version
+ * 2 (pre-#274 scalar queue_tag — forward-migrated via migrateV2Items rather
+ * than rejected, so a stale sync blob or an old .queuest export isn't
+ * permanently stuck), the legacy v1 shape (no sortDir/cancelAlerts —
+ * callers fall back to defaults), and the pre-versioning bare-array format.
+ * Anything else is rejected outright rather than silently half-parsed.
  */
 export function deserializeAppState(raw: unknown): {
 	items: BackupItem[];
@@ -475,12 +551,19 @@ export function deserializeAppState(raw: unknown): {
 
 	const payload = raw as Record<string, unknown>;
 	const version = payload.version;
-	if (version !== undefined && version !== 1 && version !== APP_STATE_VERSION) {
+	if (version !== undefined && version !== 1 && version !== 2 && version !== APP_STATE_VERSION) {
 		throw new Error('Unsupported backup format version');
 	}
 
 	const itemCandidates = Array.isArray(payload.items) ? payload.items.slice(0, 5000) : [];
-	const items = itemCandidates.map(parseBackupItem).filter((i): i is BackupItem => i !== null);
+	let items: BackupItem[];
+	let rejectedItemCount: number;
+	if (version === 2) {
+		({ items, rejectedCount: rejectedItemCount } = migrateV2Items(itemCandidates));
+	} else {
+		items = itemCandidates.map(parseBackupItem).filter((i): i is BackupItem => i !== null);
+		rejectedItemCount = itemCandidates.length - items.length;
+	}
 
 	const prefs = parsePrefs(payload.prefs);
 
@@ -493,7 +576,7 @@ export function deserializeAppState(raw: unknown): {
 
 	return {
 		items,
-		rejectedItemCount: itemCandidates.length - items.length,
+		rejectedItemCount,
 		...(prefs ? { prefs } : {}),
 		...(services && services.length > 0 ? { services } : {})
 	};
