@@ -7,7 +7,10 @@ const setWatched = vi.fn();
 const removeItem = vi.fn();
 const updateShowProgress = vi.fn();
 const setQueueTag = vi.fn();
+const addQueueTag = vi.fn();
+const removeQueueTag = vi.fn();
 const setSortOrder = vi.fn();
+const setTagRank = vi.fn();
 const gcTombstones = vi.fn();
 
 vi.mock('./db', () => ({
@@ -16,7 +19,10 @@ vi.mock('./db', () => ({
 	removeItem: (...args: unknown[]) => removeItem(...args),
 	updateShowProgress: (...args: unknown[]) => updateShowProgress(...args),
 	setQueueTag: (...args: unknown[]) => setQueueTag(...args),
+	addQueueTag: (...args: unknown[]) => addQueueTag(...args),
+	removeQueueTag: (...args: unknown[]) => removeQueueTag(...args),
 	setSortOrder: (...args: unknown[]) => setSortOrder(...args),
+	setTagRank: (...args: unknown[]) => setTagRank(...args),
 	gcTombstones: (...args: unknown[]) => gcTombstones(...args)
 }));
 
@@ -26,11 +32,16 @@ const {
 	removeQueueItem,
 	toggleSeasonProgress,
 	listCollections,
-	groupIntoCollections,
-	setItemCollection,
+	sortByRank,
+	addItemToCollection,
+	removeItemFromCollection,
+	clearItemCollections,
 	moveItem,
 	reorderItems,
-	bulkSetCollection,
+	moveItemInCollection,
+	bulkAddToCollection,
+	bulkRemoveFromCollection,
+	bulkClearCollections,
 	bulkSetWatched,
 	bulkRemove
 } = await import('./queue-actions');
@@ -62,7 +73,10 @@ beforeEach(() => {
 	removeItem.mockReset();
 	updateShowProgress.mockReset();
 	setQueueTag.mockReset();
+	addQueueTag.mockReset();
+	removeQueueTag.mockReset();
 	setSortOrder.mockReset();
+	setTagRank.mockReset();
 	gcTombstones.mockReset().mockResolvedValue(0);
 });
 
@@ -255,96 +269,114 @@ describe('listCollections', () => {
 	});
 });
 
-describe('groupIntoCollections', () => {
-	it('groups items alphabetically by tag with Uncategorized pinned last', () => {
-		const drama = makeItem({ id: 1, title: 'Drama Item', queue_tags: tags('Drama') });
-		const action1 = makeItem({ id: 2, title: 'Action Item 1', queue_tags: tags('Action') });
-		const noTag = makeItem({ id: 3, title: 'No Tag Item', queue_tags: undefined });
-		const action2 = makeItem({ id: 4, title: 'Action Item 2', queue_tags: tags('Action') });
+describe('sortByRank', () => {
+	it('sorts ranked items by rank', () => {
+		const a = makeItem({ id: 1, queue_tags: { Drama: { at: AT, rank: 2 } } });
+		const b = makeItem({ id: 2, queue_tags: { Drama: { at: AT, rank: 0 } } });
+		const c = makeItem({ id: 3, queue_tags: { Drama: { at: AT, rank: 1 } } });
 
-		const sections = groupIntoCollections([drama, action1, noTag, action2], {
-			Action: '#ef4444',
-			Drama: '#3b82f6'
+		expect(sortByRank([a, b, c], 'Drama').map((i) => i.id)).toEqual([2, 3, 1]);
+	});
+
+	it('appends unranked items after ranked ones, ordered by added_at', () => {
+		const ranked = makeItem({
+			id: 1,
+			added_at: '2024-06-01T00:00:00.000Z',
+			queue_tags: { Drama: { at: AT, rank: 0 } }
+		});
+		const unrankedOlder = makeItem({
+			id: 2,
+			added_at: '2024-01-01T00:00:00.000Z',
+			queue_tags: tags('Drama')
+		});
+		const unrankedNewer = makeItem({
+			id: 3,
+			added_at: '2024-03-01T00:00:00.000Z',
+			queue_tags: tags('Drama')
 		});
 
-		expect(sections.map((s) => s.name)).toEqual(['Action', 'Drama', 'Uncategorized']);
-		expect(sections[0].items).toEqual([action1, action2]);
-		expect(sections[0].color).toBe('#ef4444');
-		expect(sections[0].tag).toBe('Action');
-		expect(sections[2].tag).toBeNull();
-		expect(sections[2].color).toBeNull();
-		expect(sections[2].items).toEqual([noTag]);
+		const result = sortByRank([unrankedNewer, ranked, unrankedOlder], 'Drama');
+
+		expect(result.map((i) => i.id)).toEqual([1, 2, 3]);
 	});
 
-	it('omits the Uncategorized section when every item has a tag', () => {
-		const sections = groupIntoCollections([makeItem({ queue_tags: tags('Drama') })], {});
-		expect(sections.map((s) => s.name)).toEqual(['Drama']);
-	});
+	it('is a stable no-op ordering when nothing is ranked', () => {
+		const a = makeItem({ id: 1, added_at: '2024-01-01T00:00:00.000Z', queue_tags: tags('Drama') });
+		const b = makeItem({ id: 2, added_at: '2024-02-01T00:00:00.000Z', queue_tags: tags('Drama') });
 
-	it('returns a single Uncategorized section when no items have a tag', () => {
-		const sections = groupIntoCollections([makeItem(), makeItem({ id: 2 })], {});
-		expect(sections.map((s) => s.name)).toEqual(['Uncategorized']);
-	});
-
-	it('returns an empty array for an empty item list', () => {
-		expect(groupIntoCollections([], {})).toEqual([]);
-	});
-
-	it('preserves item order within each section', () => {
-		const b = makeItem({ id: 1, title: 'B', queue_tags: tags('X') });
-		const a = makeItem({ id: 2, title: 'A', queue_tags: tags('X') });
-		const sections = groupIntoCollections([b, a], {});
-		expect(sections[0].items).toEqual([b, a]);
-	});
-
-	// #274 — an item can carry more than one active tag now, so it fans into
-	// one section per tag rather than exactly one section overall.
-	it('an item with two active tags appears in both sections', () => {
-		const both = makeItem({ id: 1, title: 'Both', queue_tags: tags('Action', 'Drama') });
-
-		const sections = groupIntoCollections([both], {});
-
-		expect(sections.map((s) => s.name)).toEqual(['Action', 'Drama']);
-		expect(sections[0].items).toEqual([both]);
-		expect(sections[1].items).toEqual([both]);
+		expect(sortByRank([b, a], 'Drama').map((i) => i.id)).toEqual([1, 2]);
 	});
 });
 
-describe('setItemCollection', () => {
-	it('sets a collection, reloads, and clears busy state on success', async () => {
+describe('addItemToCollection / removeItemFromCollection / clearItemCollections', () => {
+	it('addItemToCollection adds a tag, reloads, and clears busy state on success', async () => {
 		const { state, deps } = makeDeps();
 		const item = makeItem({ id: 6 });
-		setQueueTag.mockResolvedValue(undefined);
+		addQueueTag.mockResolvedValue(undefined);
 		getAll.mockResolvedValue([{ ...item, queue_tags: tags('Drama') }]);
 
-		await setItemCollection(item, 'Drama', deps);
+		await addItemToCollection(item, 'Drama', deps);
 
-		expect(setQueueTag).toHaveBeenCalledWith(6, 'Drama');
+		expect(addQueueTag).toHaveBeenCalledWith(6, 'Drama');
 		expect(state.items[0].queue_tags).toEqual(tags('Drama'));
 		expect(state.busy.has(6)).toBe(false);
 	});
 
-	it('clears a collection (null) on success', async () => {
+	it('addItemToCollection sets an error and clears busy state when addQueueTag throws', async () => {
+		const { state, deps } = makeDeps();
+		const item = makeItem({ id: 10 });
+		addQueueTag.mockRejectedValue(new Error('storage full'));
+
+		await addItemToCollection(item, 'Drama', deps);
+
+		expect(state.error).toBe('storage full');
+		expect(state.busy.has(10)).toBe(false);
+	});
+
+	it('removeItemFromCollection removes a tag, reloads, and clears busy state on success', async () => {
+		const { state, deps } = makeDeps();
+		const item = makeItem({ id: 7, queue_tags: tags('Drama') });
+		removeQueueTag.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([{ ...item, queue_tags: undefined }]);
+
+		await removeItemFromCollection(item, 'Drama', deps);
+
+		expect(removeQueueTag).toHaveBeenCalledWith(7, 'Drama');
+		expect(state.busy.has(7)).toBe(false);
+	});
+
+	it('removeItemFromCollection sets an error and clears busy state when removeQueueTag throws', async () => {
+		const { state, deps } = makeDeps();
+		const item = makeItem({ id: 11, queue_tags: tags('Drama') });
+		removeQueueTag.mockRejectedValue(new Error('storage full'));
+
+		await removeItemFromCollection(item, 'Drama', deps);
+
+		expect(state.error).toBe('storage full');
+		expect(state.busy.has(11)).toBe(false);
+	});
+
+	it('clearItemCollections clears every list on success', async () => {
 		const { state, deps } = makeDeps();
 		const item = makeItem({ id: 8, queue_tags: tags('Action') });
 		setQueueTag.mockResolvedValue(undefined);
 		getAll.mockResolvedValue([{ ...item, queue_tags: undefined }]);
 
-		await setItemCollection(item, null, deps);
+		await clearItemCollections(item, deps);
 
 		expect(setQueueTag).toHaveBeenCalledWith(8, null);
 		expect(state.busy.has(8)).toBe(false);
 	});
 
-	it('sets an error and clears busy state when setQueueTag throws', async () => {
+	it('clearItemCollections sets an error and clears busy state when setQueueTag throws', async () => {
 		const { state, deps } = makeDeps();
-		const item = makeItem({ id: 10 });
+		const item = makeItem({ id: 12, queue_tags: tags('Action') });
 		setQueueTag.mockRejectedValue(new Error('storage full'));
 
-		await setItemCollection(item, 'Drama', deps);
+		await clearItemCollections(item, deps);
 
 		expect(state.error).toBe('storage full');
-		expect(state.busy.has(10)).toBe(false);
+		expect(state.busy.has(12)).toBe(false);
 	});
 });
 
@@ -437,36 +469,112 @@ describe('reorderItems', () => {
 	});
 });
 
-describe('bulkSetCollection', () => {
-	it('tags every selected item and reloads once', async () => {
+describe('moveItemInCollection', () => {
+	it('swaps with the previous item in the list and persists via setTagRank', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
+		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
+		const c = makeItem({ id: 3, queue_tags: tags('Drama') });
+		setTagRank.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([a, b, c]);
+
+		await moveItemInCollection(b, 'Drama', 'up', [a, b, c], deps);
+
+		expect(setTagRank).toHaveBeenCalledWith('Drama', [2, 1, 3]);
+		expect(getAll).toHaveBeenCalledOnce();
+	});
+
+	it('swaps with the next item on move down', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
+		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
+		const c = makeItem({ id: 3, queue_tags: tags('Drama') });
+		setTagRank.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([a, c, b]);
+
+		await moveItemInCollection(b, 'Drama', 'down', [a, b, c], deps);
+
+		expect(setTagRank).toHaveBeenCalledWith('Drama', [1, 3, 2]);
+	});
+
+	it('no-ops at the top of the list rather than wrapping', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
+		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
+
+		await moveItemInCollection(a, 'Drama', 'up', [a, b], deps);
+
+		expect(setTagRank).not.toHaveBeenCalled();
+	});
+
+	it('no-ops at the bottom of the list rather than wrapping', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
+		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
+
+		await moveItemInCollection(b, 'Drama', 'down', [a, b], deps);
+
+		expect(setTagRank).not.toHaveBeenCalled();
+	});
+
+	it('surfaces an error and clears busy state when the write fails', async () => {
+		const { state, deps } = makeDeps();
+		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
+		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
+		setTagRank.mockRejectedValue(new Error('write failed'));
+
+		await moveItemInCollection(b, 'Drama', 'up', [a, b], deps);
+
+		expect(state.error).toBe('write failed');
+		expect(state.busy.has(2)).toBe(false);
+	});
+});
+
+describe('bulkAddToCollection / bulkRemoveFromCollection / bulkClearCollections', () => {
+	it('bulkAddToCollection tags every selected item and reloads once', async () => {
 		const { state, deps } = makeDeps();
 		const items = [makeItem({ id: 1 }), makeItem({ id: 2 }), makeItem({ id: 3 })];
-		setQueueTag.mockResolvedValue(undefined);
+		addQueueTag.mockResolvedValue(undefined);
 		getAll.mockResolvedValue(items.map((i) => ({ ...i, queue_tags: tags('Movie Night') })));
 
-		await bulkSetCollection(items, 'Movie Night', deps);
+		await bulkAddToCollection(items, 'Movie Night', deps);
 
-		expect(setQueueTag).toHaveBeenCalledTimes(3);
-		expect(setQueueTag).toHaveBeenCalledWith(1, 'Movie Night');
-		expect(setQueueTag).toHaveBeenCalledWith(2, 'Movie Night');
-		expect(setQueueTag).toHaveBeenCalledWith(3, 'Movie Night');
+		expect(addQueueTag).toHaveBeenCalledTimes(3);
+		expect(addQueueTag).toHaveBeenCalledWith(1, 'Movie Night');
+		expect(addQueueTag).toHaveBeenCalledWith(2, 'Movie Night');
+		expect(addQueueTag).toHaveBeenCalledWith(3, 'Movie Night');
 		expect(getAll).toHaveBeenCalledTimes(1);
 		expect(state.items).toHaveLength(3);
 	});
 
-	it('clears busy for every item, even the ones that ran before a failure', async () => {
+	it('bulkAddToCollection clears busy for every item, even the ones that ran before a failure', async () => {
 		const { state, deps } = makeDeps();
 		const items = [makeItem({ id: 1 }), makeItem({ id: 2 })];
-		setQueueTag.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('write failed'));
+		addQueueTag.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('write failed'));
 
-		await bulkSetCollection(items, 'Drama', deps);
+		await bulkAddToCollection(items, 'Drama', deps);
 
 		expect(state.error).toBe('write failed');
 		expect(state.busy.has(1)).toBe(false);
 		expect(state.busy.has(2)).toBe(false);
 	});
 
-	it('clears a collection from every selected item with null', async () => {
+	it('bulkRemoveFromCollection removes the tag from every selected item', async () => {
+		const { deps } = makeDeps();
+		const items = [
+			makeItem({ id: 1, queue_tags: tags('Drama') }),
+			makeItem({ id: 2, queue_tags: tags('Drama') })
+		];
+		removeQueueTag.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([]);
+
+		await bulkRemoveFromCollection(items, 'Drama', deps);
+
+		expect(removeQueueTag).toHaveBeenCalledWith(1, 'Drama');
+		expect(removeQueueTag).toHaveBeenCalledWith(2, 'Drama');
+	});
+
+	it('bulkClearCollections clears every list from every selected item', async () => {
 		const { deps } = makeDeps();
 		const items = [
 			makeItem({ id: 1, queue_tags: tags('Drama') }),
@@ -475,7 +583,7 @@ describe('bulkSetCollection', () => {
 		setQueueTag.mockResolvedValue(undefined);
 		getAll.mockResolvedValue([]);
 
-		await bulkSetCollection(items, null, deps);
+		await bulkClearCollections(items, deps);
 
 		expect(setQueueTag).toHaveBeenCalledWith(1, null);
 		expect(setQueueTag).toHaveBeenCalledWith(2, null);
