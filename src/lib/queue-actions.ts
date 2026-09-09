@@ -130,7 +130,7 @@ export function listCollections(items: WatchlistItem[], extraNames: string[] = [
  * matching "new items join at the end" everywhere else in this app rather
  * than falling back to `rank ?? 0`, which would collide every untouched
  * item at the front instead. The first reorder of a partially-ranked list
- * stamps contiguous ranks on every item in it (moveItemInCollection always
+ * stamps contiguous ranks on every item in it (reorderCollectionItems always
  * passes the full array), self-healing from then on.
  *
  * `dir` (#273) only flips the comparison between two *ranked* items —
@@ -202,40 +202,11 @@ export function filterByService(
 }
 
 /**
- * Swaps an item with its neighbor in `visibleOrder` (the currently
- * sorted/filtered list, not the whole queue — see setSortOrder in db.ts for
- * why only that list gets renumbered) and persists the result. No-ops at
- * either end of the list rather than wrapping.
- */
-export async function moveItem(
-	item: WatchlistItem,
-	direction: 'up' | 'down',
-	visibleOrder: WatchlistItem[],
-	deps: QueueActionDeps
-): Promise<void> {
-	const idx = visibleOrder.findIndex((i) => i.id === item.id);
-	const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-	if (idx === -1 || swapIdx < 0 || swapIdx >= visibleOrder.length) return;
-
-	deps.setBusy(item.id, true);
-	try {
-		const reordered = [...visibleOrder];
-		[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-		await setSortOrder(reordered.map((i) => i.id));
-		await reloadQueue(deps);
-	} catch (e) {
-		deps.setError(e instanceof Error ? e.message : 'Could not reorder this title.');
-	} finally {
-		deps.setBusy(item.id, false);
-	}
-}
-
-/**
- * Drag-and-drop's counterpart to moveItem (#231) — takes the whole settled
- * order from the drag gesture instead of a single up/down swap, but persists
- * through the same setSortOrder call so both reorder paths share one merge
- * rule. No per-item busy state: a drag already has its own "settled" moment
- * (drop), unlike the buttons where each click is its own request.
+ * Persists the full settled order from a drag gesture (#231) via
+ * setSortOrder — the sorted/filtered list being dragged, not necessarily the
+ * whole queue (see setSortOrder in db.ts for why only that list gets
+ * renumbered). No per-item busy state: a drag has one "settled" moment
+ * (drop), not a discrete request per item.
  */
 export async function reorderItems(
 	newOrder: WatchlistItem[],
@@ -250,48 +221,11 @@ export async function reorderItems(
 }
 
 /**
- * Per-list counterpart to moveItem, for the Lists page's move-up/move-down
- * (PR2) — same neighbor-swap shape, but persists through setTagRank(tag, …)
- * instead of setSortOrder, scoped to one list's own order rather than the
- * queue's. `visibleOrder` must be the *full* current order for `tag` (see
- * setTagRank's own doc comment for why a partial array would break the
- * per-key merge's "one device's whole reorder wins atomically" property) —
- * always call this with the same full, sorted array the list is rendering,
- * never a subset.
- */
-export async function moveItemInCollection(
-	item: WatchlistItem,
-	tag: string,
-	direction: 'up' | 'down',
-	visibleOrder: WatchlistItem[],
-	deps: QueueActionDeps
-): Promise<void> {
-	const idx = visibleOrder.findIndex((i) => i.id === item.id);
-	const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-	if (idx === -1 || swapIdx < 0 || swapIdx >= visibleOrder.length) return;
-
-	deps.setBusy(item.id, true);
-	try {
-		const reordered = [...visibleOrder];
-		[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-		await setTagRank(
-			tag,
-			reordered.map((i) => i.id)
-		);
-		await reloadQueue(deps);
-	} catch (e) {
-		deps.setError(e instanceof Error ? e.message : 'Could not reorder this list.');
-	} finally {
-		deps.setBusy(item.id, false);
-	}
-}
-
-/**
- * Drag-and-drop's counterpart to moveItemInCollection, mirroring how
- * reorderItems relates to moveItem — takes the whole settled order from a
- * drag gesture scoped to one list, instead of a single up/down swap.
- * `newOrder` must be the full current order for `tag` (see
- * moveItemInCollection's doc comment) — the caller's dragHandleZone must
+ * Persists the full settled order from a drag gesture, scoped to one list,
+ * via setTagRank(tag, …) instead of setSortOrder. `newOrder` must be the
+ * full current order for `tag` — see setTagRank's own doc comment (db.ts)
+ * for why a partial array would break the per-key merge's "one device's
+ * whole reorder wins atomically" property — the caller's dragHandleZone must
  * have dropFromOthersDisabled set so a foreign-zone drop can't violate that.
  */
 export async function reorderCollectionItems(

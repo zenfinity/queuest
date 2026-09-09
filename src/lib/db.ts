@@ -620,7 +620,7 @@ export async function removeQueueTag(id: number, tag: string): Promise<void> {
 
 /**
  * Bulk-reassigns sort_order to match `orderedIds` — the custom "Rank" sort
- * mode's move-up/move-down (#216). Renumbers only the given ids (typically
+ * mode's drag-to-reorder (#216). Renumbers only the given ids (typically
  * the currently visible/filtered list); ids left out keep their existing
  * value, same "not atomic across a batch write" tradeoff already accepted
  * for renameCollectionTag. Rides the existing whole-item LWW sync merge for
@@ -653,7 +653,7 @@ export async function setSortOrder(orderedIds: number[]): Promise<void> {
 /**
  * Bulk-reassigns queue_tags[tag].rank to match `orderedIds`'s array position
  * — the per-list counterpart to setSortOrder above, backing the Lists page's
- * per-list move-up/move-down (PR2). Same shape: one transaction, get→mutate→
+ * per-list drag-to-reorder. Same shape: one transaction, get→mutate→
  * put per id, tx.oncomplete resolves. Ids outside the array keep whatever
  * rank they have; an id in the array whose item doesn't currently have `tag`
  * active is left untouched rather than resurrecting or corrupting a
@@ -669,8 +669,8 @@ export async function setSortOrder(orderedIds: number[]): Promise<void> {
  * currently-known ordered id list for `tag` — never a partial delta — or
  * the "one device's whole reorder wins atomically on conflict" merge
  * property breaks down into a field-by-field interleave neither device
- * actually produced. moveItemInCollection (queue-actions.ts) enforces this
- * by construction, same as moveItem already does for setSortOrder.
+ * actually produced. reorderCollectionItems (queue-actions.ts) enforces this
+ * by construction, same as reorderItems already does for setSortOrder.
  *
  * Accepted tradeoff: reordering touches every item in the list, not just
  * the ones that moved, which widens (vs. a single-item edit) the odds this
