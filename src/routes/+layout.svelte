@@ -41,10 +41,10 @@
 
 	let isLanding = $derived(page.url.pathname === '/');
 	// The filter dock shows on both the Queue and Lists pages (#273) — Lists
-	// browses items too now, driven by the same dock. `isListsPage` further
-	// tells the dock which of its route-specific sections to show (list
-	// filter vs. Gantt's lane-grouping) — see QueueDock.svelte's
-	// showListFilter/showLanes props.
+	// still has sort/watched/service filters even though list browsing itself
+	// is now a per-list accordion, not dock-driven. `isListsPage` tells the
+	// dock whether to show Gantt's Timeline/lane-grouping (queue-only) — see
+	// QueueDock.svelte's showLanes prop.
 	let isListsPage = $derived(page.url.pathname === '/lists');
 	let showDock = $derived(page.url.pathname === '/app' || isListsPage);
 
@@ -303,7 +303,7 @@
 				     outside <nav> below, since backdrop-filter on <nav> would otherwise confine a
 				     fixed-position dock to the nav's own box (see QueueDock.svelte). -->
 				<div class="hidden self-center lg:block">
-					<QueueDock floating={false} showListFilter={isListsPage} showLanes={!isListsPage} />
+					<QueueDock floating={false} showLanes={!isListsPage} />
 				</div>
 			{/if}
 
@@ -335,7 +335,7 @@
 		<!-- Floating placement (below lg:) — deliberately outside <nav>, see the comment
 		     on the inline instance above for why. -->
 		<div class="lg:hidden">
-			<QueueDock floating={true} showListFilter={isListsPage} showLanes={!isListsPage} />
+			<QueueDock floating={true} showLanes={!isListsPage} />
 		</div>
 	{/if}
 
@@ -352,7 +352,7 @@
 			class="mx-auto flex max-w-5xl flex-col items-center gap-2 px-3 sm:flex-row sm:justify-between sm:px-4"
 		>
 			<img
-				src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"
+				src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"
 				alt="The Movie Database (TMDB)"
 				class="h-3.5 opacity-70 sm:h-4"
 			/>

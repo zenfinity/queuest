@@ -41,7 +41,6 @@ const {
 	moveItem,
 	reorderItems,
 	moveItemInCollection,
-	reorderItemsInCollection,
 	bulkAddToCollection,
 	bulkRemoveFromCollection,
 	bulkClearCollections,
@@ -607,34 +606,6 @@ describe('moveItemInCollection', () => {
 
 		expect(state.error).toBe('write failed');
 		expect(state.busy.has(2)).toBe(false);
-	});
-});
-
-describe('reorderItemsInCollection', () => {
-	it('persists the full settled order for one list via setTagRank and reloads', async () => {
-		const { deps } = makeDeps();
-		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
-		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
-		const c = makeItem({ id: 3, queue_tags: tags('Drama') });
-		setTagRank.mockResolvedValue(undefined);
-		getAll.mockResolvedValue([c, a, b]);
-
-		await reorderItemsInCollection('Drama', [c, a, b], deps);
-
-		expect(setTagRank).toHaveBeenCalledWith('Drama', [3, 1, 2]);
-		expect(getAll).toHaveBeenCalledOnce();
-	});
-
-	it('surfaces an error without touching per-item busy state', async () => {
-		const { state, deps } = makeDeps();
-		const a = makeItem({ id: 1, queue_tags: tags('Drama') });
-		const b = makeItem({ id: 2, queue_tags: tags('Drama') });
-		setTagRank.mockRejectedValue(new Error('write failed'));
-
-		await reorderItemsInCollection('Drama', [b, a], deps);
-
-		expect(state.error).toBe('write failed');
-		expect(state.busy.size).toBe(0);
 	});
 });
 
