@@ -20,10 +20,27 @@ test('revoking a pending invite from the UI kills the link', async ({ browser })
 
 	await ownerPage.goto('/lists');
 
+	// Each list is its own expandable accordion — management actions (Share,
+	// Invite, ...) only render once expanded (#273 follow-up).
+	await ownerPage.getByRole('button', { name: `Toggle ${listName}`, exact: true }).click();
+
 	// Promote the seeded personal list to a shared one — invites only exist
 	// on shared lists.
 	await ownerPage.getByRole('button', { name: 'Share', exact: true }).click();
 	await ownerPage.getByRole('button', { name: 'Share it' }).click();
+
+	// The newly-promoted shared list is its own fresh accordion instance,
+	// collapsed by default regardless of the personal list's state above —
+	// and shares the same name as the personal list, so this is scoped to
+	// the Shared Lists section rather than disambiguated by position. Scoping
+	// (rather than e.g. `.last()`) also means this naturally waits out
+	// doPromoteCollection's async work instead of racing it — a plain
+	// `.click()` only waits for the click to dispatch, not for the shared
+	// list's own SharedListSection instance to actually mount afterward.
+	const sharedListsSection = ownerPage.locator('section', {
+		has: ownerPage.getByRole('heading', { name: 'Shared Lists' })
+	});
+	await sharedListsSection.getByRole('button', { name: `Toggle ${listName}`, exact: true }).click();
 	await expect(ownerPage.getByText('You own this')).toBeVisible();
 
 	// Mint an invite and read the real link (fragment included) straight from
