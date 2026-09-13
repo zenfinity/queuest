@@ -13,22 +13,26 @@
 //   sq:import-missed            — leftover diagnostics from the last CSV import
 //   sq:dismiss-cancel           — per-provider alert dismissals (device-local)
 //   sq:budget-callout-dismissed — first-visit callout state
-//   sq:nav-hint-dismissed       — swipe/keyboard tab-nav hint seen on this device
 //   sq:shared-list-colors       — per-device color swatches for shared lists;
 //                                 unlike sq:queue:colors (personal lists),
 //                                 not wired into buildPrefs/applyPrefs, so it
 //                                 doesn't travel with an export or sync pull
 //
-// (#242 removed the other four per-hint dismissal keys — list/share/sync/
-// ranking — along with the floating-pill system they belonged to; those
-// hints are now permanent in-flow copy with no dismissal state at all.
-// sq:hints-disabled, the global "stop showing tips" kill switch, went with
-// them rather than being repurposed: the one hint shape left with a
-// dismissal key (nav) is a single 5px dot, not disruptive enough to
-// warrant its own synced preference. Existing synced clients carrying
-// either key from before #242 just have it silently ignored on the next
-// pull — nothing reads sq:hints-disabled or the four removed dismissal
-// keys anywhere in the app any more.)
+// (#242 removed four per-hint dismissal keys — list/share/sync/ranking —
+// along with the floating-pill system they belonged to; those hints are
+// permanent in-flow copy with no dismissal state. sq:hints-disabled, the
+// global "stop showing tips" kill switch, went with them. #288 later
+// removed a fifth, sq:nav-hint-dismissed, the same way, once its one hint
+// (a swipe/keyboard tab-nav dot) turned out to be unreachable on touch and
+// was retired outright rather than fixed. Existing synced clients carrying
+// any of those five keys from before their respective removals just have
+// them silently ignored on the next pull — nothing reads them anywhere in
+// the app any more.)
+//
+// sq:hints (#289) is different in kind from all of those: a per-feature
+// "have you discovered this yet" dismiss/re-arm/retire map (Gantt, Suggest),
+// deliberately SYNCED rather than device-local — feature awareness is a
+// property of the account, not the device you happened to notice it on.
 //
 // Every other sq: key belongs in SYNCED_KEYS. Every key must appear in
 // exactly one of the two sets below — app-state.test.ts greps the whole
@@ -70,7 +74,8 @@ export const SYNCED_KEYS = [
 	'sq:budget:weeks',
 	'sq:cancel-alerts',
 	'sq:queue:name',
-	'sq:queue:colors'
+	'sq:queue:colors',
+	'sq:hints'
 ] as const;
 
 export const LOCAL_KEYS = [
@@ -78,11 +83,23 @@ export const LOCAL_KEYS = [
 	'sq:import-missed',
 	'sq:dismiss-cancel',
 	'sq:budget-callout-dismissed',
-	'sq:nav-hint-dismissed',
 	'sq:shared-list-colors'
 ] as const;
 
 export const APP_STATE_VERSION = 3;
+
+/**
+ * Per-feature-discovery-hint dismiss/re-arm/retire state (#289): dismissing
+ * a hint without using the feature it points at re-arms after 30 days, up
+ * to a handful of times, tracked via showCount; actually using the feature
+ * (usedAt set) retires it for good, no further re-arms. See app/+page.svelte
+ * for the read/write logic and hintAvailable()'s exact rules.
+ */
+export interface HintState {
+	dismissedAt?: string;
+	showCount?: number;
+	usedAt?: string;
+}
 
 export interface AppStatePrefs {
 	theme?: 'light' | 'dark';
@@ -96,6 +113,7 @@ export interface AppStatePrefs {
 	sortDir?: 'asc' | 'desc';
 	view?: 'grid' | 'list' | 'lanes';
 	cancelAlerts?: boolean;
+	hints?: Record<string, HintState>;
 }
 
 export interface AppStateSnapshot {
@@ -128,7 +146,8 @@ function buildPrefs(): AppStatePrefs {
 		sort: (readRaw('sq:sort') as AppStatePrefs['sort']) ?? 'added',
 		sortDir: (readRaw('sq:sortDir') as AppStatePrefs['sortDir']) ?? 'desc',
 		view: (readRaw('sq:view') as AppStatePrefs['view']) ?? 'grid',
-		cancelAlerts: readBoolean('sq:cancel-alerts', false)
+		cancelAlerts: readBoolean('sq:cancel-alerts', false),
+		hints: parseHints(JSON.parse(readRaw('sq:hints') ?? 'null')) ?? {}
 	};
 }
 
@@ -181,6 +200,7 @@ export function applyPrefs(prefs: AppStatePrefs): void {
 		if (typeof prefs.cancelAlerts === 'boolean') {
 			localStorage.setItem('sq:cancel-alerts', String(prefs.cancelAlerts));
 		}
+		if (prefs.hints) localStorage.setItem('sq:hints', JSON.stringify(prefs.hints));
 	} catch {
 		// Best-effort localStorage write; a failed pref write here isn't fatal —
 		// the item/service sync (the actual point of the engine) already applied.
@@ -410,6 +430,47 @@ function parseQueueTags(raw: unknown): WatchlistItem['queue_tags'] {
 	return count > 0 ? out : undefined;
 }
 
+/**
+ * Validates the sq:hints map (#289): a small, fixed set of feature-discovery
+ * hint ids we control ('gantt', 'suggest') -> per-hint dismiss/re-arm/retire
+ * state. Keys are allowlisted against HINT_IDS rather than reject-listed via
+ * DANGEROUS_KEYS — unlike queue_tags' list names, hint ids are never
+ * user-supplied, so a strict allowlist is both simpler and stricter here.
+ * MAX_HINTS stays defensive even though HINT_IDS has only two entries today,
+ * matching parseQueueTags' own "bounded even when small" posture.
+ */
+const HINT_IDS = new Set(['gantt', 'suggest']);
+const MAX_HINTS = 10;
+
+function parseHintState(raw: unknown): HintState | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const h = raw as Record<string, unknown>;
+	const dismissedAt = validateIsoDate(h.dismissedAt);
+	const usedAt = validateIsoDate(h.usedAt);
+	const showCount = coerceNumber(h.showCount);
+	const state: HintState = {
+		...(dismissedAt ? { dismissedAt } : {}),
+		...(usedAt ? { usedAt } : {}),
+		...(showCount !== null ? { showCount } : {})
+	};
+	return Object.keys(state).length > 0 ? state : null;
+}
+
+function parseHints(raw: unknown): Record<string, HintState> | undefined {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+	const out: Record<string, HintState> = Object.create(null);
+	let count = 0;
+	for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+		if (count >= MAX_HINTS) break;
+		if (!HINT_IDS.has(key)) continue;
+		const state = parseHintState(value);
+		if (!state) continue;
+		out[key] = state;
+		count++;
+	}
+	return count > 0 ? out : undefined;
+}
+
 /** Extracts the pre-#274 scalar queue_tag field from a raw v2 item — same
  *  40-char cap the old field enforced (matches MAX_TAG_NAME_LENGTH above). */
 function extractLegacyQueueTag(raw: unknown): string | undefined {
@@ -511,7 +572,8 @@ function parsePrefs(raw: unknown): AppStatePrefs | undefined {
 		...(typeof p.view === 'string' && ['grid', 'list', 'lanes'].includes(p.view)
 			? { view: p.view as AppStatePrefs['view'] }
 			: {}),
-		...(typeof p.cancelAlerts === 'boolean' ? { cancelAlerts: p.cancelAlerts } : {})
+		...(typeof p.cancelAlerts === 'boolean' ? { cancelAlerts: p.cancelAlerts } : {}),
+		...(parseHints(p.hints) ? { hints: parseHints(p.hints) } : {})
 	};
 
 	return Object.keys(prefs).length > 0 ? prefs : undefined;

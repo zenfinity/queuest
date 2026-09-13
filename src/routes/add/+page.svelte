@@ -19,7 +19,6 @@
 	} from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
 	import { services, setSubscribedIds } from '$lib/services.svelte';
-	import { triggerNavHint } from '$lib/nav-hint.svelte';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import AddToListButton from '$lib/components/AddToListButton.svelte';
@@ -227,12 +226,8 @@
 				else adding.delete(id);
 			},
 			setAdded: (id, isAdded) => {
-				if (isAdded) {
-					added.add(id);
-					triggerNavHint();
-				} else {
-					added.delete(id);
-				}
+				if (isAdded) added.add(id);
+				else added.delete(id);
 			},
 			setError: (id, message) => {
 				if (message) errors.set(id, message);
@@ -640,15 +635,21 @@
 	</details>
 
 	{#if isOnboarding}
-		<div class="flex flex-wrap items-center justify-between gap-3 pt-2">
-			<Button href={resolve('/app')} class="px-5 py-2.5 text-sm">Go to my queue →</Button>
-			<button
-				type="button"
-				onclick={openImport}
-				class="text-sm text-gray-500 underline decoration-gray-300 underline-offset-2 hover:text-gray-700 dark:text-gray-400 dark:decoration-gray-700 dark:hover:text-gray-200"
-			>
-				Import a watchlist instead
-			</button>
+		<div class="space-y-2 pt-2">
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<Button href={resolve('/app')} class="px-5 py-2.5 text-sm">Go to my queue →</Button>
+				<button
+					type="button"
+					onclick={openImport}
+					class="text-sm text-gray-500 underline decoration-gray-300 underline-offset-2 hover:text-gray-700 dark:text-gray-400 dark:decoration-gray-700 dark:hover:text-gray-200"
+				>
+					Import a watchlist instead
+				</button>
+			</div>
+			<p class="text-xs text-gray-400 dark:text-gray-600">
+				<kbd class="rounded bg-gray-100 px-1 py-0.5 font-mono dark:bg-gray-800">Alt</kbd>
+				+ <span aria-hidden="true">← →</span> moves between tabs. Swipe on touch.
+			</p>
 		</div>
 	{/if}
 </div>

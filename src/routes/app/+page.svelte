@@ -26,8 +26,10 @@
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import {
 		remainingRuntime,
+		totalRemainingRuntime,
 		releaseChip,
 		cancelCandidates,
+		aggregateByProvider,
 		hms,
 		saveBudgetPrefs,
 		DEFAULT_BUDGET_HOURS
@@ -45,11 +47,14 @@
 	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import { readNumber, readRecord, readBoolean } from '$lib/storage';
+	import type { HintState } from '$lib/app-state';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
 	import SyncHint from '$lib/components/SyncHint.svelte';
+	import GanttHint from '$lib/components/GanttHint.svelte';
+	import SuggestHint from '$lib/components/SuggestHint.svelte';
 	import Button from '$lib/components/Button.svelte';
 
 	// ── Persisted prefs ───────────────────────────────────────────────────────
@@ -235,6 +240,105 @@
 		return candidates[0] ?? null;
 	});
 
+	// ── Discovery hints (#289/#291) ───────────────────────────────────────────
+	// Gantt and Suggest have no discovery path anywhere in the app today — this
+	// nudges toward each once its own value proposition is concretely true for
+	// this user's data (queue outgrowing budget; an unsubscribed provider
+	// already holding a month-plus of unwatched weight), not on a usage
+	// counter or elapsed time. Dismiss/re-arm/retire state lives in sq:hints
+	// (synced — see app-state.ts) rather than the zero-interaction shape
+	// ListHint/SyncHint use, since both of these conditions can stay true
+	// forever and a permanent nudge would just be the #242 nag problem back
+	// in in-flow clothes.
+	let hints = $state<Record<string, HintState>>({});
+
+	function readHints(): Record<string, HintState> {
+		try {
+			const raw = localStorage.getItem('sq:hints');
+			if (!raw) return {};
+			const parsed = JSON.parse(raw);
+			return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+		} catch {
+			return {};
+		}
+	}
+
+	function writeHints(next: Record<string, HintState>) {
+		hints = next;
+		try {
+			localStorage.setItem('sq:hints', JSON.stringify(next));
+		} catch {
+			// Best-effort localStorage write; worst case the hint re-shows next visit
+		}
+	}
+
+	function dismissHint(id: string) {
+		const current = hints[id] ?? {};
+		writeHints({
+			...hints,
+			[id]: {
+				...current,
+				dismissedAt: new Date().toISOString(),
+				showCount: (current.showCount ?? 0) + 1
+			}
+		});
+	}
+
+	function markHintUsed(id: string) {
+		if (hints[id]?.usedAt) return;
+		writeHints({ ...hints, [id]: { ...hints[id], usedAt: new Date().toISOString() } });
+	}
+
+	const HINT_RE_ARM_DAYS = 30;
+	const HINT_MAX_SHOWS = 3;
+
+	function hintAvailable(id: string): boolean {
+		const state = hints[id];
+		if (!state) return true;
+		if (state.usedAt) return false;
+		if (!state.dismissedAt) return true;
+		if ((state.showCount ?? 0) >= HINT_MAX_SHOWS) return false;
+		const dismissedTime = new Date(state.dismissedAt).getTime();
+		if (isNaN(dismissedTime)) return true; // fail open, matches cancelCandidates' convention
+		return (Date.now() - dismissedTime) / 86400000 > HINT_RE_ARM_DAYS;
+	}
+
+	let totalRemainingMins = $derived.by(() => totalRemainingRuntime(queued));
+
+	let ganttHintEligible = $derived(
+		budgetHours > 0 && totalRemainingMins >= budgetHours * 60 && queueControls.viewMode !== 'lanes'
+	);
+
+	let topSuggestCandidate = $derived.by(() => {
+		const candidates = aggregateByProvider(queued)
+			.filter((s) => services.ids.size === 0 || !services.ids.has(s.provider_id))
+			.sort((a, b) => b.totalMins - a.totalMins);
+		return candidates[0] ?? null;
+	});
+	let suggestHintEligible = $derived(
+		budgetHours > 0 && (topSuggestCandidate?.totalMins ?? 0) >= budgetHours * 60
+	);
+
+	let ganttHintShow = $derived(ganttHintEligible && hintAvailable('gantt'));
+	let suggestHintShow = $derived(suggestHintEligible && hintAvailable('suggest'));
+
+	// #291 — priority arbitration: at most one of these three renders at once.
+	// Sync > Suggest > Gantt: data-loss-adjacent > money-adjacent >
+	// viewing-convenience. SyncHint stays outside the sq:hints dismiss system
+	// entirely (deliberate — see #289/#291's own discussion: giving it a
+	// dismiss path would cut against it being the highest-priority one here).
+	let activeDiscoveryHint = $derived.by((): 'sync' | 'suggest' | 'gantt' | null => {
+		if (!loaded) return null;
+		if (!syncEnabled && items.length > 0) return 'sync';
+		if (suggestHintShow) return 'suggest';
+		if (ganttHintShow) return 'gantt';
+		return null;
+	});
+
+	$effect(() => {
+		if (queueControls.viewMode === 'lanes') markHintUsed('gantt');
+	});
+
 	// ── Derived lists ─────────────────────────────────────────────────────────
 	// "queued" always means unwatched, independent of the Watched toggle — used for cancel alerts.
 	let queued = $derived(items.filter((i) => !i.watched_at));
@@ -356,6 +460,7 @@
 		queueColors = getQueueColors();
 		cancelAlertsEnabled = readBoolean('sq:cancel-alerts', false);
 		dismissedAlerts = readRecord('sq:dismiss-cancel', {});
+		hints = readHints();
 
 		const hasBudget = localStorage.getItem('sq:budget:weekly') !== null;
 		const wasDismissed = localStorage.getItem('sq:budget-callout-dismissed') === 'true';
@@ -808,7 +913,9 @@
 	{/if}
 </div>
 
-<SyncHint show={loaded && !syncEnabled && items.length > 0} count={items.length} />
+<SyncHint show={activeDiscoveryHint === 'sync'} count={items.length} />
+<SuggestHint show={activeDiscoveryHint === 'suggest'} onDismiss={() => dismissHint('suggest')} />
+<GanttHint show={activeDiscoveryHint === 'gantt'} onDismiss={() => dismissHint('gantt')} />
 
 <!-- ── Detail panel ───────────────────────────────────────────────────────── -->
 {#if detailItem}

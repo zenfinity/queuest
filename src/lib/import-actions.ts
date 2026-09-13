@@ -173,6 +173,9 @@ export async function restoreBackup(
 		if (typeof parsed.prefs?.view === 'string') localStorage.setItem('sq:view', parsed.prefs.view);
 		if (typeof parsed.prefs?.cancelAlerts === 'boolean')
 			localStorage.setItem('sq:cancel-alerts', parsed.prefs.cancelAlerts ? 'true' : 'false');
+		if (parsed.prefs?.hints && typeof parsed.prefs.hints === 'object') {
+			localStorage.setItem('sq:hints', JSON.stringify(parsed.prefs.hints));
+		}
 
 		if (parsed.services) ops.push(setServices(parsed.services));
 		await Promise.all(ops);
