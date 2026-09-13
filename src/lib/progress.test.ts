@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
 	releaseChip,
 	remainingRuntime,
+	totalRemainingRuntime,
 	cancelCandidates,
 	formatMonthsEquivalent
 } from './progress';
@@ -76,6 +77,29 @@ describe('remainingRuntime', () => {
 			watched_seasons: [1]
 		});
 		expect(remainingRuntime(item)).toBe(0);
+	});
+});
+
+describe('totalRemainingRuntime', () => {
+	it('sums remainingRuntime across mixed movie/TV items', () => {
+		const items = [
+			makeItem({ media_type: 'movie', runtime_minutes: 100 }),
+			makeItem({
+				media_type: 'tv',
+				runtime_minutes: null,
+				seasons: [
+					{ season_number: 1, episode_count: 10, name: 'S1', runtime_minutes: 300 },
+					{ season_number: 2, episode_count: 10, name: 'S2', runtime_minutes: 250 }
+				],
+				watched_seasons: [1]
+			})
+		];
+		// 100 (movie) + 250 (only S2 unwatched)
+		expect(totalRemainingRuntime(items)).toBe(350);
+	});
+
+	it('returns 0 for an empty array', () => {
+		expect(totalRemainingRuntime([])).toBe(0);
 	});
 });
 

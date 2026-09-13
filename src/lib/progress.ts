@@ -134,6 +134,12 @@ export function remainingRuntime(item: WatchlistItem): number {
 	return Math.round(remaining);
 }
 
+/** Sums remainingRuntime across every item — the queue-wide total the Gantt
+ *  discovery hint's trigger (#289) compares against the monthly budget. */
+export function totalRemainingRuntime(items: WatchlistItem[]): number {
+	return items.reduce((sum, item) => sum + remainingRuntime(item), 0);
+}
+
 export interface CancelCandidate {
 	providerId: number;
 	name: string;

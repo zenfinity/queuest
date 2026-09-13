@@ -283,6 +283,7 @@
 	}
 
 	// ── Personal Lists ────────────────────────────────────────────────────────
+	let loaded = $state(false);
 	let queueColors = $state<Record<string, string>>({});
 	let collections = $state<string[]>([]);
 	let collectionCounts = $state<Record<string, number>>({});
@@ -557,6 +558,7 @@
 			items = await getAll();
 			collections = listCollections(items, Object.keys(queueColors));
 			updateCounts();
+			loaded = true;
 		})();
 
 		ensureSubscribedLoaded();
@@ -684,7 +686,7 @@
 		</form>
 		{#if collections.length === 0}
 			<p class="text-sm text-gray-400 dark:text-gray-600">No lists yet.</p>
-			<ListHint show={items.length >= 5} />
+			<ListHint show={loaded && items.length >= 5 && collections.length === 0} />
 		{:else}
 			<div class="space-y-2">
 				{#each collections as collection (collection)}

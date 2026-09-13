@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.27.0] — 2026-09-13
+
+### fix: the nav-tab hint dot was ambiguous on desktop and unreachable on mobile (#288)
+
+A small orange dot lighting up the Queue tab after your first add read like a notification badge, not a "here's what to do next" cue — and its actual content (a swipe/Alt+arrow tab-switching tip) only ever appeared on hover or keyboard focus of that tab. On touch, tapping the tab's `<a href>` navigates rather than holding a hover state, so the tooltip never rendered — and that same tap fired the tab's `onmouseenter`-adjacent dismiss handler, meaning a mobile user could burn the one-time hint without ever seeing it. Removed the mechanism entirely (`NavHint.svelte`, `nav-hint.svelte.ts`, the `sq:nav-hint-dismissed` key, and every wire-up in `+layout.svelte`/`add/+page.svelte`); the swipe/Alt+arrow tip survives only as plain copy under the onboarding "Go to my queue →" button, shown once, not preserved elsewhere.
+
+### feat: Gantt and Suggest get a real discovery path, with dismiss/re-arm/retire state (#289, #291)
+
+Two features had no discovery path anywhere in the app — nothing ever pointed a user toward the Timeline/Gantt view or the Suggest section. Added two new in-flow nudges, each firing when its feature's value proposition becomes concretely true for that user's own data rather than on a usage counter: **Gantt** once the queue's total remaining runtime outgrows the monthly budget (the exact two quantities its bars encode), and **Suggest** once a provider the user isn't subscribed to already holds a full month's worth of unwatched queue weight (reusing `budget/+page.svelte`'s own existing `aggregateByProvider`-based "What to Subscribe to Next" math, not new aggregation logic).
+
+Unlike the existing permanent in-flow hints (`ListHint`/`SyncHint`, #242), both of these conditions can stay true forever — a chronic over-queuer never un-exceeds their own budget — so a permanent nudge would just be #242's nag problem back in different clothes. Added a small dismiss/re-arm/retire state machine instead: dismissing without using the feature re-arms after 30 days, up to 3 total showings; actually using the feature (switching to Timeline view) retires the hint for good. This state (`sq:hints`) is synced across devices rather than device-local — learning a feature exists on one device means knowing about it everywhere, the same way the feature itself is available everywhere.
+
+Since three hints (`SyncHint`, plus the two new ones) could all become independently eligible on `/app` for the same no-sync, large-queue user, added a single priority-ordered arbitration point there so at most one ever shows at once: Sync outranks Suggest outranks Gantt (data-loss-adjacent > money-adjacent > viewing-convenience). `SyncHint` deliberately stays outside the new dismiss system — giving it a dismiss path would cut against it being the one most worth always showing.
+
+### fix: ListHint's self-retiring guard, restored for parity (#290)
+
+`ListHint` on `/lists` lost its `existingCollections.length === 0`/`loaded` guards in the #273 Queue/Lists split — not a currently-visible bug (the surrounding markup already only renders it when there are no lists), but the guard belongs on the component itself per its own doc comment, and restoring it is cheap insurance against a future refactor decoupling the two.
+
 ## [1.26.0] — 2026-09-09
 
 ### fix: forward-migrate version-2 sync/backup payloads instead of rejecting them forever

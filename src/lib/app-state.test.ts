@@ -609,6 +609,58 @@ describe('queue_tags (#274)', () => {
 	});
 });
 
+describe('hints (#289)', () => {
+	it('round-trips a well-formed hints map', () => {
+		const result = deserializeAppState({
+			items: [],
+			prefs: {
+				hints: {
+					gantt: { usedAt: '2026-09-01T00:00:00.000Z' },
+					suggest: { dismissedAt: '2026-08-15T00:00:00.000Z', showCount: 1 }
+				}
+			}
+		});
+		expect(result.prefs?.hints).toEqual({
+			gantt: { usedAt: '2026-09-01T00:00:00.000Z' },
+			suggest: { dismissedAt: '2026-08-15T00:00:00.000Z', showCount: 1 }
+		});
+	});
+
+	it('drops an id outside the known hint set', () => {
+		const result = deserializeAppState({
+			items: [],
+			prefs: { hints: { notAHint: { dismissedAt: '2026-08-15T00:00:00.000Z' } } }
+		});
+		expect(result.prefs?.hints).toBeUndefined();
+	});
+
+	it('drops a malformed dismissedAt/usedAt date rather than trusting it', () => {
+		const result = deserializeAppState({
+			items: [],
+			prefs: { hints: { gantt: { dismissedAt: 'not-a-date', usedAt: 'also-not-a-date' } } }
+		});
+		expect(result.prefs?.hints).toBeUndefined();
+	});
+
+	it('keeps showCount alongside a dropped malformed date on the same entry', () => {
+		const result = deserializeAppState({
+			items: [],
+			prefs: { hints: { suggest: { dismissedAt: 'not-a-date', showCount: 2 } } }
+		});
+		expect(result.prefs?.hints).toEqual({ suggest: { showCount: 2 } });
+	});
+
+	it('omits hints entirely when the map has no valid entries', () => {
+		const result = deserializeAppState({ items: [], prefs: { hints: {} } });
+		expect(result.prefs?.hints).toBeUndefined();
+	});
+
+	it('ignores a non-object hints value rather than throwing', () => {
+		const result = deserializeAppState({ items: [], prefs: { hints: 'not-an-object' } });
+		expect(result.prefs?.hints).toBeUndefined();
+	});
+});
+
 describe('notes (#155)', () => {
 	function backupWith(itemOverrides: Record<string, unknown>) {
 		return {
