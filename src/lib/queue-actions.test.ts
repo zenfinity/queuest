@@ -3,6 +3,7 @@ import type { WatchlistItem } from './types';
 import { makeItem } from './test-fixtures';
 
 const getAll = vi.fn();
+const addItem = vi.fn();
 const setWatched = vi.fn();
 const removeItem = vi.fn();
 const updateShowProgress = vi.fn();
@@ -15,6 +16,7 @@ const gcTombstones = vi.fn();
 
 vi.mock('./db', () => ({
 	getAll: (...args: unknown[]) => getAll(...args),
+	addItem: (...args: unknown[]) => addItem(...args),
 	setWatched: (...args: unknown[]) => setWatched(...args),
 	removeItem: (...args: unknown[]) => removeItem(...args),
 	updateShowProgress: (...args: unknown[]) => updateShowProgress(...args),
@@ -44,6 +46,7 @@ const {
 	moveCollectionItemToEdge,
 	snapshotSortOrderLocally,
 	snapshotTagRankLocally,
+	addCollectionItemToQueue,
 	bulkAddToCollection,
 	bulkRemoveFromCollection,
 	bulkClearCollections,
@@ -74,6 +77,7 @@ function makeDeps() {
 
 beforeEach(() => {
 	getAll.mockReset();
+	addItem.mockReset();
 	setWatched.mockReset();
 	removeItem.mockReset();
 	updateShowProgress.mockReset();
@@ -745,5 +749,65 @@ describe('bulkRemove', () => {
 		expect(state.error).toBe('gone');
 		expect(state.busy.has(1)).toBe(false);
 		expect(state.busy.has(2)).toBe(false);
+	});
+});
+
+// CollectionItem = Omit<WatchlistItem, 'id'> plus the two collab-only fields
+// (types.ts's own doc comment) — makeItem() minus `id` is a real CollectionItem.
+function makeCollectionItem(overrides: Partial<WatchlistItem> = {}) {
+	const { id: _id, ...rest } = makeItem(overrides);
+	return rest;
+}
+
+describe('addCollectionItemToQueue', () => {
+	it('strips collab-only and queue-specific fields and calls addItem with the rest', async () => {
+		const { deps } = makeDeps();
+		const collectionItem = makeCollectionItem({
+			tmdb_id: 42,
+			title: 'Shared Movie',
+			watch: { acct1: '2026-01-02T00:00:00.000Z' },
+			added_by_account_id: 'acct1',
+			queue_tags: { 'Movie Night': { at: '2026-01-01T00:00:00.000Z' } },
+			watched_seasons: [1, 2]
+		});
+		addItem.mockResolvedValue({ id: 9 });
+		getAll.mockResolvedValue([]);
+
+		await addCollectionItemToQueue(collectionItem, deps);
+
+		expect(addItem).toHaveBeenCalledOnce();
+		const passed = addItem.mock.calls[0][0];
+		expect(passed.tmdb_id).toBe(42);
+		expect(passed.title).toBe('Shared Movie');
+		expect(passed.watched_seasons).toEqual([]);
+		expect(passed).not.toHaveProperty('watch');
+		expect(passed).not.toHaveProperty('added_by_account_id');
+		expect(passed).not.toHaveProperty('queue_tags');
+		expect(passed).not.toHaveProperty('added_at');
+		expect(passed).not.toHaveProperty('watched_at');
+		expect(passed).not.toHaveProperty('updated_at');
+		expect(getAll).toHaveBeenCalledOnce();
+	});
+
+	it('treats a duplicate (ConstraintError) as already satisfied, not a failure', async () => {
+		const { state, deps } = makeDeps();
+		const collectionItem = makeCollectionItem({ tmdb_id: 7, media_type: 'tv' });
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getAll.mockResolvedValue([]);
+
+		await addCollectionItemToQueue(collectionItem, deps);
+
+		expect(state.error).toBe('');
+		expect(getAll).toHaveBeenCalledOnce();
+	});
+
+	it('surfaces a non-ConstraintError failure', async () => {
+		const { state, deps } = makeDeps();
+		const collectionItem = makeCollectionItem();
+		addItem.mockRejectedValue(new Error('IDB write failed'));
+
+		await addCollectionItemToQueue(collectionItem, deps);
+
+		expect(state.error).toBe('IDB write failed');
 	});
 });

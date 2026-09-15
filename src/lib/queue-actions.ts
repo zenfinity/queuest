@@ -1,8 +1,11 @@
 import { activeQueueTags, type WatchlistItem } from './types';
 import { remainingRuntime } from './progress';
 import type { SortKey, ServiceFilterKey } from './queue-controls.svelte';
+import type { CollectionItem } from './collection-sync';
+import { isConstraintError } from './http';
 import {
 	getAll,
+	addItem,
 	removeItem,
 	setWatched,
 	updateShowProgress,
@@ -496,5 +499,47 @@ export async function bulkRemove(items: WatchlistItem[], deps: QueueActionDeps):
 		deps.setError(e instanceof Error ? e.message : 'Could not remove items.');
 	} finally {
 		for (const item of items) deps.setBusy(item.id, false);
+	}
+}
+
+/**
+ * Copies a shared-list item into the caller's own personal queue (#294-drag
+ * Phase 3's "copy to my queue" drop action) — lands untagged in the flat
+ * queue, the same primitive every existing add path already uses (addItem).
+ * A CollectionItem isn't a differently-shaped type needing conversion — it's
+ * WatchlistItem's own interface minus `id` (see types.ts's own doc comment
+ * on why the collab-only fields live there instead of a separate type) — so
+ * this just strips the collab-only/queue-specific fields that don't carry
+ * across identities and adds the rest, resetting watched_seasons since a
+ * shared list's viewing progress is the group's, not necessarily the
+ * caller's own.
+ */
+export async function addCollectionItemToQueue(
+	item: CollectionItem,
+	deps: QueueActionDeps
+): Promise<void> {
+	try {
+		const {
+			watch: _watch,
+			added_by_account_id: _addedBy,
+			queue_tags: _tags,
+			added_at: _addedAt,
+			watched_at: _watchedAt,
+			updated_at: _updatedAt,
+			...rest
+		} = item;
+		try {
+			await addItem({ ...rest, watched_seasons: [] });
+		} catch (e) {
+			if (!isConstraintError(e)) throw e;
+			// Already in the queue somewhere (#274 — identity is global, one row
+			// per title) — that's the goal of "copy to queue" already met, not
+			// a failure. Same precedent as add-actions.ts's addAndPlace: a
+			// collision here is treated as satisfied without inspecting which
+			// row it collided with.
+		}
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not add this title to your queue.');
 	}
 }

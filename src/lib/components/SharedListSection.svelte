@@ -13,12 +13,12 @@
 	// toggling and select-mode aren't offered — neither is wired up for shared
 	// items yet.
 	import type { Snippet } from 'svelte';
-	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
+	import { dragHandleZone, dragHandle, TRIGGERS } from 'svelte-dnd-action';
 	import { flip } from 'svelte/animate';
 	import { itemKey } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { remainingRuntime, releaseChip, DEFAULT_RUNTIME, hms } from '$lib/progress';
-	import { queueControls } from '$lib/queue-controls.svelte';
+	import { queueControls, setSortBy } from '$lib/queue-controls.svelte';
 	import { services } from '$lib/services.svelte';
 	import { motion } from '$lib/motion.svelte';
 	import {
@@ -36,8 +36,16 @@
 	import { memberColor } from '$lib/queue-colors';
 	import { getSyncStatus } from '$lib/sync';
 	import { getLastViewed, markViewed, hasNewActivity } from '$lib/collection-activity';
+	import { addCollectionItemToQueue, type QueueActionDeps } from '$lib/queue-actions';
+	import {
+		startDragSession,
+		endDragSession,
+		dragSession,
+		type DragAction
+	} from '$lib/drag-session.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import RankingHint from '$lib/components/RankingHint.svelte';
+	import DragHandle from '$lib/components/DragHandle.svelte';
 
 	let {
 		collection,
@@ -308,6 +316,96 @@
 
 	let remainingMins = $derived.by(() => visibleItems.reduce((s, i) => s + rt(i), 0));
 
+	// ── Drag on the main grid/list view (#294-drag Phase 3) ─────────────────
+	// There's no canonical shared order to reorder into here — the "Rank"
+	// criterion is a read-only Borda tally across every member's ballot, not
+	// a writable field a drag could stamp — so "drag to reorder" can only
+	// coherently mean "edit my own ballot," reusing setMyBallot exactly like
+	// the ☆-to-rank panel above already does. svelte-dnd-action needs objects
+	// with an `id`; CollectionItem's is `itemKey`, not a bare field, so each
+	// visible item is wrapped rather than reordering visibleItems directly.
+	let draggableVisibleItems = $derived(
+		visibleItems.map((item) => ({ ...item, id: itemKey(item) }))
+	);
+	// Frozen, not stamped — unlike the personal queue's snapshot-then-switch
+	// fix, there's no field here to pre-seed that would make the post-switch
+	// tally-sorted view equal the current one, since the tally is a pure
+	// function of everyone's ballots, not this one drag. Freezing dndVisibleItems
+	// to whatever was on screen the instant the drag started, and only
+	// releasing it once the drag's own effect (a ballot commit) has actually
+	// landed, keeps the switch to Rank sort from reflowing the view mid-gesture.
+	let dragFrozenOrder: (CollectionItem & { id: string })[] | null = $state(null);
+	let dndVisibleItems = $derived(dragFrozenOrder ?? draggableVisibleItems);
+
+	// Deps for addCollectionItemToQueue (#294-drag Phase 3's "copy to my
+	// queue" drop action) — this component has no view of the personal
+	// queue's own item list to keep live, only this list's own `error`
+	// banner to surface a failure into; whichever page shows the queue picks
+	// the new item up on its own next load.
+	const queueActionDeps: QueueActionDeps = {
+		setItems: () => {},
+		setBusy: () => {},
+		setError: (e) => (error = e)
+	};
+
+	// Fires once, right as a drag gesture picks up in the main grid/list
+	// view, with the id (itemKey) of the item that was picked up —
+	// populates the drop-zone action bar with this item's ballot/queue
+	// actions.
+	function handleShareDragStart(key: string) {
+		const item = items.find((i) => itemKey(i) === key);
+		if (!item) return;
+		const actions: DragAction[] = [
+			{
+				label: 'Copy to my queue',
+				icon: '📥',
+				run: () => addCollectionItemToQueue(item, queueActionDeps)
+			},
+			{
+				label: 'Move to top of my ballot',
+				icon: '⬆️',
+				run: () => pushBallot([itemKey(item), ...myBallot.filter((k) => k !== itemKey(item))])
+			}
+		];
+		if (myBallot.includes(itemKey(item))) {
+			actions.push({
+				label: 'Remove from my ballot',
+				icon: '✕',
+				run: () => toggleRank(item)
+			});
+		}
+		startDragSession(actions);
+	}
+
+	function handleContentConsider(
+		e: CustomEvent<{
+			items: (CollectionItem & { id: string })[];
+			info: { trigger: TRIGGERS; id: string };
+		}>
+	) {
+		dragFrozenOrder = e.detail.items;
+		if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) {
+			handleShareDragStart(e.detail.info.id);
+			if (queueControls.sortBy !== 'rank') setSortBy('rank');
+		}
+	}
+
+	async function handleContentFinalize(
+		e: CustomEvent<{ items: (CollectionItem & { id: string })[]; info: { trigger: TRIGGERS } }>
+	) {
+		const targetedAction = dragSession.actions.find((a) => a.label === dragSession.targetedLabel);
+		endDragSession();
+		if (targetedAction) {
+			await targetedAction.run();
+		} else {
+			// No tile — the drop itself, wherever it landed in the frozen
+			// order, becomes the new ballot (setMyBallot's own MAX_BALLOT_SIZE
+			// truncation handles a longer list than 5 correctly).
+			await pushBallot(e.detail.items.map((i) => i.id));
+		}
+		dragFrozenOrder = null;
+	}
+
 	$effect(() => {
 		if (inline) load();
 	});
@@ -469,6 +567,7 @@
 				{/if}
 			</div>
 		</div>
+		<DragHandle variant="card" label={item.title} />
 	</div>
 {/snippet}
 
@@ -483,6 +582,7 @@
 		title="Added by {memberLabel(item.added_by_account_id ?? null)}"
 	>
 		<div class="flex items-center gap-3">
+			<DragHandle variant="row" label={item.title} />
 			<div class="relative h-12 w-8 shrink-0 overflow-hidden rounded bg-gray-200 dark:bg-gray-800">
 				{#if item.poster_path}
 					<img
@@ -834,15 +934,45 @@
 			{items.length === 0 ? 'Nothing here yet.' : 'Nothing matches these filters.'}
 		</p>
 	{:else if queueControls.viewMode === 'grid'}
-		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5">
-			{#each visibleItems as item (itemKey(item))}
-				{@render gridCard(item)}
+		<div
+			class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5"
+			use:dragHandleZone={{
+				items: dndVisibleItems,
+				flipDurationMs: 0,
+				dragDisabled: rankingBusy,
+				dropTargetStyle: {},
+				dropFromOthersDisabled: true,
+				delayTouchStart: true,
+				useCursorForDetection: true
+			}}
+			onconsider={handleContentConsider}
+			onfinalize={handleContentFinalize}
+		>
+			{#each dndVisibleItems as item (item.id)}
+				<div animate:flip={{ duration: flipDurationMs }}>
+					{@render gridCard(item)}
+				</div>
 			{/each}
 		</div>
 	{:else if queueControls.viewMode === 'list'}
-		<div class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60">
-			{#each visibleItems as item (itemKey(item))}
-				{@render listRow(item)}
+		<div
+			class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60"
+			use:dragHandleZone={{
+				items: dndVisibleItems,
+				flipDurationMs: 0,
+				dragDisabled: rankingBusy,
+				dropTargetStyle: {},
+				dropFromOthersDisabled: true,
+				delayTouchStart: true,
+				useCursorForDetection: true
+			}}
+			onconsider={handleContentConsider}
+			onfinalize={handleContentFinalize}
+		>
+			{#each dndVisibleItems as item (item.id)}
+				<div animate:flip={{ duration: flipDurationMs }}>
+					{@render listRow(item)}
+				</div>
 			{/each}
 		</div>
 	{:else}
