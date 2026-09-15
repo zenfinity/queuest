@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.33.0] — 2026-09-15
+
+### fix: grid view's drag handle was anchored to the poster, not the card
+
+v1.32.0 put the persistent Grid handle flush to the poster's own bottom edge, reasoning the Watched/Remove row below it already "owned" the card's literal bottom. That was wrong in practice — reported as drag-to-reorder "not doing anything" on mobile grid view, because the actual press target was a thin band between the poster and the title, not where anyone would look for it (under the Watched button, matching where the List view's handle already sits relative to its row). Moved `DragHandle`'s `card` variant to a full-width bar at the true bottom of the card, below Watched/Remove, and restyled it from an over-image dark overlay to a plain bar matching the card's own chrome now that it's no longer sitting on top of a poster. List view (which already anchored correctly) is untouched.
+
 ## [1.32.0] — 2026-09-15
 
 ### feat: persistent drag handles, phase 1 of a unified drag-to-reorder model
