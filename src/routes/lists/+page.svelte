@@ -703,7 +703,7 @@
 
 <h1 class="sr-only">Lists</h1>
 
-<div class="mx-auto max-w-md space-y-6 xs:space-y-10">
+<div class="space-y-6 xs:space-y-10">
 	<!-- Lists -->
 	<section class="space-y-3">
 		<h2 class="section-heading">Lists</h2>
@@ -713,7 +713,7 @@
 		</p>
 		<ShareHint show={syncEnabled} />
 		<form
-			class="flex gap-2"
+			class="flex max-w-md gap-2"
 			onsubmit={(e) => {
 				e.preventDefault();
 				createCollection();
@@ -749,7 +749,7 @@
 					     management actions reveal on expand instead of sitting pinned
 					     above a separate accordion box. -->
 					<div class="rounded-xl border-2" style="border-color: {color}">
-						<div class="flex items-center gap-2.5 px-3 py-2.5">
+						<div class="flex items-center gap-2.5 px-3 py-2.5 {isRenaming ? 'max-w-md' : ''}">
 							{#if isRenaming}
 								<!-- svelte-ignore a11y_autofocus -->
 								<input
@@ -1001,7 +1001,7 @@
 									{#if readOnlyLinkCreating}
 										<p class="mt-1.5 text-gray-500 dark:text-gray-400">Creating link…</p>
 									{:else if readOnlyLinkUrl}
-										<div class="mt-2 flex gap-1">
+										<div class="mt-2 flex max-w-md gap-1">
 											<input
 												type="text"
 												readonly
@@ -1068,7 +1068,7 @@
 				{#if wholeQueueLinkCreating}
 					<p class="mt-1.5 text-gray-500 dark:text-gray-400">Creating link…</p>
 				{:else if wholeQueueLinkUrl}
-					<div class="mt-2 flex gap-1">
+					<div class="mt-2 flex max-w-md gap-1">
 						<input
 							type="text"
 							readonly

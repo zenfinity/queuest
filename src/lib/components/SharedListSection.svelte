@@ -858,7 +858,7 @@
 {:else}
 	<div class="rounded-xl border-2" style="border-color: {color}">
 		{#if isRenaming && nameSlot}
-			<div class="flex w-full items-center gap-2 px-3 py-2.5">
+			<div class="flex max-w-md items-center gap-2 px-3 py-2.5">
 				{@render nameSlot()}
 			</div>
 		{:else}

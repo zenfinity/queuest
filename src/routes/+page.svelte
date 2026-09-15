@@ -39,6 +39,9 @@
 		logoTextSize: string;
 		bars: MockBar[];
 		over: string | null;
+		statusLabel: string;
+		statusBg: string;
+		statusColor: string;
 	};
 
 	const mockLanes: MockLane[] = [
@@ -56,7 +59,10 @@
 			logoTextColor: '#000',
 			logoTextSize: '9px',
 			bars: [{ title: 'The Bear', time: '~26h', width: '62%' }],
-			over: null
+			over: null,
+			statusLabel: 'Cancel',
+			statusBg: '#3a1414',
+			statusColor: '#f87171'
 		},
 		{
 			label: 'Apple TV',
@@ -75,7 +81,10 @@
 				{ title: 'Severance', time: '~13h', width: '30%' },
 				{ title: 'Ted Lasso', time: '~29h', width: '40%' }
 			],
-			over: '+1.6h over'
+			over: '+1.6h over',
+			statusLabel: 'Keep',
+			statusBg: '#0d3320',
+			statusColor: '#2dd4bf'
 		}
 	];
 
@@ -303,6 +312,10 @@
 											{lane.label}
 										</div>
 										<div style="font-size:9px;color:#4b5563">{lane.meta}</div>
+										<span
+											style="display:inline-block;margin-top:5px;padding:2px 6px;border-radius:999px;font-size:8px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;background:{lane.statusBg};color:{lane.statusColor}"
+											>{lane.statusLabel}</span
+										>
 									</div>
 									<div
 										style="flex:1;padding:12px;display:flex;align-items:center;gap:4px;overflow:hidden;position:relative"
@@ -392,6 +405,12 @@
 											<span style="font-size:10px;color:#6b7280;white-space:nowrap">{t.time}</span>
 										</div>
 									</div>
+									<div
+										aria-hidden="true"
+										style="display:flex;align-items:center;justify-content:center;width:22px;height:26px;border-radius:5px;background:#1d2535;color:#6b7280;font-size:11px;flex:none"
+									>
+										⠿
+									</div>
 									<div style="display:flex;gap:3px">
 										<button
 											aria-label="Mark watched"
@@ -415,7 +434,14 @@
 								<div
 									style="background:#0f1924;border:1px solid #1d2535;border-radius:11px;overflow:hidden"
 								>
-									<div style="height:110px;background:{t.cardPoster}"></div>
+									<div style="height:110px;background:{t.cardPoster};position:relative">
+										<div
+											aria-hidden="true"
+											style="position:absolute;bottom:6px;right:6px;width:20px;height:20px;border-radius:999px;background:rgba(0,0,0,0.45);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center"
+										>
+											⠿
+										</div>
+									</div>
 									<div style="padding:9px">
 										<div style="font-size:11px;font-weight:600;color:#e5e7eb;margin-bottom:5px">
 											{t.title}
