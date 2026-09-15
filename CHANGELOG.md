@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.31.0] — 2026-09-15
+
+### feat: landing page mock auto-rotates through its three views
+
+The interactive Grid/List/Gantt mock on the landing page never moved on its own, so a first-time visitor had no particular reason to notice the three tab buttons were clickable — it just read as a static panel. It now auto-advances through the three views every 4 seconds, which doubles as its own hint that they're switchable: watching the highlighted tab move teaches that before anyone needs to click. Stops for good the moment someone clicks a tab manually (auto-advancing after that would just fight their own navigation) and pauses while the pointer is over the panel so a mid-read view doesn't get pulled out from under them. Respects `prefers-reduced-motion` via the same `motion.reduced` check already gating this page's parallax and scroll-reveal.
+
 ## [1.30.0] — 2026-09-15
 
 ### fix: /lists was capped to a mobile-width column on desktop (#294)
