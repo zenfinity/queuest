@@ -300,6 +300,36 @@ export function snapshotTagRankLocally(
 }
 
 /**
+ * Drop-zone action-bar helpers (#294-drag Phase 2) — move one item to the
+ * very front or back of its current order without requiring the caller to
+ * actually drag it there. `currentOrder` must be the same full order the
+ * caller would otherwise drag within (queue-wide for moveItemToEdge, one
+ * list's for moveCollectionItemToEdge) — same reasoning as reorderItems/
+ * reorderCollectionItems, which these delegate straight to.
+ */
+export async function moveItemToEdge(
+	item: WatchlistItem,
+	currentOrder: WatchlistItem[],
+	edge: 'top' | 'bottom',
+	deps: QueueActionDeps
+): Promise<void> {
+	const rest = currentOrder.filter((i) => i.id !== item.id);
+	await reorderItems(edge === 'top' ? [item, ...rest] : [...rest, item], deps);
+}
+
+/** Same as moveItemToEdge, scoped to one list via reorderCollectionItems. */
+export async function moveCollectionItemToEdge(
+	item: WatchlistItem,
+	currentOrder: WatchlistItem[],
+	tag: string,
+	edge: 'top' | 'bottom',
+	deps: QueueActionDeps
+): Promise<void> {
+	const rest = currentOrder.filter((i) => i.id !== item.id);
+	await reorderCollectionItems(edge === 'top' ? [item, ...rest] : [...rest, item], tag, deps);
+}
+
+/**
  * Personal-list assignment, genuinely multi-select (PR2) — an item can be
  * added to or removed from any number of lists independently, rather than
  * the old single-select "replace membership with exactly this one tag"

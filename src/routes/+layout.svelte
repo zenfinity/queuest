@@ -10,6 +10,7 @@
 	import '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import QueueDock from '$lib/components/QueueDock.svelte';
+	import DragActionBar from '$lib/components/DragActionBar.svelte';
 
 	let { children } = $props();
 
@@ -339,6 +340,8 @@
 	>
 		{@render children()}
 	</main>
+
+	<DragActionBar />
 
 	<footer class="mt-8 border-t border-gray-200 py-4 sm:mt-16 sm:py-6 dark:border-gray-800">
 		<div

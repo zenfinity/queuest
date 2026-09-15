@@ -47,6 +47,7 @@
 		filterByService,
 		reorderCollectionItems,
 		snapshotTagRankLocally,
+		moveCollectionItemToEdge,
 		toggleWatched,
 		removeQueueItem,
 		toggleSeasonProgress,
@@ -56,6 +57,11 @@
 		setItemNote,
 		type QueueActionDeps
 	} from '$lib/queue-actions';
+	import {
+		startDragSession,
+		QUEUE_ITEM_ZONE_TYPE,
+		type DragAction
+	} from '$lib/drag-session.svelte';
 	import { DEFAULT_BUDGET_HOURS, releaseChip, remainingRuntime, hms } from '$lib/progress';
 	import { readNumber } from '$lib/storage';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
@@ -379,17 +385,79 @@
 			: sortByField(filtered, queueControls.sortBy, queueControls.sortDir);
 	}
 
+	// Copy-to-list tiles cap (#294-drag Phase 2) — see app/+page.svelte's
+	// identical constant.
+	const LIST_TARGET_CAP = 6;
+
 	// Fires once, right as a drag gesture picks up in ANY expanded personal
-	// list. Snapshots every currently-expanded list, not just the one being
+	// list, with which list (`tag`) and which item (`id`) it started from.
+	// Snapshots every currently-expanded list, not just the one being
 	// dragged — they all read 'rank' order from the same writable
 	// queue_tags[tag].rank field, so without snapshotting them too they'd
-	// jump exactly like the dragged one would the moment sortBy flips.
-	function handleListDragStart() {
-		if (queueControls.sortBy === 'rank') return;
-		for (const tag of expandedCollections) {
-			snapshotTagRankLocally(items, currentOrderFor(tag), tag, listActionDeps);
+	// jump exactly like the dragged one would the moment sortBy flips. Then
+	// populates the drop-zone action bar with move/copy actions scoped to
+	// this list and bound to this specific item.
+	function handleListDragStart(tag: string, id: number) {
+		if (queueControls.sortBy !== 'rank') {
+			for (const t of expandedCollections) {
+				snapshotTagRankLocally(items, currentOrderFor(t), t, listActionDeps);
+			}
+			setSortBy('rank');
 		}
-		setSortBy('rank');
+		const item = items.find((i) => i.id === id);
+		if (!item) return;
+		const currentOrder = currentOrderFor(tag);
+
+		// "Copy to list" excludes the list being dragged from — the item's
+		// already in it — but not the equivalent shared collection, if any;
+		// promotion (#274) means a personal and shared list of the same name
+		// can coexist as genuinely separate targets.
+		const listTargets = [
+			...collections
+				.filter((name) => name !== tag)
+				.map((name) => ({ kind: 'personal' as const, name })),
+			...sharedCollections.map((coll) => ({ kind: 'shared' as const, coll }))
+		];
+		const cappedTargets = listTargets.slice(0, LIST_TARGET_CAP);
+		const overflow = listTargets.length - cappedTargets.length;
+
+		const actions: DragAction[] = [
+			{
+				label: 'Move to top',
+				icon: '⬆️',
+				run: () => moveCollectionItemToEdge(item, currentOrder, tag, 'top', listActionDeps)
+			},
+			{
+				label: 'Move to bottom',
+				icon: '⬇️',
+				run: () => moveCollectionItemToEdge(item, currentOrder, tag, 'bottom', listActionDeps)
+			},
+			...cappedTargets.map((target): DragAction =>
+				target.kind === 'personal'
+					? {
+							label: target.name,
+							icon: '📁',
+							run: () => addItemToCollection(item, target.name, listActionDeps)
+						}
+					: {
+							label: target.coll.name,
+							icon: '👥',
+							run: async () => {
+								const ok = await addItemsToSharedCollection(
+									target.coll,
+									[item],
+									collectionActionDeps
+								);
+								if (ok) await loadSharedMembership();
+							}
+						}
+			)
+		];
+		startDragSession(
+			QUEUE_ITEM_ZONE_TYPE,
+			actions,
+			overflow > 0 ? `+${overflow} more — open the card for the full list` : null
+		);
 	}
 
 	// Backs DetailPanel's onAssignShared (#287) — errors surface through the
@@ -874,7 +942,7 @@
 												reorderingCollections.delete(collection);
 											}
 										}}
-										onDragStart={handleListDragStart}
+										onDragStart={(id) => handleListDragStart(collection, id)}
 										{seasonPicker}
 									/>
 								{:else}
@@ -897,7 +965,7 @@
 												reorderingCollections.delete(collection);
 											}
 										}}
-										onDragStart={handleListDragStart}
+										onDragStart={(id) => handleListDragStart(collection, id)}
 										{seasonPicker}
 									/>
 								{/if}

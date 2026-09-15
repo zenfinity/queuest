@@ -9,6 +9,7 @@
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import type { ItemChips } from '$lib/queue-actions';
+	import { endDragSession, QUEUE_ITEM_ZONE_TYPE } from '$lib/drag-session.svelte';
 	import DragHandle from './DragHandle.svelte';
 
 	let {
@@ -48,10 +49,12 @@
 		/** Fires once a drag gesture settles, with the full new order. */
 		onReorder?: (newOrder: WatchlistItem[]) => void;
 		/** Fires once, at the very start of a drag gesture, before any
-		 * reorder tracking — the caller's chance to snapshot the current
-		 * visual order into place and switch sort to Rank without a jump
-		 * (see queue-actions.ts's snapshotSortOrderLocally). */
-		onDragStart?: () => void;
+		 * reorder tracking, with the id of the item that was picked up — the
+		 * caller's chance to snapshot the current visual order into place and
+		 * switch sort to Rank without a jump (see queue-actions.ts's
+		 * snapshotSortOrderLocally), and to populate the drop-zone action bar
+		 * (drag-session.svelte.ts) with actions bound to this item. */
+		onDragStart?: (id: number) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -62,12 +65,21 @@
 	let dndItems = $derived(items);
 	const flipDurationMs = $derived(motion.reduced ? 0 : 250);
 	function handleDndConsider(
-		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS } }>
+		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS; id: string } }>
 	) {
-		if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) onDragStart?.();
+		if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) onDragStart?.(Number(e.detail.info.id));
 		dndItems = e.detail.items;
 	}
-	function handleDndFinalize(e: CustomEvent<{ items: WatchlistItem[] }>) {
+	function handleDndFinalize(
+		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS } }>
+	) {
+		endDragSession();
+		// See QueueGridView.svelte's identical branch for why this resets to
+		// the original `items` prop instead of adopting e.detail.items.
+		if (e.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+			dndItems = items;
+			return;
+		}
 		dndItems = e.detail.items;
 		onReorder?.(dndItems);
 	}
@@ -295,11 +307,16 @@
 	class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60"
 	use:dragHandleZone={{
 		items: dndItems,
+		type: QUEUE_ITEM_ZONE_TYPE,
 		flipDurationMs,
 		dragDisabled: dragBusy,
 		dropTargetStyle: {},
 		dropFromOthersDisabled: true,
-		delayTouchStart: true
+		delayTouchStart: true,
+		// See QueueGridView.svelte's identical option — the handle sits at
+		// the row's leading edge, not its center, so hit-testing needs the
+		// real cursor position to reliably reach the drop-zone action bar.
+		useCursorForDetection: true
 	}}
 	onconsider={handleDndConsider}
 	onfinalize={handleDndFinalize}

@@ -40,6 +40,8 @@ const {
 	clearItemCollections,
 	reorderItems,
 	reorderCollectionItems,
+	moveItemToEdge,
+	moveCollectionItemToEdge,
 	snapshotSortOrderLocally,
 	snapshotTagRankLocally,
 	bulkAddToCollection,
@@ -513,6 +515,62 @@ describe('reorderCollectionItems', () => {
 
 		expect(state.error).toBe('write failed');
 		expect(state.busy.size).toBe(0);
+	});
+});
+
+describe('moveItemToEdge', () => {
+	it('moves the item to the front and persists via setSortOrder', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2 });
+		const c = makeItem({ id: 3 });
+		setSortOrder.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([c, a, b]);
+
+		await moveItemToEdge(c, [a, b, c], 'top', deps);
+
+		expect(setSortOrder).toHaveBeenCalledWith([3, 1, 2]);
+	});
+
+	it('moves the item to the back and persists via setSortOrder', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2 });
+		const c = makeItem({ id: 3 });
+		setSortOrder.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([b, c, a]);
+
+		await moveItemToEdge(a, [a, b, c], 'bottom', deps);
+
+		expect(setSortOrder).toHaveBeenCalledWith([2, 3, 1]);
+	});
+});
+
+describe('moveCollectionItemToEdge', () => {
+	it('moves the item to the front of the given list and persists via setTagRank', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2 });
+		const c = makeItem({ id: 3 });
+		setTagRank.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([c, a, b]);
+
+		await moveCollectionItemToEdge(c, [a, b, c], 'Movie Night', 'top', deps);
+
+		expect(setTagRank).toHaveBeenCalledWith('Movie Night', [3, 1, 2]);
+	});
+
+	it('moves the item to the back of the given list and persists via setTagRank', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2 });
+		const c = makeItem({ id: 3 });
+		setTagRank.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([b, c, a]);
+
+		await moveCollectionItemToEdge(a, [a, b, c], 'Movie Night', 'bottom', deps);
+
+		expect(setTagRank).toHaveBeenCalledWith('Movie Night', [2, 3, 1]);
 	});
 });
 
