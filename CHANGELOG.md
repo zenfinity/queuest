@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.30.0] — 2026-09-15
+
+### fix: /lists was capped to a mobile-width column on desktop (#294)
+
+The whole page — personal list rows, and every shared list's expanded poster grid — rendered inside a fixed `max-w-md` (448px) div, nested inside the layout's own `max-w-5xl`, so a shared list's grid was squeezed to a quarter of the screen instead of getting the same multi-column layout `/app` gives the identical content. `QueueGridView`/`QueueListView`/`SharedListSection` needed no changes at all — they already use the same responsive grid breakpoints `/app` does; they were purely being starved of width by the one wrapper div. Dropped it, matching `/app`'s own precedent of relying solely on the layout's cap rather than re-declaring it. The two rows that actually become unusable at full width — a growing text input, not just more space — keep their own `max-w-md`: the New List field and any list's rename-input row.
+
+### fix: landing page's interactive mock never caught up to two real UI changes (#286)
+
+Prompted by #285 (which turned out to already be fixed as of v1.28.0 — the per-list runtime-total line on the landing page is accurate, not touched here). The deeper accuracy pass found the mock itself had drifted: it never got the drag-to-reorder handle that replaced rank arrows in v1.25.0/#281, and it never got the Keep/Start/Cancel lane-status badges #242 added to the real Gantt view — notable since feature card 3 ("Know what to cancel") directly sells that exact mechanic, and the mock meant to preview it was missing the one element that shows it. Added a small `⠿` handle to the Grid and List tabs and a Keep/Cancel pill to the Gantt tab's two lanes (thin Hulu → Cancel, over-budget Apple TV → Keep, matching the card's own copy), all in the mock's existing stylized, hardcoded-hex idiom rather than porting the real components' live Tailwind classes. Left the mock's colored-text provider pills alone — the mock's own doc comment already rules out real TMDB image loads on a marketing page, so that's deliberate stylization, not drift. Whether to also add copy for Suggest or shared-list ranked-choice voting — both real, shipped, and currently unmentioned on the landing page — is a scope decision, not a factual correction, and is left for a separate follow-up issue rather than folded into this drift fix.
+
 ## [1.29.0] — 2026-09-15
 
 ### feat: /add orients you outside the guided onboarding flow too (#293)
