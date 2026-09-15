@@ -1,4 +1,4 @@
-import { soloTagMap, type SearchResult, type WatchlistItem } from './types';
+import { hasActiveTag, soloTagMap, type SearchResult, type WatchlistItem } from './types';
 import { addItem, addQueueTag, getItemByTmdbId, nowIso } from './db';
 import { isConstraintError } from './http';
 import { addItemsToSharedCollection, type SharedCollection } from './collection-actions';
@@ -91,6 +91,12 @@ export async function addSearchResultToQueue(
 }
 
 export type AddListTarget = { tag: string } | { collection: SharedCollection };
+
+/** Whether a personal-list destination has nothing currently tagged into it —
+ *  #293's "should /add's orientation copy still show?" check. */
+export function isDestinationEmpty(items: WatchlistItem[], tag: string): boolean {
+	return !items.some((i) => hasActiveTag(i, tag));
+}
 
 // The one-tap-away targeted version of addSearchResultToQueue — lands the
 // title straight in a personal or shared list instead of the untagged queue,

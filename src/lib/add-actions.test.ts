@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SearchResult } from './types';
+import { makeItem } from './test-fixtures';
 
 const addItem = vi.fn();
 const addQueueTag = vi.fn();
@@ -16,7 +17,8 @@ vi.mock('./collection-actions', () => ({
 	addItemsToSharedCollection: (...args: unknown[]) => addItemsToSharedCollection(...args)
 }));
 
-const { addSearchResultToQueue, addSearchResultToList } = await import('./add-actions');
+const { addSearchResultToQueue, addSearchResultToList, isDestinationEmpty } =
+	await import('./add-actions');
 
 function makeResult(overrides: Partial<SearchResult> = {}): SearchResult {
 	return {
@@ -202,5 +204,30 @@ describe('addSearchResultToList', () => {
 		);
 		// The local add already happened — the failure is only in the shared push.
 		expect(addItem).toHaveBeenCalled();
+	});
+});
+
+describe('isDestinationEmpty', () => {
+	it('is empty for an empty item list', () => {
+		expect(isDestinationEmpty([], 'Movie Night')).toBe(true);
+	});
+
+	it('is empty when no item carries the tag', () => {
+		const items = [makeItem({ queue_tags: { 'Date Night': { at: '2024-01-01T00:00:00.000Z' } } })];
+		expect(isDestinationEmpty(items, 'Movie Night')).toBe(true);
+	});
+
+	it('is not empty when an item carries the tag as active', () => {
+		const items = [makeItem({ queue_tags: { 'Movie Night': { at: '2024-01-01T00:00:00.000Z' } } })];
+		expect(isDestinationEmpty(items, 'Movie Night')).toBe(false);
+	});
+
+	it('is empty when the only carrier has the tag tombstoned (deleted)', () => {
+		const items = [
+			makeItem({
+				queue_tags: { 'Movie Night': { at: '2024-01-01T00:00:00.000Z', deleted: true } }
+			})
+		];
+		expect(isDestinationEmpty(items, 'Movie Night')).toBe(true);
 	});
 });

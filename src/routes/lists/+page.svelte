@@ -805,6 +805,13 @@
 											: ''}">▸</span
 									>
 								</button>
+								<a
+									href={resolve(`/add?list=${encodeURIComponent(collection)}`)}
+									class="shrink-0 text-xs px-2 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+									aria-label="Add items to {collection}"
+								>
+									+ Add
+								</a>
 							{/if}
 						</div>
 
