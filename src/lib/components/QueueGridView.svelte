@@ -91,63 +91,49 @@
 	{@const cardLine = cardHue !== null ? `hsl(${cardHue} 60% 52%)` : '#374151'}
 	{@const cardDot = cardHue !== null ? `hsl(${cardHue} 70% 62%)` : '#4b5563'}
 	{@const isSelected = selected.has(item.id)}
-	<div class="relative">
-		<button
-			class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
-			onclick={(e) => {
-				e.stopPropagation();
-				if (selectMode) onToggleSelect?.(item);
-				else onOpenDetail(item);
-			}}
-			data-detail-trigger
-			aria-label={selectMode
-				? `${isSelected ? 'Deselect' : 'Select'} ${item.title}`
-				: `View details for ${item.title}`}
-		>
-			{#if item.poster_path}
-				<img
-					src="{TMDB_IMG}/w300{item.poster_path}"
-					alt={item.title}
-					loading="lazy"
-					decoding="async"
-					class="h-full w-full object-cover"
-				/>
-			{:else}
-				<div
-					class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600"
-				>
-					🎬
-				</div>
-			{/if}
-			{#if selectMode}
-				<span
-					class="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs font-bold {isSelected
-						? 'border-orange-500 bg-orange-500 text-white'
-						: 'border-white bg-black/40 text-transparent'}"
-				>
-					✓
-				</span>
-			{/if}
-			{#if queueControls.watchedOn && item.watched_at}
-				<span
-					class="absolute top-2 left-2 rounded bg-teal-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-teal-400"
-					>✓ Watched</span
-				>
-			{/if}
-		</button>
-		{#if !selectMode}
-			<!-- DragHandle is a SIBLING of the poster <button> above, not a
-			     descendant — an interactive element can't nest inside a
-			     <button> (invalid HTML) — but dragHandle only needs to be
-			     somewhere inside the draggable item's bounding rect, not a
-			     direct child of the drag zone's item root, so this still works
-			     with no changes to the {#each} item div below. This wrapping
-			     div's own `relative` is required, not decorative: without it
-			     the absolutely-positioned handle would resolve against a
-			     distant ancestor instead of the poster. -->
-			<DragHandle variant="card" label={item.title} />
+	<button
+		class="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-gray-200 dark:bg-gray-800 w-full cursor-pointer"
+		onclick={(e) => {
+			e.stopPropagation();
+			if (selectMode) onToggleSelect?.(item);
+			else onOpenDetail(item);
+		}}
+		data-detail-trigger
+		aria-label={selectMode
+			? `${isSelected ? 'Deselect' : 'Select'} ${item.title}`
+			: `View details for ${item.title}`}
+	>
+		{#if item.poster_path}
+			<img
+				src="{TMDB_IMG}/w300{item.poster_path}"
+				alt={item.title}
+				loading="lazy"
+				decoding="async"
+				class="h-full w-full object-cover"
+			/>
+		{:else}
+			<div
+				class="flex h-full w-full items-center justify-center text-4xl text-gray-400 dark:text-gray-600"
+			>
+				🎬
+			</div>
 		{/if}
-	</div>
+		{#if selectMode}
+			<span
+				class="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs font-bold {isSelected
+					? 'border-orange-500 bg-orange-500 text-white'
+					: 'border-white bg-black/40 text-transparent'}"
+			>
+				✓
+			</span>
+		{/if}
+		{#if queueControls.watchedOn && item.watched_at}
+			<span
+				class="absolute top-2 left-2 rounded bg-teal-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-teal-400"
+				>✓ Watched</span
+			>
+		{/if}
+	</button>
 	<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
 		<p class="line-clamp-2 text-sm font-medium leading-tight">{item.title}</p>
 		<!-- Runtime sparkline -->
@@ -290,6 +276,9 @@
 			</div>
 		{/if}
 	</div>
+	{#if !selectMode}
+		<DragHandle variant="card" label={item.title} />
+	{/if}
 {/snippet}
 
 <div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">

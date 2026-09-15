@@ -3,9 +3,10 @@
 
 	// Shared handle for every drag-to-reorder surface (Grid, List, and —
 	// from #phase-3 — shared lists) so they read as one interaction language
-	// instead of three independently-styled ones. `card` anchors to the
-	// poster's bottom edge (Grid); `row` is the leading element of a list
-	// row (List). Both keep the same ⠿ glyph every surface already used.
+	// instead of three independently-styled ones. `card` is a full-width bar
+	// at the very bottom of the card, below the Watched/Remove row (Grid);
+	// `row` is the leading element of a list row (List). Both keep the same
+	// ⠿ glyph every surface already used.
 	let { variant, label }: { variant: 'card' | 'row'; label: string } = $props();
 </script>
 
@@ -22,7 +23,7 @@
 	aria-label="Drag to reorder {label}"
 	onclick={(e) => e.stopPropagation()}
 	class={variant === 'card'
-		? 'absolute inset-x-0 bottom-0 flex h-6 touch-none cursor-grab items-center justify-center bg-black/45 text-xs tracking-[0.4em] text-white select-none backdrop-blur-[1px] active:cursor-grabbing'
+		? 'flex h-6 w-full touch-none cursor-grab items-center justify-center rounded-b-xl bg-gray-100 text-xs tracking-[0.4em] text-gray-400 select-none active:cursor-grabbing dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300'
 		: 'flex h-8 w-5 shrink-0 touch-none cursor-grab items-center justify-center rounded text-gray-400 select-none active:cursor-grabbing dark:text-gray-500 dark:hover:text-gray-300'}
 >
 	⠿
