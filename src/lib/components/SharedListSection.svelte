@@ -17,7 +17,7 @@
 	import { flip } from 'svelte/animate';
 	import { itemKey } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
-	import { remainingRuntime, releaseChip, DEFAULT_RUNTIME } from '$lib/progress';
+	import { remainingRuntime, releaseChip, DEFAULT_RUNTIME, hms } from '$lib/progress';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import { services } from '$lib/services.svelte';
 	import { motion } from '$lib/motion.svelte';
@@ -306,16 +306,15 @@
 		});
 	});
 
+	let remainingMins = $derived.by(() => visibleItems.reduce((s, i) => s + rt(i), 0));
+
 	$effect(() => {
 		if (inline) load();
 	});
 
 	$effect(() => {
 		if (inline) {
-			onStats?.({
-				count: visibleItems.length,
-				remainingMins: visibleItems.reduce((s, i) => s + rt(i), 0)
-			});
+			onStats?.({ count: visibleItems.length, remainingMins });
 		}
 	});
 </script>
@@ -886,7 +885,10 @@
 				{/if}
 				{#if loaded}
 					<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-						{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'}
+						{visibleItems.length} title{visibleItems.length === 1 ? '' : 's'}{visibleItems.length >
+						0
+							? ` · ~${hms(remainingMins)}`
+							: ''}
 					</span>
 				{/if}
 			</button>

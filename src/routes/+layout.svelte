@@ -15,8 +15,9 @@
 
 	// Default og:title/og:description — matches the copy that used to be
 	// static in app.html. A route overrides either by returning ogTitle /
-	// ogDescription from its own load() (see lists/join/[token] and
-	// lists/[id] for #219); everything else falls back to these.
+	// ogDescription from its own load() (see lists/join/[token] for #219;
+	// lists/[id] had one too before #284 retired that page); everything
+	// else falls back to these.
 	const DEFAULT_OG_TITLE = 'Queuest';
 	const DEFAULT_OG_DESCRIPTION =
 		'Figure out how long you actually need a streaming subscription — before paying for another month.';
