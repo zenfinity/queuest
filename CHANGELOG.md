@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.29.0] — 2026-09-15
+
+### feat: /add orients you outside the guided onboarding flow too (#293)
+
+`/add` had two faces gated on a single `?onboarding=1` param: the guided signup flow's post-search CTA and nav tip, or — via the permanent "Add" nav tab, the normal everyday way anyone gets here — nothing at all. Before searching, one static line; after adding, no confirmation of where anything went beyond a small inline "✓ Added" swap. Concretely: create a new list on `/lists`, and there was no path to `/add` at all, let alone one that knew which list you meant.
+
+`/lists`' personal list rows now carry a "+ Add" link (`/add?list=<name>`) that gives `/add` a destination to orient around for the first time — naming it in the pre-search copy, defaulting every result card's one-tap action to that list instead of Queue (`AddToListButton`'s new `defaultTarget` prop, inert everywhere else), and offering a way back while the list is still empty. Separately, and for every visit regardless of `?list=` — including the plain nav-tab case with nothing but a bare Queue — a "✓ Added N titles · Go to my queue →" banner now appears once you've actually added something this visit, and stays for the rest of it. A *permanent* CTA on every visit was explicitly out of scope (would recreate #289's nagging problem); a nudge conditioned on having just acted isn't one.
+
+Deliberately not reused: `sq:hints`' dismiss/re-arm/retire system (`#289`/`#291`) — that machinery exists for conditions that can stay true forever and need synced cross-device state; `/add`'s emptiness resolves itself the instant one item lands, closer in spirit to `ListHint`'s plain, no-dismiss shape.
+
+Found and fixed along the way: the search form posted to `/search`, which 301-redirects preserving only `q` — silently dropping `onboarding=1` (and now `list=`) the moment anyone actually searched, which is the whole point of the page. This had been quietly breaking the onboarding CTA's persistence since it shipped; the form now posts to `/add` directly with hidden inputs carrying both params through.
+
 ## [1.28.0] — 2026-09-14
 
 ### chore: retire the standalone per-list page (#284)

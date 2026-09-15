@@ -13,10 +13,12 @@
 		busyLabel = 'Adding…',
 		done = false,
 		disabled = false,
+		doneLabel,
 		existingCollections,
 		queueColors,
 		sharedCollections,
 		sharedListColors,
+		defaultTarget = null,
 		onAddToQueue,
 		onAddToList
 	}: {
@@ -25,10 +27,15 @@
 		busyLabel?: string;
 		done?: boolean;
 		disabled?: boolean;
+		doneLabel?: string;
 		existingCollections: string[];
 		queueColors: Record<string, string>;
 		sharedCollections: SharedCollection[];
 		sharedListColors: Record<string, string>;
+		defaultTarget?: {
+			label: string;
+			target: { tag: string } | { collection: SharedCollection };
+		} | null;
 		onAddToQueue: () => void;
 		onAddToList: (target: { tag: string } | { collection: SharedCollection }) => void;
 	} = $props();
@@ -52,14 +59,14 @@
 			? 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-400'
 			: 'bg-orange-500 text-white hover:bg-orange-400'}"
 		disabled={isDisabled}
-		onclick={onAddToQueue}
+		onclick={() => (defaultTarget ? onAddToList(defaultTarget.target) : onAddToQueue())}
 	>
 		{#if busy}
 			{busyLabel}
 		{:else if done}
-			✓ Added
+			✓ Added{doneLabel ? ` to ${doneLabel}` : ''}
 		{:else}
-			{label}
+			{defaultTarget ? `+ Add to ${defaultTarget.label}` : label}
 		{/if}
 	</button>
 	{#if hasLists}

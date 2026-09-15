@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
-	import type { SearchResult, Provider } from '$lib/types';
+	import type { SearchResult, Provider, WatchlistItem } from '$lib/types';
 	import type { SearchSuggestion } from '../api/search-suggestions/+server';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
@@ -23,9 +23,26 @@
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
 	import AddToListButton from '$lib/components/AddToListButton.svelte';
 	import Button from '$lib/components/Button.svelte';
-	import { addSearchResultToQueue, addSearchResultToList } from '$lib/add-actions';
+	import {
+		addSearchResultToQueue,
+		addSearchResultToList,
+		isDestinationEmpty
+	} from '$lib/add-actions';
 
 	let isOnboarding = $derived(page.url.searchParams.has('onboarding'));
+
+	// ── Destination awareness (#293) ──────────────────────────────────────────
+	// /add has no page-level "destination" concept beyond isOnboarding today —
+	// every result routes independently via its own AddToListButton popover.
+	// listParam (set only when arriving via a /lists "+ Add" link) gives this
+	// page a destination to orient around: name it in copy, default each
+	// card's primary action to it, and know when it's still empty.
+	let listParam = $derived(page.url.searchParams.get('list'));
+	let items: WatchlistItem[] = $state([]);
+	let loaded = $state(false);
+	let destinationEmpty = $derived(
+		!isOnboarding && loaded && !!listParam && isDestinationEmpty(items, listParam)
+	);
 
 	let { data }: { data: PageData } = $props();
 
@@ -168,6 +185,7 @@
 	let adding = new SvelteSet<number>();
 	let added = new SvelteSet<number>();
 	let errors = new SvelteMap<number, string>();
+	let addedTo = new SvelteMap<number, string>();
 	let detailItem: SearchResult | null = $state(null);
 
 	// DetailPanel's runtime lollipop is relative to the monthly budget, same as
@@ -188,8 +206,10 @@
 
 	onMount(() => {
 		queueColors = getQueueColors();
-		getAll().then((items) => {
+		getAll().then((fetchedItems) => {
+			items = fetchedItems;
 			existingCollections = listCollections(items, Object.keys(queueColors));
+			loaded = true;
 		});
 		isSyncEnabled().then((enabled) => {
 			if (!enabled) return;
@@ -219,15 +239,24 @@
 		}
 	});
 
-	function addDeps(): Parameters<typeof addSearchResultToQueue>[1] {
+	function addDeps(label: string): Parameters<typeof addSearchResultToQueue>[1] {
 		return {
 			setAdding: (id, isAdding) => {
 				if (isAdding) adding.add(id);
 				else adding.delete(id);
 			},
 			setAdded: (id, isAdded) => {
-				if (isAdded) added.add(id);
-				else added.delete(id);
+				if (isAdded) {
+					added.add(id);
+					addedTo.set(id, label);
+					// Keeps destinationEmpty accurate for the rest of this visit.
+					getAll().then((fresh) => {
+						items = fresh;
+					});
+				} else {
+					added.delete(id);
+					addedTo.delete(id);
+				}
 			},
 			setError: (id, message) => {
 				if (message) errors.set(id, message);
@@ -237,14 +266,15 @@
 	}
 
 	async function addToQueue(result: SearchResult) {
-		await addSearchResultToQueue(result, addDeps());
+		await addSearchResultToQueue(result, addDeps('Queue'));
 	}
 
 	async function addToList(
 		result: SearchResult,
 		target: Parameters<typeof addSearchResultToList>[1]
 	) {
-		await addSearchResultToList(result, target, addDeps());
+		const label = 'tag' in target ? target.tag : target.collection.name;
+		await addSearchResultToList(result, target, addDeps(label));
 	}
 </script>
 
@@ -347,7 +377,7 @@
 
 	<form
 		bind:this={formEl}
-		action="/search"
+		action={resolve('/add')}
 		method="GET"
 		class="flex gap-2"
 		onsubmit={() => {
@@ -440,8 +470,23 @@
 				</div>
 			{/if}
 		</div>
+		{#if isOnboarding}<input type="hidden" name="onboarding" value="1" />{/if}
+		{#if listParam}<input type="hidden" name="list" value={listParam} />{/if}
 		<Button type="submit" class="px-5 py-2.5 text-sm">Search</Button>
 	</form>
+
+	{#if !isOnboarding && addedTo.size > 0}
+		<div
+			class="flex items-center justify-between gap-3 rounded-lg bg-teal-50 px-4 py-3 text-sm dark:bg-teal-900/20"
+		>
+			<p class="text-teal-700 dark:text-teal-400">
+				✓ Added {addedTo.size} title{addedTo.size === 1 ? '' : 's'}.
+			</p>
+			<Button href={resolve(listParam ? '/lists' : '/app')} class="px-4 py-2 text-sm">
+				{listParam ? `Go to ${listParam} →` : 'Go to my queue →'}
+			</Button>
+		</div>
+	{/if}
 
 	{#snippet resultCard(result: SearchResult)}
 		<div
@@ -525,10 +570,14 @@
 					<AddToListButton
 						busy={adding.has(result.id)}
 						done={added.has(result.id)}
-						{existingCollections}
+						doneLabel={addedTo.get(result.id)}
+						existingCollections={listParam
+							? existingCollections.filter((n) => n !== listParam)
+							: existingCollections}
 						{queueColors}
 						{sharedCollections}
 						{sharedListColors}
+						defaultTarget={listParam ? { label: listParam, target: { tag: listParam } } : null}
 						onAddToQueue={() => addToQueue(result)}
 						onAddToList={(target) => addToList(result, target)}
 					/>
@@ -589,7 +638,17 @@
 	{:else}
 		<div class="py-12 text-center text-gray-400 xs:py-20 dark:text-gray-600">
 			<p class="mb-3 text-4xl xs:mb-4 xs:text-5xl">🔍</p>
-			<p class="text-sm xs:text-base">Search for movies and TV shows to add to your queue</p>
+			{#if listParam}
+				<p class="text-sm xs:text-base">Search for movies and TV shows to add to "{listParam}"</p>
+				{#if destinationEmpty}
+					<p class="mt-1 text-sm">
+						<a href={resolve('/lists')} class="text-orange-500 hover:underline">← Back to Lists</a>
+						· or add to Queue via the ▾ menu
+					</p>
+				{/if}
+			{:else}
+				<p class="text-sm xs:text-base">Search for movies and TV shows to add to your queue</p>
+			{/if}
 		</div>
 	{/if}
 

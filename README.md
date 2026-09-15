@@ -78,7 +78,7 @@ Can't agree on what to watch? Everyone can **rank their top 5 picks**, and Queue
 
 ### Everything else
 
-- 🚪 **Guided onboarding** for first-time visitors, from the landing page through setting a budget to adding a first title — including a one-time nudge toward swipe / <kbd>Alt</kbd>+←→ tab switching, shown right after your first add.
+- 🚪 **Guided onboarding** for first-time visitors, from the landing page through setting a budget to adding a first title — including a swipe / <kbd>Alt</kbd>+←→ tab-switching tip shown on that onboarding screen.
 - 🌙 **Dark / light mode**, persisted in preferences and backup file.
 - 🔄 **Refresh provider data** — re-fetch streaming info for every queued title in one click (Settings).
 - 💬 **In-app feedback** — files a GitHub issue directly from Settings.
