@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.37.0] — 2026-09-15
+
+### fix: drop-zone action bar never worked on a real queue, only short test lists
+
+v1.36.0's reliability fixes were verified against a 3-item test queue and genuinely helped — but the actual remaining failure only shows up with a real, longer queue, which is exactly what every real user has. Reproduced directly: a 23-item queue's Grid renders a CSS grid box 2285px tall against a 768px viewport, because the box spans every row it has, not just what's currently scrolled into view.
+
+`svelte-dnd-action` decides which zone a drag is "in" by comparing the pointer against each candidate zone's raw bounding box and picking whichever wins a depth-based tie-break — there's no concept of "visible" versus "off-screen but technically still inside this box." Once a queue is taller than one screen, the origin Grid/List zone's box already contains the action bar's fixed on-screen position long before the pointer physically gets there, so it always won that comparison — the tile was never a candidate, on any list longer than a screen's worth of cards, regardless of how carefully the pointer was aimed. This is the actual root cause of the original report (the fixes so far had addressed real but secondary problems).
+
+Fixed by no longer asking `svelte-dnd-action` which zone the drag is in for this specific question. The action-bar tiles are now plain elements, not `dndzone` targets; a small pointer tracker in `DragActionBar.svelte` calls `document.elementsFromPoint()` directly on every move and walks the returned front-to-back stack (needed because the library's own floating dragged-card clone, at `z-index: 9999`, is the actual topmost hit at the cursor and has to be looked past) to find whichever tile, if any, is really underneath the pointer. Both the live highlight and the final drop decision now come from that, entirely independent of the size of whatever list the drag started in. Grid/List's own same-zone reordering is untouched — still `svelte-dnd-action` end to end, just no longer asked to arbitrate against a zone that isn't really there.
+
 ## [1.36.0] — 2026-09-15
 
 ### fix: drop-zone action bar was unreliable and unclear on a real device

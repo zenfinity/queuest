@@ -9,7 +9,7 @@
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import type { ItemChips } from '$lib/queue-actions';
-	import { endDragSession, QUEUE_ITEM_ZONE_TYPE } from '$lib/drag-session.svelte';
+	import { dragSession, endDragSession } from '$lib/drag-session.svelte';
 	import DragHandle from './DragHandle.svelte';
 
 	let {
@@ -77,17 +77,24 @@
 	function handleDndFinalize(
 		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS } }>
 	) {
+		// Whether the drop landed on an action-bar tile is decided by real
+		// elementsFromPoint hit-testing (DragActionBar.svelte), not by
+		// svelte-dnd-action's own cross-zone matching — see drag-session.svelte.ts's
+		// own doc comment for why: that matching compares raw bounding-box
+		// containment, and this zone's box covers every row it has, not just
+		// what's currently visible, so on any queue taller than one screen it
+		// already "contains" the action bar's on-screen position before the
+		// pointer ever gets there. Captured before endDragSession() clears it.
+		const targetedAction = dragSession.actions.find((a) => a.label === dragSession.targetedLabel);
 		endDragSession();
-		// The item was claimed by a drop-zone action-bar tile instead of a
-		// normal in-zone reorder — that tile's own action already did the
-		// real work (see DragActionTile.svelte), and svelte-dnd-action has
-		// already removed the item from this zone's tracked items by this
-		// point (it dispatched a "dragged left" consider event the moment the
-		// pointer crossed into the tile's zone). Resetting to the original
-		// `items` prop, rather than adopting e.detail.items, is what keeps
-		// the card from visually vanishing from this view.
-		if (e.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+		if (targetedAction) {
+			// The tile's own action already did the real work — reset to the
+			// original `items` prop, rather than adopting e.detail.items
+			// (which reflects wherever svelte-dnd-action's own, overridden
+			// conclusion would have placed it), so the card doesn't visually
+			// jump to a bogus in-zone position.
 			dndItems = items;
+			targetedAction.run();
 			return;
 		}
 		dndItems = e.detail.items;
@@ -313,18 +320,13 @@
 	class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
 	use:dragHandleZone={{
 		items: dndItems,
-		type: QUEUE_ITEM_ZONE_TYPE,
 		// Deliberately NOT the same flipDurationMs passed to animate:flip
 		// below. svelte-dnd-action reuses this same number to pace its own
-		// cross-zone polling loop (setInterval ≈ max(this, 100ms) — see its
-		// source), so the 250ms that looks right for the reorder-flip
-		// animation also means the library only re-checks "which zone is the
-		// pointer over" every ~267ms. A normal decisive swipe down to the
-		// drop-zone action bar (#294-drag Phase 2) can finish well inside
-		// that window, landing back in this zone instead of the target tile.
-		// 0 here drops the library into its fast ~21ms polling path; the
-		// visual reorder animation is unaffected since it's driven by
-		// animate:flip's own separate duration, not this option.
+		// same-zone polling loop (setInterval ≈ max(this, 100ms) — see its
+		// source); 0 here keeps that fast (~21ms) for a responsive live
+		// reorder preview. The visual reorder animation is unaffected since
+		// it's driven by animate:flip's own separate duration, not this
+		// option.
 		flipDurationMs: 0,
 		dragDisabled: dragBusy,
 		dropTargetStyle: {},
