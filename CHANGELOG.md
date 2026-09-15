@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.28.0] — 2026-09-14
+
+### chore: retire the standalone per-list page (#284)
+
+`/lists/[id]` duplicated `SharedListSection`'s own card markup and had drifted out of sync with it release after release as features (notes, DetailPanel, drag reorder, filters, view modes) landed on the accordion instead. Now that `/lists` renders every shared list as a full accordion using that same component, the standalone page supplied nothing the accordion doesn't already cover. Removed it — and its `+page.ts` sibling, which supplied `ogTitle`/`ogDescription` link-preview copy for direct shared-list links — and, matching this app's established pattern for every other retired route (`/search`, `/suggest`, `/collections/join/[token]`), kept it as a 301 to `/lists` rather than letting old bookmarks or shared links 404. One accepted, documented trade-off: a link shared before this ships will unfurl with generic Queuest branding after the redirect instead of "Shared list on Queuest" — the link still works, only the preview card degrades. `/collections/[id]`'s own long-standing redirect (`#208`) now points straight at `/lists` rather than chaining through the page that no longer exists.
+
+### feat: show each list's own runtime total (#285)
+
+The README and landing page have promised this since Lists shipped, but nothing on `/lists` ever rendered it — personal lists never computed a total, and shared lists computed one (`SharedListSection`'s `remainingMins`) only to throw it away, since the one caller that read it via `onStats` was the standalone page just removed above. Personal and shared list headers now both show it next to the existing title count, e.g. "3 titles · ~4h 12m" — an empty list still shows a bare count, no runtime clause.
+
+### feat: assign items to other lists from inside `/lists` (#287)
+
+Opening an item's detail panel from `/lists` deliberately omitted the list-assignment picker — a deliberate cut from the #273/#274 Queue/Lists split, back when `/app` was still where you'd browse a list's contents and its own detail panel already had the picker. Now that browsing lives on `/lists` itself, that was backwards: there was no way to add an item to another list from the exact place you're looking at it. Wired it through, mirroring `/app`'s own detail-panel usage — personal list chips, shared list chips with real membership state, and notes editing, all previously Queue-only.
+
 ## [1.27.0] — 2026-09-13
 
 ### fix: the nav-tab hint dot was ambiguous on desktop and unreachable on mobile (#288)

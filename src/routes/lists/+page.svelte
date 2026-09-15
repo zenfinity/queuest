@@ -9,7 +9,7 @@
 	// schema and API surface for zero user-facing benefit, so this is a
 	// presentation-layer rename only.
 	import { SvelteSet } from 'svelte/reactivity';
-	import { hasActiveTag, type WatchlistItem } from '$lib/types';
+	import { hasActiveTag, itemKey, activeQueueTags, type WatchlistItem } from '$lib/types';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { getAll, renameCollectionTag, clearCollectionTag } from '$lib/db';
@@ -25,9 +25,11 @@
 		setSharedCollectionColor,
 		listMembers,
 		loadCollectionItems,
+		addItemsToSharedCollection,
 		type SharedCollection,
 		type CollectionMember,
-		type OutstandingInvite
+		type OutstandingInvite,
+		type CollectionActionDeps
 	} from '$lib/collection-actions';
 	import { getLastViewed, countNewActivity } from '$lib/collection-activity';
 	import { createShareLink } from '$lib/share-create-actions';
@@ -47,9 +49,13 @@
 		toggleWatched,
 		removeQueueItem,
 		toggleSeasonProgress,
+		addItemToCollection,
+		removeItemFromCollection,
+		clearItemCollections,
+		setItemNote,
 		type QueueActionDeps
 	} from '$lib/queue-actions';
-	import { DEFAULT_BUDGET_HOURS, releaseChip } from '$lib/progress';
+	import { DEFAULT_BUDGET_HOURS, releaseChip, remainingRuntime, hms } from '$lib/progress';
 	import { readNumber } from '$lib/storage';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
 	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
@@ -105,6 +111,13 @@
 	// keyed by shared-list *id* briefly leaked shared list ids in as phantom
 	// empty personal lists the first time this shipped.
 	let sharedListColors = $state<Record<string, string>>({});
+	// Which shared lists each item already belongs to (#287), keyed by
+	// itemKey so a personal item can be matched against shared-collection
+	// items despite the two having unrelated id schemes. Mirrors
+	// app/+page.svelte's identical map exactly.
+	let sharedMembership = $state<Map<string, { id: string; name: string; color: string }[]>>(
+		new Map()
+	);
 
 	async function loadSharedCollections() {
 		sharedCollections = await listSharedCollections({
@@ -142,6 +155,22 @@
 		newActivityCounts = { ...newActivityCounts, [coll.id]: countNewActivity(items, watermark) };
 	}
 
+	// Powers DetailPanel's shared-list chips (#287) — mirrors
+	// app/+page.svelte's loadSharedMembership exactly.
+	async function loadSharedMembership() {
+		const silentDeps: CollectionActionDeps = { setBusy: () => {}, setError: () => {} };
+		const grouped: Record<string, { id: string; name: string; color: string }[]> = {};
+		for (const coll of sharedCollections) {
+			const { items: collItems } = await loadCollectionItems(coll, silentDeps);
+			const color = sharedListColors[coll.id] ?? sharedListColor(coll);
+			for (const ci of collItems) {
+				const key = itemKey(ci);
+				(grouped[key] ??= []).push({ id: coll.id, name: coll.name, color });
+			}
+		}
+		sharedMembership = new Map(Object.entries(grouped));
+	}
+
 	// Promotion is the only way a shared list is born (#145) — there is no
 	// create-from-scratch form, so there's exactly one on-ramp rather than two
 	// unrelated things both called "Lists".
@@ -163,6 +192,7 @@
 				// itself having failed — the list already exists at this point,
 				// just without its carried-over color.
 				if (oldColor) await updateSharedListColor(created, oldColor);
+				await loadSharedMembership();
 				// The personal list's own color entry is left alone — promotion
 				// is additive (#274), so "{name}" still exists as a real personal
 				// list with its item(s) in it, showing under both sections here
@@ -287,6 +317,7 @@
 	let queueColors = $state<Record<string, string>>({});
 	let collections = $state<string[]>([]);
 	let collectionCounts = $state<Record<string, number>>({});
+	let collectionRuntimes = $state<Record<string, number>>({});
 	let items = $state<WatchlistItem[]>([]);
 	let renamingCollection = $state<string | null>(null);
 	let renameInput = $state('');
@@ -321,6 +352,17 @@
 			if (isBusy) listItemBusy.add(id);
 			else listItemBusy.delete(id);
 		},
+		setError: (message) => {
+			reorderError = message;
+		}
+	};
+
+	// Backs DetailPanel's onAssignShared (#287) — errors surface through the
+	// same reorderError banner listActionDeps already uses, since it renders
+	// inline in whichever list card is expanded, i.e. exactly the card whose
+	// item's panel would be open.
+	const collectionActionDeps: CollectionActionDeps = {
+		setBusy: () => {},
 		setError: (message) => {
 			reorderError = message;
 		}
@@ -529,10 +571,14 @@
 
 	function updateCounts() {
 		const counts: Record<string, number> = {};
+		const runtimes: Record<string, number> = {};
 		for (const collection of collections) {
-			counts[collection] = items.filter((i) => hasActiveTag(i, collection)).length;
+			const inList = items.filter((i) => hasActiveTag(i, collection));
+			counts[collection] = inList.length;
+			runtimes[collection] = inList.reduce((s, i) => s + remainingRuntime(i), 0);
 		}
 		collectionCounts = counts;
+		collectionRuntimes = runtimes;
 	}
 
 	onMount(() => {
@@ -551,7 +597,7 @@
 		(async () => {
 			queueColors = getQueueColors();
 			syncEnabled = await isSyncEnabled();
-			if (syncEnabled) await loadSharedCollections();
+			if (syncEnabled) await loadSharedCollections().then(loadSharedMembership);
 		})();
 
 		(async () => {
@@ -749,7 +795,9 @@
 										{collection}
 									</span>
 									<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-										{count} title{count === 1 ? '' : 's'}
+										{count} title{count === 1 ? '' : 's'}{count > 0
+											? ` · ~${hms(collectionRuntimes[collection] ?? 0)}`
+											: ''}
 									</span>
 									<span
 										class="shrink-0 text-gray-400 transition-transform dark:text-gray-500 {isExpanded
@@ -1137,12 +1185,6 @@
 								<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
 									{coll.role === 'owner' ? 'You own this' : 'Member'}
 								</span>
-								<a
-									href={resolve('/lists/[id]', { id: coll.id })}
-									class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-								>
-									Open
-								</a>
 								{#if coll.role === 'owner'}
 									<button
 										onclick={async () => {
@@ -1330,20 +1372,50 @@
 	{/if}
 </div>
 
-<!-- ── Detail panel (#273) ────────────────────────────────────────────────
-     Minimal — no onAddTag/onRemoveTag/onClearTags/sharedCollections/
-     onAssignShared, so DetailPanel's List section (gated on onAddTag)
-     doesn't render here; assignment stays on the Queue page. showSeasons
-     is wired through toggleSeasonProgress since personal items can be TV
-     shows with real progress to track, unlike search results. -->
+<!-- ── Detail panel (#273, list-assignment wired #287) ──────────────────────
+     Mirrors app/+page.svelte's DetailPanel usage: onAddTag/onRemoveTag/
+     onClearTags/onAssignShared wired through this page's own
+     listActionDeps/collectionActionDeps/sharedMembership. Tag-mutating
+     callbacks also call updateCounts() so the per-list count/runtime
+     badges (#285) stay live without collapsing/reopening the card. -->
 {#if detailItem}
 	{@const di = detailItem}
 	<DetailPanel
-		item={di}
+		item={{ ...di, activeQueueTags: activeQueueTags(di) }}
 		{budgetHours}
 		showSeasons={true}
 		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
 		onClose={() => (detailItem = null)}
+		existingCollections={collections}
+		{queueColors}
+		onAddTag={async (tag) => {
+			await addItemToCollection(di, tag, listActionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+			updateCounts();
+		}}
+		onRemoveTag={async (tag) => {
+			await removeItemFromCollection(di, tag, listActionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+			updateCounts();
+		}}
+		onClearTags={async () => {
+			await clearItemCollections(di, listActionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+			updateCounts();
+		}}
+		onSetNote={async (notes) => {
+			await setItemNote(di, notes, listActionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
+		{sharedCollections}
+		activeSharedCollectionIds={sharedMembership.get(itemKey(di))?.map((c) => c.id) ?? []}
+		{sharedListColors}
+		onAssignShared={async (collectionId) => {
+			const coll = sharedCollections.find((c) => c.id === collectionId);
+			if (!coll) return;
+			const ok = await addItemsToSharedCollection(coll, [di], collectionActionDeps);
+			if (ok) await loadSharedMembership();
+		}}
 	>
 		{#snippet footer(item)}
 			<button
