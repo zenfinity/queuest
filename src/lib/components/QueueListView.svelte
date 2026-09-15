@@ -9,7 +9,7 @@
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import type { ItemChips } from '$lib/queue-actions';
-	import { endDragSession, QUEUE_ITEM_ZONE_TYPE } from '$lib/drag-session.svelte';
+	import { dragSession, endDragSession } from '$lib/drag-session.svelte';
 	import DragHandle from './DragHandle.svelte';
 
 	let {
@@ -73,11 +73,14 @@
 	function handleDndFinalize(
 		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS } }>
 	) {
+		// See QueueGridView.svelte's identical branch — the drop-target tile,
+		// if any, is decided by real elementsFromPoint hit-testing, not by
+		// svelte-dnd-action's own cross-zone matching.
+		const targetedAction = dragSession.actions.find((a) => a.label === dragSession.targetedLabel);
 		endDragSession();
-		// See QueueGridView.svelte's identical branch for why this resets to
-		// the original `items` prop instead of adopting e.detail.items.
-		if (e.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+		if (targetedAction) {
 			dndItems = items;
+			targetedAction.run();
 			return;
 		}
 		dndItems = e.detail.items;
@@ -307,13 +310,9 @@
 	class="divide-y divide-gray-200 overflow-hidden rounded-xl dark:divide-gray-800/60"
 	use:dragHandleZone={{
 		items: dndItems,
-		type: QUEUE_ITEM_ZONE_TYPE,
 		// See QueueGridView.svelte's identical option — deliberately not the
-		// same flipDurationMs passed to animate:flip below, since the
-		// library reuses this number to pace its own cross-zone polling
-		// loop, and 250ms's ~267ms poll gap is slow enough that a decisive
-		// swipe to the drop-zone action bar can finish before a single check
-		// ever sees the pointer over the target tile.
+		// same flipDurationMs passed to animate:flip below, kept fast for a
+		// responsive live reorder preview.
 		flipDurationMs: 0,
 		dragDisabled: dragBusy,
 		dropTargetStyle: {},

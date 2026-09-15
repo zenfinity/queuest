@@ -57,11 +57,7 @@
 		setItemNote,
 		type QueueActionDeps
 	} from '$lib/queue-actions';
-	import {
-		startDragSession,
-		QUEUE_ITEM_ZONE_TYPE,
-		type DragAction
-	} from '$lib/drag-session.svelte';
+	import { startDragSession, type DragAction } from '$lib/drag-session.svelte';
 	import { DEFAULT_BUDGET_HOURS, releaseChip, remainingRuntime, hms } from '$lib/progress';
 	import { readNumber } from '$lib/storage';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
@@ -425,7 +421,7 @@
 				}
 			}
 		];
-		startDragSession(QUEUE_ITEM_ZONE_TYPE, actions);
+		startDragSession(actions);
 	}
 
 	// Backs DetailPanel's onAssignShared (#287) — errors surface through the

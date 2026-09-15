@@ -25,11 +25,7 @@
 		type QueueActionDeps,
 		type ItemChips
 	} from '$lib/queue-actions';
-	import {
-		startDragSession,
-		QUEUE_ITEM_ZONE_TYPE,
-		type DragAction
-	} from '$lib/drag-session.svelte';
+	import { startDragSession, type DragAction } from '$lib/drag-session.svelte';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import {
 		remainingRuntime,
@@ -464,7 +460,7 @@
 				}
 			}
 		];
-		startDragSession(QUEUE_ITEM_ZONE_TYPE, actions);
+		startDragSession(actions);
 	}
 
 	const collectionActionDeps: CollectionActionDeps = {
