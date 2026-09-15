@@ -46,6 +46,7 @@
 		sortByField,
 		filterByService,
 		reorderCollectionItems,
+		snapshotTagRankLocally,
 		toggleWatched,
 		removeQueueItem,
 		toggleSeasonProgress,
@@ -58,7 +59,7 @@
 	import { DEFAULT_BUDGET_HOURS, releaseChip, remainingRuntime, hms } from '$lib/progress';
 	import { readNumber } from '$lib/storage';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
-	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
+	import { queueControls, SORT_DEFAULT_DIR, setSortBy } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import SharedListSection from '$lib/components/SharedListSection.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
@@ -356,6 +357,40 @@
 			reorderError = message;
 		}
 	};
+
+	// Which personal lists currently have an in-flight reorder write — scoped
+	// per list, not one shared flag, since multiple can be expanded at once
+	// and one list's reorder shouldn't freeze another's handle (#294-drag).
+	let reorderingCollections = new SvelteSet<string>();
+
+	// The filtered+sorted order a given personal list is currently showing —
+	// pulled out of the template's own {@const} so the drag-start snapshot
+	// below (and the template) share one definition.
+	function currentOrderFor(tag: string): WatchlistItem[] {
+		const filtered = filterByService(
+			(queueControls.watchedOn ? items : items.filter((i) => !i.watched_at)).filter((i) =>
+				hasActiveTag(i, tag)
+			),
+			queueControls.serviceFilter,
+			services.ids
+		);
+		return queueControls.sortBy === 'rank'
+			? sortByRank(filtered, tag, queueControls.sortDir)
+			: sortByField(filtered, queueControls.sortBy, queueControls.sortDir);
+	}
+
+	// Fires once, right as a drag gesture picks up in ANY expanded personal
+	// list. Snapshots every currently-expanded list, not just the one being
+	// dragged — they all read 'rank' order from the same writable
+	// queue_tags[tag].rank field, so without snapshotting them too they'd
+	// jump exactly like the dragged one would the moment sortBy flips.
+	function handleListDragStart() {
+		if (queueControls.sortBy === 'rank') return;
+		for (const tag of expandedCollections) {
+			snapshotTagRankLocally(items, currentOrderFor(tag), tag, listActionDeps);
+		}
+		setSortBy('rank');
+	}
 
 	// Backs DetailPanel's onAssignShared (#287) — errors surface through the
 	// same reorderError banner listActionDeps already uses, since it renders
@@ -816,17 +851,7 @@
 						</div>
 
 						{#if isExpanded}
-							{@const filtered = filterByService(
-								(queueControls.watchedOn ? items : items.filter((i) => !i.watched_at)).filter((i) =>
-									hasActiveTag(i, collection)
-								),
-								queueControls.serviceFilter,
-								services.ids
-							)}
-							{@const sortedItems =
-								queueControls.sortBy === 'rank'
-									? sortByRank(filtered, collection, queueControls.sortDir)
-									: sortByField(filtered, queueControls.sortBy, queueControls.sortDir)}
+							{@const sortedItems = currentOrderFor(collection)}
 							<div class="border-t border-gray-100 p-3 dark:border-gray-800/60">
 								{#if sortedItems.length === 0}
 									<p class="text-xs text-gray-400 dark:text-gray-600">
@@ -837,12 +862,19 @@
 										items={sortedItems}
 										{budgetHours}
 										busy={listItemBusy}
-										rankMode={queueControls.sortBy === 'rank'}
+										dragBusy={reorderingCollections.has(collection)}
 										onToggle={toggle}
 										onRemove={remove}
 										onOpenDetail={(item) => (detailItem = item)}
-										onReorder={(newOrder) =>
-											reorderCollectionItems(newOrder, collection, listActionDeps)}
+										onReorder={async (newOrder) => {
+											reorderingCollections.add(collection);
+											try {
+												await reorderCollectionItems(newOrder, collection, listActionDeps);
+											} finally {
+												reorderingCollections.delete(collection);
+											}
+										}}
+										onDragStart={handleListDragStart}
 										{seasonPicker}
 									/>
 								{:else}
@@ -853,12 +885,19 @@
 										items={sortedItems}
 										{budgetHours}
 										busy={listItemBusy}
-										rankMode={queueControls.sortBy === 'rank'}
+										dragBusy={reorderingCollections.has(collection)}
 										onToggle={toggle}
 										onRemove={remove}
 										onOpenDetail={(item) => (detailItem = item)}
-										onReorder={(newOrder) =>
-											reorderCollectionItems(newOrder, collection, listActionDeps)}
+										onReorder={async (newOrder) => {
+											reorderingCollections.add(collection);
+											try {
+												await reorderCollectionItems(newOrder, collection, listActionDeps);
+											} finally {
+												reorderingCollections.delete(collection);
+											}
+										}}
+										onDragStart={handleListDragStart}
 										{seasonPicker}
 									/>
 								{/if}

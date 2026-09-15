@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
-	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
+	import { dragHandleZone, TRIGGERS } from 'svelte-dnd-action';
 	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
@@ -9,6 +9,7 @@
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import type { ItemChips } from '$lib/queue-actions';
+	import DragHandle from './DragHandle.svelte';
 
 	let {
 		items,
@@ -17,12 +18,13 @@
 		chipsByItemId = new Map<number, ItemChips>(),
 		selectMode = false,
 		selected = new Set<number>(),
-		rankMode = false,
+		dragBusy = false,
 		onToggle,
 		onRemove,
 		onOpenDetail,
 		onToggleSelect,
 		onReorder,
+		onDragStart,
 		seasonPicker
 	}: {
 		items: WatchlistItem[];
@@ -34,15 +36,22 @@
 		chipsByItemId?: Map<number, ItemChips>;
 		selectMode?: boolean;
 		selected?: Set<number>;
-		/** Custom "Rank" sort is active (#216) — shows a poster-corner drag
-		 * handle for reordering. */
-		rankMode?: boolean;
+		/** True while the caller is persisting a reorder — pauses the drag
+		 * zone so a second gesture can't start mid-write. Drag itself is
+		 * otherwise always available (handles are persistent, not gated to
+		 * any particular sort mode — picking one up switches to Rank). */
+		dragBusy?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
 		onOpenDetail: (item: WatchlistItem) => void;
 		onToggleSelect?: (item: WatchlistItem) => void;
 		/** Fires once a drag gesture settles, with the full new order. */
 		onReorder?: (newOrder: WatchlistItem[]) => void;
+		/** Fires once, at the very start of a drag gesture, before any
+		 * reorder tracking — the caller's chance to snapshot the current
+		 * visual order into place and switch sort to Rank without a jump
+		 * (see queue-actions.ts's snapshotSortOrderLocally). */
+		onDragStart?: () => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -56,7 +65,10 @@
 	// so it never fights the live reorder mid-gesture.
 	let dndItems = $derived(items);
 	const flipDurationMs = $derived(motion.reduced ? 0 : 250);
-	function handleDndConsider(e: CustomEvent<{ items: WatchlistItem[] }>) {
+	function handleDndConsider(
+		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS } }>
+	) {
+		if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) onDragStart?.();
 		dndItems = e.detail.items;
 	}
 	function handleDndFinalize(e: CustomEvent<{ items: WatchlistItem[] }>) {
@@ -123,29 +135,17 @@
 				>
 			{/if}
 		</button>
-		{#if rankMode && !selectMode}
-			<!-- svelte-dnd-action's dragHandle action makes this a real
-			     role="button" tabindex="0" element unconditionally (its own
-			     keyboard mode — pick up with space/enter, move with arrow keys,
-			     drop with space/enter). It's a SIBLING of the poster <button>
-			     above, not a descendant — an interactive element can't nest
-			     inside a <button> (invalid HTML) — but dragHandle only needs to
-			     be somewhere inside the draggable item's bounding rect, not a
+		{#if !selectMode}
+			<!-- DragHandle is a SIBLING of the poster <button> above, not a
+			     descendant — an interactive element can't nest inside a
+			     <button> (invalid HTML) — but dragHandle only needs to be
+			     somewhere inside the draggable item's bounding rect, not a
 			     direct child of the drag zone's item root, so this still works
-			     with no changes to the {#each} item div below. This wrapping div's
-			     own `relative` is required, not decorative: without it the
-			     absolutely-positioned handle would resolve against a distant
-			     ancestor instead of the poster. -->
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				use:dragHandle
-				aria-label="Drag to reorder {item.title}"
-				class="absolute bottom-2 right-2 flex h-6 w-6 touch-none cursor-grab items-center justify-center rounded-full bg-black/40 text-xs text-white select-none active:cursor-grabbing"
-				onclick={(e) => e.stopPropagation()}
-			>
-				⠿
-			</div>
+			     with no changes to the {#each} item div below. This wrapping
+			     div's own `relative` is required, not decorative: without it
+			     the absolutely-positioned handle would resolve against a
+			     distant ancestor instead of the poster. -->
+			<DragHandle variant="card" label={item.title} />
 		{/if}
 	</div>
 	<div class="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
@@ -301,9 +301,10 @@
 		use:dragHandleZone={{
 			items: dndItems,
 			flipDurationMs,
-			dragDisabled: !rankMode,
+			dragDisabled: dragBusy,
 			dropTargetStyle: {},
-			dropFromOthersDisabled: true
+			dropFromOthersDisabled: true,
+			delayTouchStart: true
 		}}
 		onconsider={handleDndConsider}
 		onfinalize={handleDndFinalize}

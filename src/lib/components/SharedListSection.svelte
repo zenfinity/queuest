@@ -712,7 +712,8 @@
 						flipDurationMs,
 						dragDisabled: rankingBusy,
 						dropTargetStyle: {},
-						dropFromOthersDisabled: true
+						dropFromOthersDisabled: true,
+						delayTouchStart: true
 					}}
 					onconsider={handleBallotConsider}
 					onfinalize={handleBallotFinalize}

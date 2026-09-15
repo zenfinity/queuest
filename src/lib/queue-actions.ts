@@ -245,6 +245,61 @@ export async function reorderCollectionItems(
 }
 
 /**
+ * Persistent drag handles (#294-drag) mean picking up a handle can switch
+ * sort to Rank from any other sort — but Grid/List's live drag-tracking
+ * (`dndItems`, a writable $derived reassigned by onconsider) assumes its
+ * `items` prop doesn't change mid-gesture. Reassigning it as a side effect
+ * of a reload — even to a value-equal array — makes that mirror snap back
+ * and discard whatever the in-progress drag has accumulated so far.
+ *
+ * These two stamp the rank field into the already-in-memory items array
+ * synchronously via deps.setItems (so the visual order the drag zone reads
+ * doesn't move at all) and persist in the background — deliberately NOT
+ * going through reorderItems/reorderCollectionItems's own reloadQueue,
+ * which is exactly the async reassignment that would race the drag. Call
+ * once, right when a drag starts, with whatever order was on screen at
+ * that moment — the point is that switching sortBy to 'rank' immediately
+ * afterward is then a no-op, because the freshly-stamped rank already
+ * matches the current visual order.
+ */
+export function snapshotSortOrderLocally(
+	allItems: WatchlistItem[],
+	visibleOrder: WatchlistItem[],
+	deps: QueueActionDeps
+): void {
+	const rankOf = new Map(visibleOrder.map((item, i) => [item.id, i]));
+	deps.setItems(
+		allItems.map((item) =>
+			rankOf.has(item.id) ? { ...item, sort_order: rankOf.get(item.id) } : item
+		)
+	);
+	void setSortOrder(visibleOrder.map((i) => i.id));
+}
+
+/** Same as snapshotSortOrderLocally, scoped to one list's queue_tags[tag].rank
+ *  instead of the queue-wide sort_order — see that function's doc comment. */
+export function snapshotTagRankLocally(
+	allItems: WatchlistItem[],
+	visibleOrder: WatchlistItem[],
+	tag: string,
+	deps: QueueActionDeps
+): void {
+	const rankOf = new Map(visibleOrder.map((item, i) => [item.id, i]));
+	deps.setItems(
+		allItems.map((item) => {
+			const r = rankOf.get(item.id);
+			const existing = item.queue_tags?.[tag];
+			if (r === undefined || !existing || existing.deleted) return item;
+			return { ...item, queue_tags: { ...item.queue_tags, [tag]: { ...existing, rank: r } } };
+		})
+	);
+	void setTagRank(
+		tag,
+		visibleOrder.map((i) => i.id)
+	);
+}
+
+/**
  * Personal-list assignment, genuinely multi-select (PR2) — an item can be
  * added to or removed from any number of lists independently, rather than
  * the old single-select "replace membership with exactly this one tag"
