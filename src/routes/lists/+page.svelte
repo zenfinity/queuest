@@ -65,6 +65,7 @@
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import SharedListSection from '$lib/components/SharedListSection.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
+	import ChooseListDialog from '$lib/components/ChooseListDialog.svelte';
 	import ListHint from '$lib/components/ListHint.svelte';
 	import ShareHint from '$lib/components/ShareHint.svelte';
 	import Button from '$lib/components/Button.svelte';
@@ -345,6 +346,8 @@
 	let reorderError = $state('');
 	let budgetHours = $state(DEFAULT_BUDGET_HOURS);
 	let detailItem = $state<WatchlistItem | null>(null);
+	// Separate from detailItem — see app/+page.svelte's identical state for why.
+	let chooseListItem = $state<WatchlistItem | null>(null);
 	let releasePopupId: number | null = $state(null);
 
 	const listActionDeps: QueueActionDeps = {
@@ -388,9 +391,9 @@
 	// queue_tags[tag].rank field, so without snapshotting them too they'd
 	// jump exactly like the dragged one would the moment sortBy flips. Then
 	// populates the drop-zone action bar with actions scoped to this list
-	// and bound to this specific item. "Add to list" reopens the item's own
-	// detail panel — see app/+page.svelte's identical tile for why this
-	// isn't one tile per list.
+	// and bound to this specific item. "Add to list" opens the focused
+	// Choose List dialog — see app/+page.svelte's identical tile for why
+	// this isn't one tile per list, or the full detail panel.
 	function handleListDragStart(tag: string, id: number) {
 		if (queueControls.sortBy !== 'rank') {
 			for (const t of expandedCollections) {
@@ -417,7 +420,7 @@
 				label: 'Add to list',
 				icon: '📁',
 				run: async () => {
-					detailItem = item;
+					chooseListItem = item;
 				}
 			}
 		];
@@ -1451,11 +1454,7 @@
 </div>
 
 <!-- ── Detail panel (#273, list-assignment wired #287) ──────────────────────
-     Mirrors app/+page.svelte's DetailPanel usage: onAddTag/onRemoveTag/
-     onClearTags/onAssignShared wired through this page's own
-     listActionDeps/collectionActionDeps/sharedMembership. Tag-mutating
-     callbacks also call updateCounts() so the per-list count/runtime
-     badges (#285) stay live without collapsing/reopening the card. -->
+     Mirrors app/+page.svelte's DetailPanel usage. -->
 {#if detailItem}
 	{@const di = detailItem}
 	<DetailPanel
@@ -1464,23 +1463,8 @@
 		showSeasons={true}
 		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
 		onClose={() => (detailItem = null)}
-		existingCollections={collections}
 		{queueColors}
-		onAddTag={async (tag) => {
-			await addItemToCollection(di, tag, listActionDeps);
-			detailItem = items.find((i) => i.id === di.id) ?? null;
-			updateCounts();
-		}}
-		onRemoveTag={async (tag) => {
-			await removeItemFromCollection(di, tag, listActionDeps);
-			detailItem = items.find((i) => i.id === di.id) ?? null;
-			updateCounts();
-		}}
-		onClearTags={async () => {
-			await clearItemCollections(di, listActionDeps);
-			detailItem = items.find((i) => i.id === di.id) ?? null;
-			updateCounts();
-		}}
+		onChooseLists={() => (chooseListItem = di)}
 		onSetNote={async (notes) => {
 			await setItemNote(di, notes, listActionDeps);
 			detailItem = items.find((i) => i.id === di.id) ?? null;
@@ -1488,12 +1472,6 @@
 		{sharedCollections}
 		activeSharedCollectionIds={sharedMembership.get(itemKey(di))?.map((c) => c.id) ?? []}
 		{sharedListColors}
-		onAssignShared={async (collectionId) => {
-			const coll = sharedCollections.find((c) => c.id === collectionId);
-			if (!coll) return;
-			const ok = await addItemsToSharedCollection(coll, [di], collectionActionDeps);
-			if (ok) await loadSharedMembership();
-		}}
 	>
 		{#snippet footer(item)}
 			<button
@@ -1517,4 +1495,49 @@
 			>
 		{/snippet}
 	</DetailPanel>
+{/if}
+
+<!-- ── Choose List dialog (#294-drag) — see app/+page.svelte's identical
+     block for why this is separate from detailItem/DetailPanel above.
+     Tag-mutating closures also call updateCounts() so the per-list
+     count/runtime badges (#285) stay live without collapsing/reopening
+     the card. -->
+{#if chooseListItem}
+	{@const cli = chooseListItem}
+	<ChooseListDialog
+		item={{ ...cli, activeQueueTags: activeQueueTags(cli) }}
+		existingCollections={collections}
+		{queueColors}
+		onAddTag={async (tag) => {
+			await addItemToCollection(cli, tag, listActionDeps);
+			const fresh = items.find((i) => i.id === cli.id) ?? null;
+			chooseListItem = fresh;
+			if (detailItem?.id === cli.id) detailItem = fresh;
+			updateCounts();
+		}}
+		onRemoveTag={async (tag) => {
+			await removeItemFromCollection(cli, tag, listActionDeps);
+			const fresh = items.find((i) => i.id === cli.id) ?? null;
+			chooseListItem = fresh;
+			if (detailItem?.id === cli.id) detailItem = fresh;
+			updateCounts();
+		}}
+		onClearTags={async () => {
+			await clearItemCollections(cli, listActionDeps);
+			const fresh = items.find((i) => i.id === cli.id) ?? null;
+			chooseListItem = fresh;
+			if (detailItem?.id === cli.id) detailItem = fresh;
+			updateCounts();
+		}}
+		{sharedCollections}
+		activeSharedCollectionIds={sharedMembership.get(itemKey(cli))?.map((c) => c.id) ?? []}
+		{sharedListColors}
+		onAssignShared={async (collectionId) => {
+			const coll = sharedCollections.find((c) => c.id === collectionId);
+			if (!coll) return;
+			const ok = await addItemsToSharedCollection(coll, [cli], collectionActionDeps);
+			if (ok) await loadSharedMembership();
+		}}
+		onClose={() => (chooseListItem = null)}
+	/>
 {/if}

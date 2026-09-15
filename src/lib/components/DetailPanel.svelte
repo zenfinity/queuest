@@ -54,15 +54,11 @@
 		onToggleSeason,
 		onClose,
 		footer,
-		existingCollections = [],
 		queueColors = {},
-		onAddTag,
-		onRemoveTag,
-		onClearTags,
 		sharedCollections = [],
 		activeSharedCollectionIds = [],
 		sharedListColors = {},
-		onAssignShared,
+		onChooseLists,
 		onSetNote
 	}: {
 		item: DetailPanelItem;
@@ -71,27 +67,21 @@
 		onToggleSeason?: (seasonNumber: number) => void;
 		onClose: () => void;
 		footer: Snippet<[DetailPanelItem]>;
-		existingCollections?: string[];
 		/** Colors for the personal-list chips below, keyed by list name. */
 		queueColors?: Record<string, string>;
-		// Multi-select personal-list toggling (#274 PR2) — replaces the old
-		// single onSetCollection(tag | null) "replace membership" callback.
-		// Rendering this section at all is still gated on onAddTag being
-		// provided (mirrors the old onSetCollection gate) — add/+page.svelte's
-		// DetailPanel usage passes none of these, so its List section simply
-		// doesn't render there, same as before.
-		onAddTag?: (tag: string) => Promise<void>;
-		onRemoveTag?: (tag: string) => Promise<void>;
-		onClearTags?: () => Promise<void>;
 		sharedCollections?: { id: string; name: string }[];
-		/** Which of `sharedCollections` this item is already a member of —
-		 * shared chips render as active-but-not-toggleable for these (removal
-		 * from a shared collection stays its own separate, more consequential
-		 * flow, not folded into this toggle). */
+		/** Which of `sharedCollections` this item is already a member of. */
 		activeSharedCollectionIds?: string[];
 		/** Colors for the shared-list chips below, keyed by collection id. */
 		sharedListColors?: Record<string, string>;
-		onAssignShared?: (collectionId: string) => Promise<void>;
+		// Opens the focused Choose List dialog (ChooseListDialog.svelte) for
+		// this item — this panel only displays current membership, it
+		// doesn't mutate it directly. Rendering the List section at all is
+		// gated on this being provided — add/+page.svelte's and
+		// SharedListSection's DetailPanel usages pass neither this nor the
+		// display props, so their List section simply doesn't render, same
+		// as before (#274 PR2 / #294-drag Choose List dialog).
+		onChooseLists?: () => void;
 		// Omitted entirely for a shared item the viewer doesn't own (#155/#236)
 		// — the note still renders, read-only, from item.notes.
 		onSetNote?: (notes: string | null) => Promise<void>;
@@ -100,7 +90,6 @@
 	let overviewExpanded = $state(false);
 	let posterExpanded = $state(false);
 	let releasePopupOpen = $state(false);
-	let collectionBusy = $state(false);
 	let noteDraft = $state('');
 	let noteBusy = $state(false);
 
@@ -321,102 +310,58 @@
 		</div>
 
 		<div class="space-y-4 px-4 pb-4">
-			<!-- List (#274 PR2 — genuinely multi-select: each chip toggles that one
-			     list independently, replacing the old single <select> that could
-			     only ever replace an item's whole membership with one tag). -->
-			{#if onAddTag}
+			<!-- List (#274 PR2's chip-toggle picker moved to ChooseListDialog.svelte
+			     — this panel only displays current membership now and hands off
+			     to that focused dialog for changes, #294-drag Choose List. -->
+			{#if onChooseLists}
 				{@const active = item.activeQueueTags ?? []}
+				{@const activeShared = sharedCollections.filter((c) =>
+					activeSharedCollectionIds.includes(c.id)
+				)}
 				<div>
-					<div class="flex items-center justify-between gap-2">
-						<span
-							class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-							>List</span
-						>
-						{#if active.length > 0}
-							<button
-								type="button"
-								disabled={collectionBusy}
-								onclick={async () => {
-									collectionBusy = true;
-									try {
-										await onClearTags?.();
-									} finally {
-										collectionBusy = false;
-									}
-								}}
-								class="text-[10px] font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
-							>
-								Clear all
-							</button>
-						{/if}
-					</div>
-					{#if existingCollections.length > 0}
+					<span
+						class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+						>List</span
+					>
+					{#if active.length > 0 || activeShared.length > 0}
 						<div class="mt-1.5 flex flex-wrap gap-1">
-							{#each existingCollections as name (name)}
-								{@const isActive = active.includes(name)}
-								<button
-									type="button"
-									disabled={collectionBusy}
-									aria-pressed={isActive}
-									onclick={async () => {
-										collectionBusy = true;
-										try {
-											if (isActive) await onRemoveTag?.(name);
-											else await onAddTag(name);
-										} finally {
-											collectionBusy = false;
-										}
-									}}
-									class="rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 {isActive
-										? 'text-white'
-										: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
-									style={isActive ? `background:${queueColors[name] ?? '#f97316'}` : ''}
+							{#each active as name (name)}
+								<span
+									class="rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+									style="background:{queueColors[name] ?? '#f97316'}"
 								>
 									{name}
-								</button>
+								</span>
+							{/each}
+							{#each activeShared as coll (coll.id)}
+								{@const sharedColor = sharedListColors[coll.id] ?? '#9ca3af'}
+								<span
+									class="rounded-full border px-2 py-0.5 text-[10px] font-medium"
+									style="border-color:{sharedColor}; color:{sharedColor}"
+								>
+									{coll.name}
+								</span>
 							{/each}
 						</div>
+					{:else}
+						<p class="mt-1.5 text-xs text-gray-400 dark:text-gray-600">Not in any list yet.</p>
 					{/if}
-					{#if onAssignShared && sharedCollections.length > 0}
-						<div class="mt-2">
-							<p
-								class="text-[9px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500"
-							>
-								Shared
-							</p>
-							<div class="mt-1 flex flex-wrap gap-1">
-								{#each sharedCollections as coll (coll.id)}
-									{@const isActive = activeSharedCollectionIds.includes(coll.id)}
-									{@const sharedColor = sharedListColors[coll.id] ?? '#9ca3af'}
-									<button
-										type="button"
-										disabled={collectionBusy || isActive}
-										class="rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:cursor-default {isActive
-											? ''
-											: 'hover:bg-gray-50 dark:hover:bg-gray-800'}"
-										style="border-color:{sharedColor}; color:{sharedColor};"
-										onclick={async () => {
-											collectionBusy = true;
-											try {
-												await onAssignShared(coll.id);
-											} finally {
-												collectionBusy = false;
-											}
-										}}
-									>
-										{coll.name}{isActive ? ' ✓' : ''}
-									</button>
-								{/each}
-							</div>
-						</div>
-					{/if}
-					<button
-						type="button"
-						onclick={() => goto(resolve('/lists'))}
-						class="mt-2 text-[10px] font-medium text-orange-500 hover:text-orange-400"
-					>
-						Manage lists →
-					</button>
+					<div class="mt-2 flex items-center gap-3">
+						<button
+							type="button"
+							onclick={onChooseLists}
+							class="text-[10px] font-medium text-orange-500 hover:text-orange-400"
+						>
+							Choose lists →
+						</button>
+						<button
+							type="button"
+							onclick={() => goto(resolve('/lists'))}
+							class="text-[10px] font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+						>
+							Manage lists →
+						</button>
+					</div>
 				</div>
 			{/if}
 
