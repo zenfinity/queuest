@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.35.0] — 2026-09-15
+
+### feat: drop-zone action bar, phase 2 of the unified drag-to-reorder model
+
+Phase 2 of #294-drag: picking up a card or row now also raises a fixed bar along the bottom of the screen with a handful of one-drop actions — Move to top, Move to bottom, and one tile per list the item can be copied into (capped at 6, with a "+N more — open the card" note beyond that pointing at the existing detail-panel picker rather than growing into a scrollable list of its own). Drop the card onto a tile instead of a normal grid/list position and that tile's action runs instead of a reorder. On `/lists`, the tile set is scoped to whichever list is actually being dragged from — the list itself is excluded from its own copy targets, and every other personal list plus every shared list the account belongs to is offered.
+
+Built on `svelte-dnd-action`'s own cross-zone `type` matching rather than manual hit-testing: each action tile is its own tiny drop zone sharing a type with whichever surface started the drag. Dropping onto a tile is a "move to another zone" as far as the library's concerned, which by default deletes the item from its origin zone's own tracked list — both Grid and List's `onfinalize` now special-case that trigger to put the card back exactly where it was, since the real effect happens entirely in the tile's own closure, not through the normal reorder path.
+
+Two things came out of building this that also affect plain reordering, both shipped as part of this rev rather than held back:
+- `useCursorForDetection` is now on for both zones. The library's default hit-testing point is the *dragged card's own center*, not the cursor — a reasonable default when a handle sits in the middle of what it drags, but ours sit at an edge (Grid: bottom bar; List: leading edge), so the center trails the actual touch point by a large, size-dependent offset. Harmless for a same-zone reorder (both the "entered" and final-index math carry the same offset, so it mostly cancels out), but it meant the reference point often never reached the action bar at all — dragging felt unresponsive the moment a target lived somewhere other than inside the originating list.
+- Along the way, confirmed directly (a `display:contents`-style aside from v1.34.0's fix, this time verified against the library's own `requestAnimationFrame`-gated observation loop) that this environment's own browser-automation tooling won't reliably drive a multi-zone drag unless something forces the tab to actually render a frame partway through the gesture — not an app bug, just a note for how this and future drag work gets verified in this session.
+
+`queue-actions.ts` gains `moveItemToEdge`/`moveCollectionItemToEdge`, thin wrappers around the existing `reorderItems`/`reorderCollectionItems` that just reorder to `[item, ...rest]` or `[...rest, item]` first. New `drag-session.svelte.ts` singleton (same shape as `queue-controls.svelte.ts`) and `DragActionBar`/`DragActionTile` components, mounted once in `+layout.svelte`.
+
+Phase 3 (bringing this and persistent drag itself to shared lists — building your ballot by dragging, copy to queue) follows as its own rev.
+
 ## [1.34.0] — 2026-09-15
 
 ### fix: grid view drag never actually reordered anything

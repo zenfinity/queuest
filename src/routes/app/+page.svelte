@@ -19,11 +19,17 @@
 		setItemNote,
 		reorderItems,
 		snapshotSortOrderLocally,
+		moveItemToEdge,
 		bulkSetWatched,
 		bulkRemove,
 		type QueueActionDeps,
 		type ItemChips
 	} from '$lib/queue-actions';
+	import {
+		startDragSession,
+		QUEUE_ITEM_ZONE_TYPE,
+		type DragAction
+	} from '$lib/drag-session.svelte';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import {
 		remainingRuntime,
@@ -422,13 +428,68 @@
 		}
 	}
 
-	// Fires once, right as a drag gesture picks up — see
-	// snapshotSortOrderLocally's own doc comment for why this has to happen
-	// before, not instead of, switching to Rank sort.
-	function handleDragStart() {
-		if (queueControls.sortBy === 'rank') return;
-		snapshotSortOrderLocally(items, flatItems, actionDeps);
-		setSortBy('rank');
+	// Copy-to-list tiles cap (#294-drag Phase 2) — beyond this, the bar shows
+	// a non-interactive "+N more" note pointing at the card's own detail
+	// panel instead of growing into a scrollable list picker of its own.
+	const LIST_TARGET_CAP = 6;
+
+	// Fires once, right as a drag gesture picks up, with the id of the item
+	// that was picked up. Snapshots the current visual order into place and
+	// switches to Rank sort without a jump (see snapshotSortOrderLocally's
+	// own doc comment), then populates the drop-zone action bar with
+	// move/copy actions bound to this specific item.
+	function handleDragStart(id: number) {
+		if (queueControls.sortBy !== 'rank') {
+			snapshotSortOrderLocally(items, flatItems, actionDeps);
+			setSortBy('rank');
+		}
+		const item = items.find((i) => i.id === id);
+		if (!item) return;
+
+		const listTargets = [
+			...existingCollections.map((name) => ({ kind: 'personal' as const, name })),
+			...sharedCollections.map((coll) => ({ kind: 'shared' as const, coll }))
+		];
+		const cappedTargets = listTargets.slice(0, LIST_TARGET_CAP);
+		const overflow = listTargets.length - cappedTargets.length;
+
+		const actions: DragAction[] = [
+			{
+				label: 'Move to top',
+				icon: '⬆️',
+				run: () => moveItemToEdge(item, flatItems, 'top', actionDeps)
+			},
+			{
+				label: 'Move to bottom',
+				icon: '⬇️',
+				run: () => moveItemToEdge(item, flatItems, 'bottom', actionDeps)
+			},
+			...cappedTargets.map((target): DragAction =>
+				target.kind === 'personal'
+					? {
+							label: target.name,
+							icon: '📁',
+							run: () => addItemToCollection(item, target.name, actionDeps)
+						}
+					: {
+							label: target.coll.name,
+							icon: '👥',
+							run: async () => {
+								const ok = await addItemsToSharedCollection(
+									target.coll,
+									[item],
+									collectionActionDeps
+								);
+								if (ok) await loadSharedMembership();
+							}
+						}
+			)
+		];
+		startDragSession(
+			QUEUE_ITEM_ZONE_TYPE,
+			actions,
+			overflow > 0 ? `+${overflow} more — open the card for the full list` : null
+		);
 	}
 
 	const collectionActionDeps: CollectionActionDeps = {

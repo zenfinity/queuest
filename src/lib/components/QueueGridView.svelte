@@ -9,6 +9,7 @@
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import type { ItemChips } from '$lib/queue-actions';
+	import { endDragSession, QUEUE_ITEM_ZONE_TYPE } from '$lib/drag-session.svelte';
 	import DragHandle from './DragHandle.svelte';
 
 	let {
@@ -48,10 +49,12 @@
 		/** Fires once a drag gesture settles, with the full new order. */
 		onReorder?: (newOrder: WatchlistItem[]) => void;
 		/** Fires once, at the very start of a drag gesture, before any
-		 * reorder tracking — the caller's chance to snapshot the current
-		 * visual order into place and switch sort to Rank without a jump
-		 * (see queue-actions.ts's snapshotSortOrderLocally). */
-		onDragStart?: () => void;
+		 * reorder tracking, with the id of the item that was picked up — the
+		 * caller's chance to snapshot the current visual order into place and
+		 * switch sort to Rank without a jump (see queue-actions.ts's
+		 * snapshotSortOrderLocally), and to populate the drop-zone action bar
+		 * (drag-session.svelte.ts) with actions bound to this item. */
+		onDragStart?: (id: number) => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -66,12 +69,27 @@
 	let dndItems = $derived(items);
 	const flipDurationMs = $derived(motion.reduced ? 0 : 250);
 	function handleDndConsider(
-		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS } }>
+		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS; id: string } }>
 	) {
-		if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) onDragStart?.();
+		if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) onDragStart?.(Number(e.detail.info.id));
 		dndItems = e.detail.items;
 	}
-	function handleDndFinalize(e: CustomEvent<{ items: WatchlistItem[] }>) {
+	function handleDndFinalize(
+		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS } }>
+	) {
+		endDragSession();
+		// The item was claimed by a drop-zone action-bar tile instead of a
+		// normal in-zone reorder — that tile's own action already did the
+		// real work (see DragActionTile.svelte), and svelte-dnd-action has
+		// already removed the item from this zone's tracked items by this
+		// point (it dispatched a "dragged left" consider event the moment the
+		// pointer crossed into the tile's zone). Resetting to the original
+		// `items` prop, rather than adopting e.detail.items, is what keeps
+		// the card from visually vanishing from this view.
+		if (e.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+			dndItems = items;
+			return;
+		}
 		dndItems = e.detail.items;
 		onReorder?.(dndItems);
 	}
@@ -295,11 +313,18 @@
 	class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
 	use:dragHandleZone={{
 		items: dndItems,
+		type: QUEUE_ITEM_ZONE_TYPE,
 		flipDurationMs,
 		dragDisabled: dragBusy,
 		dropTargetStyle: {},
 		dropFromOthersDisabled: true,
-		delayTouchStart: true
+		delayTouchStart: true,
+		// The handle sits at the card's bottom edge, not its center, so the
+		// library's default zone/index hit-testing (the dragged element's own
+		// center) would trail well behind the actual touch point — most
+		// visibly reaching for the drop-zone action bar (#294-drag Phase 2),
+		// which needs the cursor's real position to be reachable at all.
+		useCursorForDetection: true
 	}}
 	onconsider={handleDndConsider}
 	onfinalize={handleDndFinalize}
