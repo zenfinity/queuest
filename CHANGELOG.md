@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.39.0] — 2026-09-15
+
+### feat: a focused Choose List dialog, reachable from the drag tile and the detail panel
+
+The drop-zone action bar's "Add to list" tile (#294-drag Phase 2) opened the full detail panel — a workaround from when listing every list as its own tile in the bar didn't work as a real interaction. That's heavier than the job calls for: picking up a card to add it to a list doesn't need the poster, overview, cast, notes, and seasons along for the ride.
+
+New `ChooseListDialog.svelte` — just the list-membership picker (the same chip-toggle interaction the detail panel already had, immediate-commit per click, no staging), as a small centered modal rather than an edge-anchored sheet, since one of its two triggers — the drag tile — vanishes the instant the drag ends and has no stable element left to anchor a popover to. Matches the app's one other centered dialog (Settings' Feedback modal) rather than inventing a new pattern.
+
+`DetailPanel` no longer owns list-mutation logic itself (`onAddTag`/`onRemoveTag`/`onClearTags`/`onAssignShared` are gone from its props) — its List section is now a read-only summary of current membership plus a **Choose lists →** button that opens the same dialog, stacked on top of the still-open panel. **Manage lists →** (navigates to `/lists`) is untouched, a distinct affordance from picking this one item's own lists. Since the dialog can open from inside an already-open detail panel or entirely on its own from the drag tile, each list-mutation refreshes both the dialog's and (if showing the same item) the detail panel's state, so toggling a chip in one updates the other live without either closing.
+
 ## [1.38.0] — 2026-09-15
 
 ### feat: bring drag-to-reorder to shared lists, phase 3 (final) of the unified model

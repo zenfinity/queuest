@@ -52,6 +52,7 @@
 	import { readNumber, readRecord, readBoolean } from '$lib/storage';
 	import type { HintState } from '$lib/app-state';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
+	import ChooseListDialog from '$lib/components/ChooseListDialog.svelte';
 	import QueueGanttView from '$lib/components/QueueGanttView.svelte';
 	import QueueListView from '$lib/components/QueueListView.svelte';
 	import QueueGridView from '$lib/components/QueueGridView.svelte';
@@ -197,6 +198,11 @@
 
 	let releasePopupId: number | null = $state(null);
 	let detailItem: WatchlistItem | null = $state(null);
+	// Separate from detailItem — the Choose List dialog (ChooseListDialog.svelte,
+	// #294-drag) can be open on its own (from the drag action bar's "Add to
+	// list" tile) or stacked on top of an already-open DetailPanel (from its
+	// own "Choose lists →" button), so it needs its own visibility state.
+	let chooseListItem: WatchlistItem | null = $state(null);
 
 	let budgetHours = $state(DEFAULT_BUDGET_HOURS); // user-adjustable month budget
 
@@ -428,11 +434,12 @@
 	// that was picked up. Snapshots the current visual order into place and
 	// switches to Rank sort without a jump (see snapshotSortOrderLocally's
 	// own doc comment), then populates the drop-zone action bar with actions
-	// bound to this specific item. "Add to list" reopens the item's own
-	// detail panel rather than listing every personal/shared list as its own
+	// bound to this specific item. "Add to list" opens the focused Choose
+	// List dialog rather than listing every personal/shared list as its own
 	// tile — a wall of small same-sized targets read as visually
-	// indistinguishable and were unreliable to aim for; the detail panel
-	// already has the exact picker this needs; built once, used everywhere.
+	// indistinguishable and were unreliable to aim for — and rather than the
+	// full detail panel, which is heavier than this one job needs (#294-drag
+	// Choose List dialog).
 	function handleDragStart(id: number) {
 		if (queueControls.sortBy !== 'rank') {
 			snapshotSortOrderLocally(items, flatItems, actionDeps);
@@ -456,7 +463,7 @@
 				label: 'Add to list',
 				icon: '📁',
 				run: async () => {
-					detailItem = item;
+					chooseListItem = item;
 				}
 			}
 		];
@@ -975,20 +982,8 @@
 		showSeasons={true}
 		onToggleSeason={(seasonNum) => toggleSeason(di, seasonNum)}
 		onClose={() => (detailItem = null)}
-		{existingCollections}
 		{queueColors}
-		onAddTag={async (tag) => {
-			await addItemToCollection(di, tag, actionDeps);
-			detailItem = items.find((i) => i.id === di.id) ?? null;
-		}}
-		onRemoveTag={async (tag) => {
-			await removeItemFromCollection(di, tag, actionDeps);
-			detailItem = items.find((i) => i.id === di.id) ?? null;
-		}}
-		onClearTags={async () => {
-			await clearItemCollections(di, actionDeps);
-			detailItem = items.find((i) => i.id === di.id) ?? null;
-		}}
+		onChooseLists={() => (chooseListItem = di)}
 		onSetNote={async (notes) => {
 			await setItemNote(di, notes, actionDeps);
 			detailItem = items.find((i) => i.id === di.id) ?? null;
@@ -996,12 +991,6 @@
 		{sharedCollections}
 		activeSharedCollectionIds={sharedMembership.get(itemKey(di))?.map((c) => c.id) ?? []}
 		{sharedListColors}
-		onAssignShared={async (collectionId) => {
-			const coll = sharedCollections.find((c) => c.id === collectionId);
-			if (!coll) return;
-			const ok = await addItemsToSharedCollection(coll, [di], collectionActionDeps);
-			if (ok) await loadSharedMembership();
-		}}
 	>
 		{#snippet footer(item)}
 			<button
@@ -1025,6 +1014,48 @@
 			>
 		{/snippet}
 	</DetailPanel>
+{/if}
+
+<!-- ── Choose List dialog (#294-drag) ────────────────────────────────────────
+     Separate from detailItem/DetailPanel above — can be open on its own
+     (from the drag action bar's "Add to list" tile) or stacked on top of an
+     already-open DetailPanel (from its own "Choose lists →" button), so
+     each mutation refreshes both when they reference the same item. -->
+{#if chooseListItem}
+	{@const cli = chooseListItem}
+	<ChooseListDialog
+		item={{ ...cli, activeQueueTags: activeQueueTags(cli) }}
+		{existingCollections}
+		{queueColors}
+		onAddTag={async (tag) => {
+			await addItemToCollection(cli, tag, actionDeps);
+			const fresh = items.find((i) => i.id === cli.id) ?? null;
+			chooseListItem = fresh;
+			if (detailItem?.id === cli.id) detailItem = fresh;
+		}}
+		onRemoveTag={async (tag) => {
+			await removeItemFromCollection(cli, tag, actionDeps);
+			const fresh = items.find((i) => i.id === cli.id) ?? null;
+			chooseListItem = fresh;
+			if (detailItem?.id === cli.id) detailItem = fresh;
+		}}
+		onClearTags={async () => {
+			await clearItemCollections(cli, actionDeps);
+			const fresh = items.find((i) => i.id === cli.id) ?? null;
+			chooseListItem = fresh;
+			if (detailItem?.id === cli.id) detailItem = fresh;
+		}}
+		{sharedCollections}
+		activeSharedCollectionIds={sharedMembership.get(itemKey(cli))?.map((c) => c.id) ?? []}
+		{sharedListColors}
+		onAssignShared={async (collectionId) => {
+			const coll = sharedCollections.find((c) => c.id === collectionId);
+			if (!coll) return;
+			const ok = await addItemsToSharedCollection(coll, [cli], collectionActionDeps);
+			if (ok) await loadSharedMembership();
+		}}
+		onClose={() => (chooseListItem = null)}
+	/>
 {/if}
 
 <!-- Filter dock now lives in src/routes/+layout.svelte (shared between the
