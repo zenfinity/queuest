@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
-	import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
+	import { dragHandleZone, TRIGGERS } from 'svelte-dnd-action';
 	import type { WatchlistItem } from '$lib/types';
 	import { TMDB_IMG, formatRuntime } from '$lib/tmdb';
 	import { resolvedHue } from '$lib/colors';
@@ -9,6 +9,7 @@
 	import { motion } from '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import type { ItemChips } from '$lib/queue-actions';
+	import DragHandle from './DragHandle.svelte';
 
 	let {
 		items,
@@ -17,12 +18,13 @@
 		chipsByItemId = new Map<number, ItemChips>(),
 		selectMode = false,
 		selected = new Set<number>(),
-		rankMode = false,
+		dragBusy = false,
 		onToggle,
 		onRemove,
 		onOpenDetail,
 		onToggleSelect,
 		onReorder,
+		onDragStart,
 		seasonPicker
 	}: {
 		items: WatchlistItem[];
@@ -34,15 +36,22 @@
 		chipsByItemId?: Map<number, ItemChips>;
 		selectMode?: boolean;
 		selected?: Set<number>;
-		/** Custom "Rank" sort is active (#216) — shows a drag handle for
-		 * reordering (#231). */
-		rankMode?: boolean;
+		/** True while the caller is persisting a reorder — pauses the drag
+		 * zone so a second gesture can't start mid-write. Drag itself is
+		 * otherwise always available (handles are persistent, not gated to
+		 * any particular sort mode — picking one up switches to Rank). */
+		dragBusy?: boolean;
 		onToggle: (item: WatchlistItem) => Promise<void>;
 		onRemove: (item: WatchlistItem) => Promise<void>;
 		onOpenDetail: (item: WatchlistItem) => void;
 		onToggleSelect?: (item: WatchlistItem) => void;
 		/** Fires once a drag gesture settles, with the full new order. */
 		onReorder?: (newOrder: WatchlistItem[]) => void;
+		/** Fires once, at the very start of a drag gesture, before any
+		 * reorder tracking — the caller's chance to snapshot the current
+		 * visual order into place and switch sort to Rank without a jump
+		 * (see queue-actions.ts's snapshotSortOrderLocally). */
+		onDragStart?: () => void;
 		seasonPicker: Snippet<[WatchlistItem]>;
 	} = $props();
 
@@ -52,7 +61,10 @@
 	// than plain $state.
 	let dndItems = $derived(items);
 	const flipDurationMs = $derived(motion.reduced ? 0 : 250);
-	function handleDndConsider(e: CustomEvent<{ items: WatchlistItem[] }>) {
+	function handleDndConsider(
+		e: CustomEvent<{ items: WatchlistItem[]; info: { trigger: TRIGGERS } }>
+	) {
+		if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) onDragStart?.();
 		dndItems = e.detail.items;
 	}
 	function handleDndFinalize(e: CustomEvent<{ items: WatchlistItem[] }>) {
@@ -78,6 +90,9 @@
 	<!-- Row 1: poster · title · actions -->
 	{@const isSelected = selected.has(item.id)}
 	<div class="flex items-center gap-3">
+		{#if !selectMode}
+			<DragHandle variant="row" label={item.title} />
+		{/if}
 		{#if selectMode}
 			<span
 				class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold {isSelected
@@ -121,25 +136,6 @@
 		{/if}
 		{#if !selectMode}
 			<div class="flex shrink-0 gap-1">
-				{#if rankMode}
-					<!-- svelte-dnd-action's dragHandle action makes this a real
-					     role="button" tabindex="0" element unconditionally (it has
-					     its own keyboard mode — pick up with space/enter, move with
-					     arrow keys, drop with space/enter), so it's given a proper
-					     label rather than hidden. The role/tabindex/keydown handling
-					     the linter wants are all supplied at runtime by the action,
-					     invisible to static analysis. -->
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div
-						use:dragHandle
-						aria-label="Drag to reorder {item.title}"
-						class="touch-none cursor-grab rounded bg-gray-100 px-1.5 py-1 text-[10px] text-gray-500 select-none active:cursor-grabbing dark:bg-gray-800 dark:text-gray-400"
-						onclick={(e) => e.stopPropagation()}
-					>
-						⠿
-					</div>
-				{/if}
 				<button
 					class="rounded bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
 					disabled={busy.has(item.id)}
@@ -300,9 +296,10 @@
 	use:dragHandleZone={{
 		items: dndItems,
 		flipDurationMs,
-		dragDisabled: !rankMode,
+		dragDisabled: dragBusy,
 		dropTargetStyle: {},
-		dropFromOthersDisabled: true
+		dropFromOthersDisabled: true,
+		delayTouchStart: true
 	}}
 	onconsider={handleDndConsider}
 	onfinalize={handleDndFinalize}

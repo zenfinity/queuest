@@ -39,6 +39,9 @@ const {
 	removeItemFromCollection,
 	clearItemCollections,
 	reorderItems,
+	reorderCollectionItems,
+	snapshotSortOrderLocally,
+	snapshotTagRankLocally,
 	bulkAddToCollection,
 	bulkRemoveFromCollection,
 	bulkClearCollections,
@@ -482,6 +485,96 @@ describe('reorderItems', () => {
 
 		expect(state.error).toBe('write failed');
 		expect(state.busy.size).toBe(0);
+	});
+});
+
+describe('reorderCollectionItems', () => {
+	it('persists the full settled order for one list via setTagRank and reloads', async () => {
+		const { deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2 });
+		const c = makeItem({ id: 3 });
+		setTagRank.mockResolvedValue(undefined);
+		getAll.mockResolvedValue([c, a, b]);
+
+		await reorderCollectionItems([c, a, b], 'Movie Night', deps);
+
+		expect(setTagRank).toHaveBeenCalledWith('Movie Night', [3, 1, 2]);
+		expect(getAll).toHaveBeenCalledOnce();
+	});
+
+	it('surfaces a list-specific error without touching per-item busy state', async () => {
+		const { state, deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2 });
+		setTagRank.mockRejectedValue(new Error('write failed'));
+
+		await reorderCollectionItems([b, a], 'Movie Night', deps);
+
+		expect(state.error).toBe('write failed');
+		expect(state.busy.size).toBe(0);
+	});
+});
+
+describe('snapshotSortOrderLocally', () => {
+	it('stamps sort_order onto the in-memory items to match the given visible order', () => {
+		const { state, deps } = makeDeps();
+		const a = makeItem({ id: 1, title: 'A' });
+		const b = makeItem({ id: 2, title: 'B' });
+		const c = makeItem({ id: 3, title: 'C' });
+
+		snapshotSortOrderLocally([a, b, c], [c, a, b], deps);
+
+		expect(state.items.find((i) => i.id === 1)?.sort_order).toBe(1);
+		expect(state.items.find((i) => i.id === 2)?.sort_order).toBe(2);
+		expect(state.items.find((i) => i.id === 3)?.sort_order).toBe(0);
+	});
+
+	it('leaves items outside the visible order untouched, and persists in the background', () => {
+		const { state, deps } = makeDeps();
+		const a = makeItem({ id: 1 });
+		const b = makeItem({ id: 2, sort_order: 99 });
+		setSortOrder.mockResolvedValue(undefined);
+
+		snapshotSortOrderLocally([a, b], [a], deps);
+
+		expect(state.items.find((i) => i.id === 2)?.sort_order).toBe(99);
+		expect(setSortOrder).toHaveBeenCalledWith([1]);
+	});
+});
+
+describe('snapshotTagRankLocally', () => {
+	it('stamps queue_tags[tag].rank onto the in-memory items to match the given visible order', () => {
+		const { state, deps } = makeDeps();
+		const at = '2024-01-01T00:00:00.000Z';
+		const a = makeItem({ id: 1, queue_tags: { 'Movie Night': { at } } });
+		const b = makeItem({ id: 2, queue_tags: { 'Movie Night': { at } } });
+
+		snapshotTagRankLocally([a, b], [b, a], 'Movie Night', deps);
+
+		expect(state.items.find((i) => i.id === 1)?.queue_tags?.['Movie Night'].rank).toBe(1);
+		expect(state.items.find((i) => i.id === 2)?.queue_tags?.['Movie Night'].rank).toBe(0);
+	});
+
+	it('skips an item whose tag is absent or tombstoned, and persists in the background', () => {
+		const { state, deps } = makeDeps();
+		const at = '2024-01-01T00:00:00.000Z';
+		const tagged = makeItem({ id: 1, queue_tags: { 'Movie Night': { at } } });
+		const untagged = makeItem({ id: 2 });
+		const tombstoned = makeItem({ id: 3, queue_tags: { 'Movie Night': { at, deleted: true } } });
+		setTagRank.mockResolvedValue(undefined);
+
+		snapshotTagRankLocally(
+			[tagged, untagged, tombstoned],
+			[tagged, untagged, tombstoned],
+			'Movie Night',
+			deps
+		);
+
+		expect(state.items.find((i) => i.id === 1)?.queue_tags?.['Movie Night'].rank).toBe(0);
+		expect(state.items.find((i) => i.id === 2)?.queue_tags).toBeUndefined();
+		expect(state.items.find((i) => i.id === 3)?.queue_tags?.['Movie Night'].rank).toBeUndefined();
+		expect(setTagRank).toHaveBeenCalledWith('Movie Night', [1, 2, 3]);
 	});
 });
 

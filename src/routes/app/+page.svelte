@@ -18,6 +18,7 @@
 		bulkClearCollections,
 		setItemNote,
 		reorderItems,
+		snapshotSortOrderLocally,
 		bulkSetWatched,
 		bulkRemove,
 		type QueueActionDeps,
@@ -44,7 +45,7 @@
 	} from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
 	import { services, ensureSubscribedLoaded } from '$lib/services.svelte';
-	import { queueControls, SORT_DEFAULT_DIR } from '$lib/queue-controls.svelte';
+	import { queueControls, SORT_DEFAULT_DIR, setSortBy } from '$lib/queue-controls.svelte';
 	import type { SortKey, ViewKey } from '$lib/queue-controls.svelte';
 	import { readNumber, readRecord, readBoolean } from '$lib/storage';
 	import type { HintState } from '$lib/app-state';
@@ -367,9 +368,6 @@
 
 	let flatItems = $derived(sorted(visibleItems));
 
-	// Move-up/down (#216) shows only in the custom "Rank" sort mode.
-	let rankMode = $derived(queueControls.sortBy === 'rank');
-
 	// Per-item list chips (#274 PR2) — personal (from this item's own
 	// queue_tags) plus shared-derived (from sharedMembership) — precomputed
 	// once here rather than re-derived per card/row in the Grid/List views.
@@ -394,6 +392,9 @@
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	let dbError = $state('');
+	// True only while an in-flight reorder write is settling — pauses the
+	// drag zone so a second gesture can't start mid-write (#294-drag).
+	let reordering = $state(false);
 
 	const actionDeps: QueueActionDeps = {
 		setItems: (next) => {
@@ -413,7 +414,21 @@
 	}
 
 	async function reorderRankedItems(newOrder: WatchlistItem[]) {
-		await reorderItems(newOrder, actionDeps);
+		reordering = true;
+		try {
+			await reorderItems(newOrder, actionDeps);
+		} finally {
+			reordering = false;
+		}
+	}
+
+	// Fires once, right as a drag gesture picks up — see
+	// snapshotSortOrderLocally's own doc comment for why this has to happen
+	// before, not instead of, switching to Rank sort.
+	function handleDragStart() {
+		if (queueControls.sortBy === 'rank') return;
+		snapshotSortOrderLocally(items, flatItems, actionDeps);
+		setSortBy('rank');
 	}
 
 	const collectionActionDeps: CollectionActionDeps = {
@@ -872,12 +887,13 @@
 			{chipsByItemId}
 			{selectMode}
 			selected={selectedIds}
-			{rankMode}
+			dragBusy={reordering}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
 			onToggleSelect={toggleSelected}
 			onReorder={reorderRankedItems}
+			onDragStart={handleDragStart}
 			{seasonPicker}
 		/>
 
@@ -890,12 +906,13 @@
 			{chipsByItemId}
 			{selectMode}
 			selected={selectedIds}
-			{rankMode}
+			dragBusy={reordering}
 			onToggle={toggle}
 			onRemove={remove}
 			onOpenDetail={(item) => (detailItem = item)}
 			onToggleSelect={toggleSelected}
 			onReorder={reorderRankedItems}
+			onDragStart={handleDragStart}
 			{seasonPicker}
 		/>
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.32.0] — 2026-09-15
+
+### feat: persistent drag handles, phase 1 of a unified drag-to-reorder model
+
+First of three revs bringing the rest of the app's drag-to-reorder up to what the shared-list ranked-choice ballot already proved out — a handle that's just always there, not something you have to switch into Rank sort mode to even see. Grid and List views' handles are no longer gated behind Rank mode; they're always rendered (bottom edge of the poster on Grid, leading edge of the row on List — the ballot's own handle is untouched, it's the model this generalizes from) and picking one up switches sort to Rank automatically, the same way starting to drag a sorted list in most apps quietly becomes "custom order."
+
+That auto-switch is the part that needed real care: Grid/List's live drag-tracking mirrors the `items` array into local state via `onconsider`, on the assumption that the array doesn't change out from under it mid-gesture. Flipping sort to Rank reactively would violate that — every open list's items recompute against whatever rank is currently stored, which may not match the order actually on screen the instant you picked up the handle. New `snapshotSortOrderLocally`/`snapshotTagRankLocally` helpers (`queue-actions.ts`) fire once, right as a drag starts: they stamp the *currently displayed* order into the rank field synchronously, in memory, before the sort-mode switch happens — so by the time `sortBy` flips to `'rank'`, the freshly-stamped rank already matches what's on screen, and nothing jumps. On `/lists`, where several lists can be expanded at once, every currently-expanded list gets snapshotted this way, not just the one being dragged — they all read Rank order from the same field, so without that they'd all jump the moment the (page-wide) sort setting flips underneath them.
+
+Also added `delayTouchStart` to every drag zone, including the ballot's, which had gone this whole time without it — persistent, always-visible handles meaningfully widen the surface where an accidental touch-scroll could otherwise kick off a drag instead.
+
+Phases 2 (a drag-triggered action bar — move to top/bottom, copy to a list) and 3 (bringing this to shared lists' own item view, unifying with the ballot) follow as their own revs.
+
 ## [1.31.0] — 2026-09-15
 
 ### feat: landing page mock auto-rotates through its three views
