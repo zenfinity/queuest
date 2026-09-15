@@ -20,25 +20,15 @@ export interface DragAction {
 export const dragSession = $state({
 	active: false,
 	zoneType: null as string | null,
-	actions: [] as DragAction[],
-	// Set only when the "copy to list" targets were capped (#294-drag Phase 2's
-	// 6-tile limit) — a non-interactive note pointing at the card's own detail
-	// panel for the rest, rather than growing the bar into a scrollable list
-	// picker of its own.
-	overflowNote: null as string | null
+	actions: [] as DragAction[]
 });
 
 /** Called once, right as a drag gesture picks up — see each origin's own
  *  onDragStart for how `actions` gets built. */
-export function startDragSession(
-	zoneType: string,
-	actions: DragAction[],
-	overflowNote: string | null = null
-) {
+export function startDragSession(zoneType: string, actions: DragAction[]) {
 	dragSession.active = true;
 	dragSession.zoneType = zoneType;
 	dragSession.actions = actions;
-	dragSession.overflowNote = overflowNote;
 }
 
 /** Called unconditionally from every origin zone's onfinalize (fires exactly
@@ -47,5 +37,4 @@ export function endDragSession() {
 	dragSession.active = false;
 	dragSession.zoneType = null;
 	dragSession.actions = [];
-	dragSession.overflowNote = null;
 }

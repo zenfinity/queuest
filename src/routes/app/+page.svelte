@@ -428,16 +428,15 @@
 		}
 	}
 
-	// Copy-to-list tiles cap (#294-drag Phase 2) — beyond this, the bar shows
-	// a non-interactive "+N more" note pointing at the card's own detail
-	// panel instead of growing into a scrollable list picker of its own.
-	const LIST_TARGET_CAP = 6;
-
 	// Fires once, right as a drag gesture picks up, with the id of the item
 	// that was picked up. Snapshots the current visual order into place and
 	// switches to Rank sort without a jump (see snapshotSortOrderLocally's
-	// own doc comment), then populates the drop-zone action bar with
-	// move/copy actions bound to this specific item.
+	// own doc comment), then populates the drop-zone action bar with actions
+	// bound to this specific item. "Add to list" reopens the item's own
+	// detail panel rather than listing every personal/shared list as its own
+	// tile — a wall of small same-sized targets read as visually
+	// indistinguishable and were unreliable to aim for; the detail panel
+	// already has the exact picker this needs; built once, used everywhere.
 	function handleDragStart(id: number) {
 		if (queueControls.sortBy !== 'rank') {
 			snapshotSortOrderLocally(items, flatItems, actionDeps);
@@ -445,13 +444,6 @@
 		}
 		const item = items.find((i) => i.id === id);
 		if (!item) return;
-
-		const listTargets = [
-			...existingCollections.map((name) => ({ kind: 'personal' as const, name })),
-			...sharedCollections.map((coll) => ({ kind: 'shared' as const, coll }))
-		];
-		const cappedTargets = listTargets.slice(0, LIST_TARGET_CAP);
-		const overflow = listTargets.length - cappedTargets.length;
 
 		const actions: DragAction[] = [
 			{
@@ -464,32 +456,15 @@
 				icon: '⬇️',
 				run: () => moveItemToEdge(item, flatItems, 'bottom', actionDeps)
 			},
-			...cappedTargets.map((target): DragAction =>
-				target.kind === 'personal'
-					? {
-							label: target.name,
-							icon: '📁',
-							run: () => addItemToCollection(item, target.name, actionDeps)
-						}
-					: {
-							label: target.coll.name,
-							icon: '👥',
-							run: async () => {
-								const ok = await addItemsToSharedCollection(
-									target.coll,
-									[item],
-									collectionActionDeps
-								);
-								if (ok) await loadSharedMembership();
-							}
-						}
-			)
+			{
+				label: 'Add to list',
+				icon: '📁',
+				run: async () => {
+					detailItem = item;
+				}
+			}
 		];
-		startDragSession(
-			QUEUE_ITEM_ZONE_TYPE,
-			actions,
-			overflow > 0 ? `+${overflow} more — open the card for the full list` : null
-		);
+		startDragSession(QUEUE_ITEM_ZONE_TYPE, actions);
 	}
 
 	const collectionActionDeps: CollectionActionDeps = {

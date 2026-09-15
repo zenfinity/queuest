@@ -13,15 +13,10 @@
 	<div
 		class="fixed inset-x-0 bottom-0 z-[70] border-t border-gray-200 bg-white/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-md dark:border-gray-800 dark:bg-gray-900/95"
 	>
-		<div class="mx-auto flex max-w-5xl items-center gap-2 overflow-x-auto px-3">
+		<div class="mx-auto flex max-w-5xl items-center justify-center gap-3 overflow-x-auto px-3">
 			{#each dragSession.actions as action (action.label)}
 				<DragActionTile {action} zoneType={dragSession.zoneType} />
 			{/each}
-			{#if dragSession.overflowNote}
-				<p class="shrink-0 max-w-[9rem] text-[10px] leading-tight text-gray-400 dark:text-gray-500">
-					{dragSession.overflowNote}
-				</p>
-			{/if}
 		</div>
 	</div>
 {/if}

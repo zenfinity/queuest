@@ -308,7 +308,13 @@
 	use:dragHandleZone={{
 		items: dndItems,
 		type: QUEUE_ITEM_ZONE_TYPE,
-		flipDurationMs,
+		// See QueueGridView.svelte's identical option — deliberately not the
+		// same flipDurationMs passed to animate:flip below, since the
+		// library reuses this number to pace its own cross-zone polling
+		// loop, and 250ms's ~267ms poll gap is slow enough that a decisive
+		// swipe to the drop-zone action bar can finish before a single check
+		// ever sees the pointer over the target tile.
+		flipDurationMs: 0,
 		dragDisabled: dragBusy,
 		dropTargetStyle: {},
 		dropFromOthersDisabled: true,
