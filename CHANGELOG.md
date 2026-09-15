@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.38.0] — 2026-09-15
+
+### feat: bring drag-to-reorder to shared lists, phase 3 (final) of the unified model
+
+The last piece of #294-drag: shared lists' Grid/List views now carry the same persistent drag handles as the personal queue, with the same drop-zone action bar underneath — **Copy to my queue**, **Move to top of my ballot**, and (once you've actually ranked something) **Remove from my ballot**.
+
+A shared list has no canonical order of its own to drag into — its "Rank" sort is a read-only Borda tally across every member's ballot, not a writable field — so dragging here can only coherently mean "edit my own ballot," reusing `setMyBallot` exactly like the existing ☆-to-rank panel already does. Dropping a card anywhere else in the grid/list (not on a tile) commits wherever it landed as the new ballot, the same mechanic the dedicated ballot panel already offers, just reachable straight from the card itself now.
+
+The tally being read-only ruled out Phase 1's snapshot-then-switch trick (there's no field to pre-seed that would make the post-switch view match the pre-switch one, since the tally is a pure function of everyone's ballots). Used a local freeze instead: the instant a drag starts, the currently-visible order is captured and the view reads from that frozen snapshot instead of the live, tally-driven one until the drag's own effect has actually landed — so flipping to Rank sort underneath an in-progress drag never reflows the card out from under the cursor, and releasing the freeze only after the ballot commit lands (not before) avoids a visible flash back to the stale order.
+
+New `addCollectionItemToQueue` in `queue-actions.ts` — a `CollectionItem` isn't a differently-shaped type needing conversion, it's `WatchlistItem`'s own interface minus `id` (see `types.ts`'s own doc comment), so this is the same `addItem()` primitive every add path already uses, just stripping the two collab-only fields and the shared list's own membership/queue-specific ones. Reuses `add-actions.ts`'s existing "a collision here means already queued somewhere, treat it as satisfied" precedent for a duplicate rather than inventing a new one.
+
+This completes the three-phase drag-to-reorder initiative: persistent handles everywhere (v1.32.0), a drop-zone action bar (v1.35.0), and now shared lists using it too — all sharing one interaction language across the whole app.
+
 ## [1.37.0] — 2026-09-15
 
 ### fix: drop-zone action bar never worked on a real queue, only short test lists
