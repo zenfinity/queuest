@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.36.0] — 2026-09-15
+
+### fix: drop-zone action bar was unreliable and unclear on a real device
+
+Real-device testing of v1.35.0's action bar surfaced three problems synthetic testing hadn't: drops frequently just fell back to a same-zone reorder instead of triggering a tile; nothing showed which tile a drop would actually land on; and listing every personal/shared list as its own tile in the bar didn't work as a real interaction — too many small, identical-looking targets.
+
+**Why drops were missing**: `svelte-dnd-action` reuses the same `flipDurationMs` value passed to a zone both for the reorder-flip animation and, less obviously, to pace its own cross-zone polling loop (roughly `max(flipDurationMs, 100ms)`). Grid/List's 250ms flip duration meant the library only rechecked "which zone is the pointer over" about every 267ms — slow enough that a normal decisive swipe down to the action bar could finish inside a single gap, landing the drop back in the origin zone no matter where the finger actually was on release. Grid and List now pass `flipDurationMs: 0` to the drag zone specifically (decoupled from the animation, which still runs off its own separate value), dropping the library into its ~21ms polling path.
+
+**Highlight**: the library's own `dropTargetStyle`/`dropTargetClasses` mark every eligible zone as valid for the whole drag, not "the pointer is over this one right now." Each tile now derives its own targeted state from whether the shadow item is currently inside it (`onconsider`'s own item array, already tracked) and applies a clear active style — scale, ring, solid color — independent of the library's styling hooks.
+
+**"Add to list" is one tile now, not six.** Dropping on it reopens the item's own detail panel — the exact personal/shared list picker that already exists there — instead of trying to fit a tile per list into the bar. Down to three tiles total (Move to top, Move to bottom, Add to list), each roomier and easier to land a drop on.
+
 ## [1.35.0] — 2026-09-15
 
 ### feat: drop-zone action bar, phase 2 of the unified drag-to-reorder model

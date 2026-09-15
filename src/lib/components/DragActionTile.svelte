@@ -13,6 +13,16 @@
 	let tileItems: { id: string }[] = $state([]);
 	let busy = $state(false);
 
+	// The library's own dropTargetStyle/dropTargetClasses mark every eligible
+	// zone as "you may drop here" for the whole drag — not "the pointer is
+	// over THIS one right now," which is what people actually need to see
+	// before releasing. tileItems is non-empty exactly while the shadow item
+	// is inside this zone (onconsider inserts it on entry, removes it on
+	// exit — see handleDraggedEntered/handleDraggedLeft in the library's own
+	// source), so it doubles as a reliable, per-tile "currently targeted"
+	// signal without needing anything from the library's styling hooks.
+	let isTargeted = $derived(tileItems.length > 0);
+
 	function handleFinalize(
 		e: CustomEvent<{ items: { id: string }[]; info: { trigger: TRIGGERS } }>
 	) {
@@ -27,16 +37,17 @@
 </script>
 
 <div
-	class="flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl bg-gray-100 text-[10px] font-medium text-gray-600 transition-colors dark:bg-gray-800 dark:text-gray-300"
+	class="flex h-20 max-w-32 flex-1 flex-col items-center justify-center gap-1 rounded-2xl text-xs font-semibold transition-all duration-100 {isTargeted
+		? 'scale-110 bg-orange-500 text-white ring-4 ring-orange-300 dark:ring-orange-900/60'
+		: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}"
 	use:dndzone={{
 		items: tileItems,
 		type: zoneType ?? undefined,
-		flipDurationMs: 0,
-		dropTargetClasses: ['!bg-orange-100', 'dark:!bg-orange-950/40', '!text-orange-600']
+		flipDurationMs: 0
 	}}
 	onconsider={(e) => (tileItems = e.detail.items)}
 	onfinalize={handleFinalize}
 >
-	<span class="text-xl leading-none" aria-hidden="true">{action.icon}</span>
-	<span class="line-clamp-2 text-center leading-tight">{action.label}</span>
+	<span class="text-2xl leading-none" aria-hidden="true">{action.icon}</span>
+	<span class="text-center leading-tight">{action.label}</span>
 </div>

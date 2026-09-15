@@ -314,7 +314,18 @@
 	use:dragHandleZone={{
 		items: dndItems,
 		type: QUEUE_ITEM_ZONE_TYPE,
-		flipDurationMs,
+		// Deliberately NOT the same flipDurationMs passed to animate:flip
+		// below. svelte-dnd-action reuses this same number to pace its own
+		// cross-zone polling loop (setInterval ≈ max(this, 100ms) — see its
+		// source), so the 250ms that looks right for the reorder-flip
+		// animation also means the library only re-checks "which zone is the
+		// pointer over" every ~267ms. A normal decisive swipe down to the
+		// drop-zone action bar (#294-drag Phase 2) can finish well inside
+		// that window, landing back in this zone instead of the target tile.
+		// 0 here drops the library into its fast ~21ms polling path; the
+		// visual reorder animation is unaffected since it's driven by
+		// animate:flip's own separate duration, not this option.
+		flipDurationMs: 0,
 		dragDisabled: dragBusy,
 		dropTargetStyle: {},
 		dropFromOthersDisabled: true,
@@ -322,8 +333,8 @@
 		// The handle sits at the card's bottom edge, not its center, so the
 		// library's default zone/index hit-testing (the dragged element's own
 		// center) would trail well behind the actual touch point — most
-		// visibly reaching for the drop-zone action bar (#294-drag Phase 2),
-		// which needs the cursor's real position to be reachable at all.
+		// visibly reaching for the drop-zone action bar, which needs the
+		// cursor's real position to be reachable at all.
 		useCursorForDetection: true
 	}}
 	onconsider={handleDndConsider}

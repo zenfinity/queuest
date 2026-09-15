@@ -385,18 +385,16 @@
 			: sortByField(filtered, queueControls.sortBy, queueControls.sortDir);
 	}
 
-	// Copy-to-list tiles cap (#294-drag Phase 2) — see app/+page.svelte's
-	// identical constant.
-	const LIST_TARGET_CAP = 6;
-
 	// Fires once, right as a drag gesture picks up in ANY expanded personal
 	// list, with which list (`tag`) and which item (`id`) it started from.
 	// Snapshots every currently-expanded list, not just the one being
 	// dragged — they all read 'rank' order from the same writable
 	// queue_tags[tag].rank field, so without snapshotting them too they'd
 	// jump exactly like the dragged one would the moment sortBy flips. Then
-	// populates the drop-zone action bar with move/copy actions scoped to
-	// this list and bound to this specific item.
+	// populates the drop-zone action bar with actions scoped to this list
+	// and bound to this specific item. "Add to list" reopens the item's own
+	// detail panel — see app/+page.svelte's identical tile for why this
+	// isn't one tile per list.
 	function handleListDragStart(tag: string, id: number) {
 		if (queueControls.sortBy !== 'rank') {
 			for (const t of expandedCollections) {
@@ -407,19 +405,6 @@
 		const item = items.find((i) => i.id === id);
 		if (!item) return;
 		const currentOrder = currentOrderFor(tag);
-
-		// "Copy to list" excludes the list being dragged from — the item's
-		// already in it — but not the equivalent shared collection, if any;
-		// promotion (#274) means a personal and shared list of the same name
-		// can coexist as genuinely separate targets.
-		const listTargets = [
-			...collections
-				.filter((name) => name !== tag)
-				.map((name) => ({ kind: 'personal' as const, name })),
-			...sharedCollections.map((coll) => ({ kind: 'shared' as const, coll }))
-		];
-		const cappedTargets = listTargets.slice(0, LIST_TARGET_CAP);
-		const overflow = listTargets.length - cappedTargets.length;
 
 		const actions: DragAction[] = [
 			{
@@ -432,32 +417,15 @@
 				icon: '⬇️',
 				run: () => moveCollectionItemToEdge(item, currentOrder, tag, 'bottom', listActionDeps)
 			},
-			...cappedTargets.map((target): DragAction =>
-				target.kind === 'personal'
-					? {
-							label: target.name,
-							icon: '📁',
-							run: () => addItemToCollection(item, target.name, listActionDeps)
-						}
-					: {
-							label: target.coll.name,
-							icon: '👥',
-							run: async () => {
-								const ok = await addItemsToSharedCollection(
-									target.coll,
-									[item],
-									collectionActionDeps
-								);
-								if (ok) await loadSharedMembership();
-							}
-						}
-			)
+			{
+				label: 'Add to list',
+				icon: '📁',
+				run: async () => {
+					detailItem = item;
+				}
+			}
 		];
-		startDragSession(
-			QUEUE_ITEM_ZONE_TYPE,
-			actions,
-			overflow > 0 ? `+${overflow} more — open the card for the full list` : null
-		);
+		startDragSession(QUEUE_ITEM_ZONE_TYPE, actions);
 	}
 
 	// Backs DetailPanel's onAssignShared (#287) — errors surface through the
