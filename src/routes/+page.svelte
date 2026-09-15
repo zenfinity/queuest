@@ -7,6 +7,17 @@
 	import { shouldRedirectToApp } from '$lib/landing';
 
 	let tab = $state<'timeline' | 'list' | 'cards'>('timeline');
+	// Auto-rotates the mock through its three tabs so it reads as an actual
+	// demo rather than a static panel — a first-time visitor has no reason to
+	// know the Grid/List/Gantt buttons are clickable until something moves.
+	// Stops for good on any manual tab click (the visitor has the idea now,
+	// further auto-advancing would just fight their own clicks) and pauses
+	// while the pointer is over the panel (mid-read shouldn't get yanked
+	// away). Respects prefers-reduced-motion like the rest of this page's
+	// motion (parallax, scroll-reveal, the mock's own float).
+	const TAB_ORDER = ['cards', 'list', 'timeline'] as const;
+	let autoRotating = $state(true);
+	let mockHovered = $state(false);
 	// Set in afterNavigate below — true when this page renders at all for a
 	// returning user (a cold load never gets here; it redirects before this
 	// component's markup matters). Swaps the CTAs from "start" to "back to
@@ -151,6 +162,16 @@
 		}
 		window.addEventListener('scroll', onScroll, { passive: true });
 
+		// Mock tab auto-rotation (skipped when reduced motion is preferred)
+		let rotateTimer: ReturnType<typeof setInterval> | undefined;
+		if (!motion.reduced) {
+			rotateTimer = setInterval(() => {
+				if (!autoRotating || mockHovered) return;
+				const next = (TAB_ORDER.indexOf(tab as (typeof TAB_ORDER)[number]) + 1) % TAB_ORDER.length;
+				tab = TAB_ORDER[next];
+			}, 4000);
+		}
+
 		// Scroll-reveal (skipped when reduced motion is preferred)
 		const revealEls = [...document.querySelectorAll<HTMLElement>('[data-reveal]')];
 		let io: IntersectionObserver | null = null;
@@ -179,6 +200,7 @@
 		return () => {
 			window.removeEventListener('scroll', onScroll);
 			io?.disconnect();
+			clearInterval(rotateTimer);
 		};
 	});
 
@@ -257,10 +279,16 @@
 
 			<!-- Product mock — always dark -->
 			<div data-reveal class="relative z-10">
+				<!-- Hover-to-pause is a mouse-only nicety on top of the auto-rotation
+				     below (which already stops for good on any real tab click) — not
+				     a keyboard interaction path, so no role/key handling to add here. -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class="overflow-hidden rounded-[20px]"
 					class:mock-float={!motion.reduced}
 					style="background:#0c1117;border:1px solid #1d2535;box-shadow:0 32px 64px -24px rgba(0,0,0,0.55)"
+					onmouseenter={() => (mockHovered = true)}
+					onmouseleave={() => (mockHovered = false)}
 				>
 					<!-- Mock header + tab switcher -->
 					<div
@@ -270,7 +298,10 @@
 						<div style="display:flex;gap:2px;background:#161d2c;padding:3px;border-radius:8px">
 							{#each [['cards', 'Grid'], ['list', 'List'], ['timeline', 'Gantt']] as const as [t, label] (t)}
 								<button
-									onclick={() => (tab = t)}
+									onclick={() => {
+										tab = t;
+										autoRotating = false;
+									}}
 									style:background={tab === t ? '#1e2736' : 'transparent'}
 									style:color={tab === t ? '#e5e7eb' : '#6b7280'}
 									style="border:none;cursor:pointer;border-radius:5px;padding:4px 9px;font-size:11px;font-weight:600;transition:background .15s,color .15s"
