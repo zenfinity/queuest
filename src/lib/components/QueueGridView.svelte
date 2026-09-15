@@ -281,43 +281,48 @@
 	{/if}
 {/snippet}
 
-<div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-	<!-- class="contents" keeps this wrapper out of the CSS grid layout (#231)
-	     so cards still lay out as direct grid children, while giving
-	     svelte-dnd-action a single element to own as the drag zone. -->
-	<div
-		class="contents"
-		use:dragHandleZone={{
-			items: dndItems,
-			flipDurationMs,
-			dragDisabled: dragBusy,
-			dropTargetStyle: {},
-			dropFromOthersDisabled: true,
-			delayTouchStart: true
-		}}
-		onconsider={handleDndConsider}
-		onfinalize={handleDndFinalize}
-	>
-		{#each dndItems as item (item.id)}
-			<!-- Card click is a convenience only — the poster button inside cardContent
-			     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
-			     action, so this div is deliberately not a second, nested interactive element. -->
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				animate:flip={{ duration: flipDurationMs }}
-				class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
-				selected.has(item.id)
-					? '!ring-2 !ring-orange-500'
-					: ''}"
-				onclick={(e) => {
-					e.stopPropagation();
-					if (selectMode) onToggleSelect?.(item);
-					else onOpenDetail(item);
-				}}
-			>
-				{@render cardContent(item)}
-			</div>
-		{/each}
-	</div>
+<!-- The drag zone is the grid container itself, not a wrapping div — an
+     earlier `class="contents"` wrapper (#231) kept an extra element out of
+     CSS grid layout so cards stayed direct grid children, but
+     svelte-dnd-action's pointer tracking calls getBoundingClientRect() on
+     the zone element to decide whether the pointer is over it at all, and
+     `display: contents` elements always report a zero-size rect — so that
+     check silently failed for the entire gesture and cards never reordered
+     on drop. Applying the action straight to the real grid box fixes both
+     at once: it's the layout container needed anyway, and now it has an
+     actual rect to hit-test against. -->
+<div
+	class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
+	use:dragHandleZone={{
+		items: dndItems,
+		flipDurationMs,
+		dragDisabled: dragBusy,
+		dropTargetStyle: {},
+		dropFromOthersDisabled: true,
+		delayTouchStart: true
+	}}
+	onconsider={handleDndConsider}
+	onfinalize={handleDndFinalize}
+>
+	{#each dndItems as item (item.id)}
+		<!-- Card click is a convenience only — the poster button inside cardContent
+		     (data-detail-trigger) is the real, keyboard-reachable trigger for the same
+		     action, so this div is deliberately not a second, nested interactive element. -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			animate:flip={{ duration: flipDurationMs }}
+			class="flex flex-col rounded-xl bg-white ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-0 cursor-pointer {selectMode &&
+			selected.has(item.id)
+				? '!ring-2 !ring-orange-500'
+				: ''}"
+			onclick={(e) => {
+				e.stopPropagation();
+				if (selectMode) onToggleSelect?.(item);
+				else onOpenDetail(item);
+			}}
+		>
+			{@render cardContent(item)}
+		</div>
+	{/each}
 </div>

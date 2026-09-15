@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.34.0] — 2026-09-15
+
+### fix: grid view drag never actually reordered anything
+
+Dragging a card and dropping it on another didn't displace it — the card would follow the cursor, but nothing swapped places, and List view (dragging the exact same data through the exact same `svelte-dnd-action` config) worked fine. Root cause: Grid's drop zone was a `class="contents"` wrapper div, kept out of CSS grid layout so cards stayed direct grid children (#231) — but `svelte-dnd-action` decides whether the pointer is over a zone at all by calling `getBoundingClientRect()` on the zone element itself, and a `display: contents` element always reports a zero-size rect (verified directly: `{top:0,left:0,width:0,height:0}` for any such element, in any browser). That rect check is what gates every reorder-tracking event the library fires — with it permanently failing, the pointer was never recognized as "inside" the Grid zone for the whole gesture, so nothing ever swapped, no matter how the drag was carried out. Applying `dragHandleZone` to the CSS grid container itself, instead of a transparent wrapper one level in, fixes it: the grid element already needs to be a real box for layout, so it has a real rect to hit-test against, and no extra element is needed since the grid's own children were already the drag items.
+
+This also retroactively explains an earlier assumption in this initiative's own dev notes, that a drop not completing under browser automation was a "known limitation of synthetic pointer events" — it wasn't; it was this bug, hit by real touch input the same way.
+
 ## [1.33.0] — 2026-09-15
 
 ### fix: grid view's drag handle was anchored to the poster, not the card
