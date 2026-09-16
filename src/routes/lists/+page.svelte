@@ -860,6 +860,11 @@
 									aria-label="Toggle {collection}"
 								>
 									<span
+										class="shrink-0 text-gray-400 transition-transform dark:text-gray-500 {isExpanded
+											? 'rotate-90'
+											: ''}">▸</span
+									>
+									<span
 										class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200"
 									>
 										{collection}
@@ -869,11 +874,6 @@
 											? ` · ~${hms(collectionRuntimes[collection] ?? 0)}`
 											: ''}
 									</span>
-									<span
-										class="shrink-0 text-gray-400 transition-transform dark:text-gray-500 {isExpanded
-											? 'rotate-90'
-											: ''}">▸</span
-									>
 								</button>
 								<a
 									href={resolve(`/add?list=${encodeURIComponent(collection)}`)}

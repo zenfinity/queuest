@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.40.0] — 2026-09-16
+
+### fix: Choose List dialog's inactive chips now preview the list's own color (#308)
+
+Reported right after the Choose List dialog shipped (#307, v1.39.0): a list's configured color only ever showed up on its chip *after* the item was already in that list — every unselected chip rendered flat gray regardless of what color the list actually held, so there was no way to scan/recognize a list by color while picking, only confirm it after the fact. The `style={isActive ? ... : ''}` binding in `ChooseListDialog.svelte` (copied verbatim from `DetailPanel`'s original chip markup, which had the same gap) only ever applied `queueColors[name]` in the active case. Both states now show the list's own color — solid fill once selected, a colored border/text tint before that — matching the pattern the shared-collection chips right below them already used.
+
+### fix: personal list accordion's expand caret moved to the leading edge (#309)
+
+`/lists`' personal-list header rendered its disclosure caret (▸) as the *last* child of the toggle button, after both the title and the "N titles · ~Xh" runtime text — landing it oddly glued to the right of the runtime clause instead of reading as a disclosure marker for the row. The Shared Lists accordion directly below it on the same page puts the identical caret first, before the title. Moved the personal-list caret to match.
+
+### docs: refresh screenshots for Collections and sync, the rest of #195
+
+#298 (earlier this cycle) only reshot the landing hero and a flat, listless Gantt demo — the actual asks in #195 (a queue with colour-coded lists and per-list runtime totals, the Gantt view's list axis toggle, a Sync settings shot, and a light-mode shot) were still outstanding. Added `docs/screenshots/lists-collections.png` (`/lists` with two colour-coded lists, one expanded), `queue-gantt-by-list.png` (the Gantt view's "Group lanes by: List" axis, previously undocumented), `sync-settings.png` (a synced throwaway account in Settings → Sync, per the issue's own instruction not to shoot a real email), and `grid-view-light.png` (light mode, doubling as the Grid view's colour-coded list badges) — replacing the stale, unused `grid-view_lightmode.png` that predated the drag-handle and Lists work. Updated the README Showcase section's captions and image order to match.
+
 ## [1.39.0] — 2026-09-15
 
 ### feat: a focused Choose List dialog, reachable from the drag tile and the detail panel

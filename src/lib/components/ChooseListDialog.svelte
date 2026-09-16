@@ -112,6 +112,7 @@
 			<div class="mt-1.5 flex flex-wrap gap-1">
 				{#each existingCollections as name (name)}
 					{@const isActive = active.includes(name)}
+					{@const color = queueColors[name] ?? '#f97316'}
 					<button
 						type="button"
 						disabled={collectionBusy}
@@ -125,10 +126,12 @@
 								collectionBusy = false;
 							}
 						}}
-						class="rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 {isActive
+						class="rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 {isActive
 							? 'text-white'
-							: 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'}"
-						style={isActive ? `background:${queueColors[name] ?? '#f97316'}` : ''}
+							: 'hover:bg-gray-50 dark:hover:bg-gray-800'}"
+						style={isActive
+							? `background:${color}; border-color:${color};`
+							: `border-color:${color}; color:${color};`}
 					>
 						{name}
 					</button>

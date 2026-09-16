@@ -12,9 +12,25 @@ Queuest lets you build a watch queue, see which services carry each title, and e
 
 ![Queuest landing page](docs/screenshots/landing-hero.png)
 
-**Queue view** — Grid, List, and Gantt visualizations with provider swimlanes, runtime sparklines, and per-season progress tracking. Filter by subscribed services, watched status, and sort order:
+**Queue view** — Grid, List, and Gantt visualizations with provider swimlanes, runtime sparklines, and per-season progress tracking. Filter by subscribed services, watched status, and sort order. Light mode, with colour-coded list badges on each card:
 
-![Queuest queue Gantt view](docs/screenshots/queue-gantt.png)
+![Queuest queue grid view, light mode](docs/screenshots/grid-view-light.png)
+
+**Lists** — organise your queue into colour-coded lists, each with its own running total:
+
+![Queuest Lists page with colour-coded lists](docs/screenshots/lists-collections.png)
+
+**Gantt view** — grouped by provider by default, to show whether each subscription is worth keeping:
+
+![Queuest Gantt view grouped by provider](docs/screenshots/queue-gantt.png)
+
+Switch the axis to group by list instead:
+
+![Queuest Gantt view grouped by list](docs/screenshots/queue-gantt-by-list.png)
+
+**Sync** — an optional account that keeps your queue encrypted end-to-end across devices:
+
+![Queuest Settings Sync section, showing a synced account](docs/screenshots/sync-settings.png)
 
 ---
 
