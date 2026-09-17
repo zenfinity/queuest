@@ -13,6 +13,8 @@ const removeQueueTag = vi.fn();
 const setSortOrder = vi.fn();
 const setTagRank = vi.fn();
 const gcTombstones = vi.fn();
+const getItemByTmdbId = vi.fn();
+const reviveItem = vi.fn();
 
 vi.mock('./db', () => ({
 	getAll: (...args: unknown[]) => getAll(...args),
@@ -25,7 +27,9 @@ vi.mock('./db', () => ({
 	removeQueueTag: (...args: unknown[]) => removeQueueTag(...args),
 	setSortOrder: (...args: unknown[]) => setSortOrder(...args),
 	setTagRank: (...args: unknown[]) => setTagRank(...args),
-	gcTombstones: (...args: unknown[]) => gcTombstones(...args)
+	gcTombstones: (...args: unknown[]) => gcTombstones(...args),
+	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args),
+	reviveItem: (...args: unknown[]) => reviveItem(...args)
 }));
 
 const {
@@ -87,6 +91,8 @@ beforeEach(() => {
 	setSortOrder.mockReset();
 	setTagRank.mockReset();
 	gcTombstones.mockReset().mockResolvedValue(0);
+	getItemByTmdbId.mockReset();
+	reviveItem.mockReset();
 });
 
 describe('reloadQueue', () => {
@@ -789,14 +795,36 @@ describe('addCollectionItemToQueue', () => {
 		expect(getAll).toHaveBeenCalledOnce();
 	});
 
-	it('treats a duplicate (ConstraintError) as already satisfied, not a failure', async () => {
+	it('treats a live duplicate (ConstraintError) as already satisfied, not a failure', async () => {
 		const { state, deps } = makeDeps();
 		const collectionItem = makeCollectionItem({ tmdb_id: 7, media_type: 'tv' });
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({ id: 7, tmdb_id: 7, media_type: 'tv', deleted_at: null });
 		getAll.mockResolvedValue([]);
 
 		await addCollectionItemToQueue(collectionItem, deps);
 
+		expect(state.error).toBe('');
+		expect(reviveItem).not.toHaveBeenCalled();
+		expect(getAll).toHaveBeenCalledOnce();
+	});
+
+	it('revives a tombstoned (previously removed) row instead of leaving it deleted', async () => {
+		const { state, deps } = makeDeps();
+		const collectionItem = makeCollectionItem({ tmdb_id: 7, media_type: 'tv' });
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({
+			id: 7,
+			tmdb_id: 7,
+			media_type: 'tv',
+			deleted_at: '2024-01-01T00:00:00.000Z'
+		});
+		reviveItem.mockResolvedValue({ id: 7, tmdb_id: 7, media_type: 'tv', deleted_at: null });
+		getAll.mockResolvedValue([]);
+
+		await addCollectionItemToQueue(collectionItem, deps);
+
+		expect(reviveItem).toHaveBeenCalledWith(7, expect.objectContaining({ tmdb_id: 7 }));
 		expect(state.error).toBe('');
 		expect(getAll).toHaveBeenCalledOnce();
 	});
