@@ -15,7 +15,9 @@ import {
 	setNote,
 	setSortOrder,
 	setTagRank,
-	gcTombstones
+	gcTombstones,
+	getItemByTmdbId,
+	reviveItem
 } from './db';
 
 /**
@@ -528,15 +530,21 @@ export async function addCollectionItemToQueue(
 			updated_at: _updatedAt,
 			...rest
 		} = item;
+		const payload = { ...rest, watched_seasons: [] };
 		try {
-			await addItem({ ...rest, watched_seasons: [] });
+			await addItem(payload);
 		} catch (e) {
 			if (!isConstraintError(e)) throw e;
-			// Already in the queue somewhere (#274 — identity is global, one row
-			// per title) — that's the goal of "copy to queue" already met, not
-			// a failure. Same precedent as add-actions.ts's addAndPlace: a
-			// collision here is treated as satisfied without inspecting which
-			// row it collided with.
+			// Same precedent as add-actions.ts's addAndPlace: identity is
+			// global (#274, one row per title), so a collision here can mean
+			// either "already in the queue somewhere" (satisfied, nothing more
+			// to do) or "was in the queue, then removed" — a tombstoned row
+			// still occupies the unique index slot, so that case needs a
+			// revive rather than a silent no-op (see reviveItem in db.ts).
+			const existing = await getItemByTmdbId(rest.tmdb_id, rest.media_type);
+			if (existing?.deleted_at) {
+				await reviveItem(existing.id, payload);
+			}
 		}
 		await reloadQueue(deps);
 	} catch (e) {
