@@ -9,6 +9,24 @@ export default {
 		env: {
 			publicPrefix: 'PUBLIC_'
 		},
+		serviceWorker: {
+			// src/service-worker.ts is built regardless; this only stops Kit from
+			// registering it itself. Registration is manual and prod-only
+			// (src/lib/pwa.ts) so `vite dev` never runs a worker that would cache
+			// static files under HMR's feet.
+			register: false,
+			// Not worth downloading at install: robots.txt is for crawlers,
+			// og-image.png for link-preview scrapers, and the icons are only read
+			// when installing (an installed app already has its icon). Kit's default
+			// filter also drops .DS_Store.
+			files: (file) =>
+				!/\.DS_Store|robots\.txt$|og-image\.png$|apple-touch-icon\.png$|icon-[\w-]+\.png$/.test(
+					file
+				)
+		},
+		// Poll _app/version.json so a long-lived tab (a home-screen PWA can stay
+		// open for days) learns a new build shipped — drives UpdateBanner.
+		version: { pollInterval: 30 * 60 * 1000 },
 		csp: {
 			// 'hash' (not 'auto'): the app has at least one prerendered route (the
 			// landing page), and SvelteKit refuses to build at all if app.html's
@@ -27,6 +45,9 @@ export default {
 				'style-src': ['self', 'unsafe-inline'],
 				'img-src': ['self', 'https://image.tmdb.org', 'https://www.themoviedb.org', 'data:'],
 				'connect-src': ['self', 'https://api.themoviedb.org', 'https://cloudflareinsights.com'],
+				// Falls back to default-src anyway; stated so the service worker
+				// (#257) doesn't silently depend on that fallback staying put.
+				'worker-src': ['self'],
 				'form-action': ['self'],
 				'object-src': ['none'],
 				'base-uri': ['self'],

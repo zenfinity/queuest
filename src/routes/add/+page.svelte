@@ -18,6 +18,7 @@
 		type SharedCollection
 	} from '$lib/collection-actions';
 	import { isSyncEnabled } from '$lib/sync';
+	import { network } from '$lib/network.svelte';
 	import { services, setSubscribedIds } from '$lib/services.svelte';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
@@ -402,12 +403,13 @@
 					}, 150);
 				}}
 				placeholder="Search movies and TV shows…"
+				disabled={!network.online}
 				autocomplete="off"
 				role="combobox"
 				aria-expanded={showSuggestions}
 				aria-controls="search-suggestions"
 				aria-activedescendant={highlightedIndex >= 0 ? `suggestion-${highlightedIndex}` : undefined}
-				class="w-full rounded-lg bg-gray-100 px-4 py-2.5 pr-9 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 transition-shadow focus:ring-orange-500 [&::-webkit-search-cancel-button]:hidden dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:ring-gray-800 dark:focus:ring-orange-500"
+				class="w-full rounded-lg bg-gray-100 px-4 py-2.5 pr-9 text-base sm:text-sm text-gray-900 placeholder-gray-400 outline-none ring-1 ring-gray-300 transition-shadow focus:ring-orange-500 [&::-webkit-search-cancel-button]:hidden dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:ring-gray-800 dark:focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
 			/>
 			{#if query}
 				<button
@@ -472,8 +474,17 @@
 		</div>
 		{#if isOnboarding}<input type="hidden" name="onboarding" value="1" />{/if}
 		{#if listParam}<input type="hidden" name="list" value={listParam} />{/if}
-		<Button type="submit" class="px-5 py-2.5 text-sm">Search</Button>
+		<Button type="submit" disabled={!network.online} class="px-5 py-2.5 text-sm">Search</Button>
 	</form>
+
+	{#if !network.online}
+		<p
+			role="status"
+			class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+		>
+			You're offline — search needs a connection. Your queue and lists still work.
+		</p>
+	{/if}
 
 	{#if !isOnboarding && addedTo.size > 0}
 		<div

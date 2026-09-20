@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.43.0] — 2026-09-20
+
+### feat: Queuest now opens offline (#257)
+
+The app installed to a home screen but had no service worker, so an installed copy opened to a network error with no connection — even though the whole queue already lives in IndexedDB and every main view only reads local state. The data was local; the app just couldn't boot without a network to fetch its own JavaScript.
+
+New `src/service-worker.ts` precaches the app shell (the Queue, Add, Lists, Budget, Settings, and landing pages) plus every build asset, so those tabs boot and navigate with no connection at all. What it intercepts is an allowlist (`classify()` in `$lib/sw-routing.ts`, unit-tested on its own), not a denylist: anything not explicitly matched — `/api/*` (including the versioned, precondition-based sync and shared-list blobs, where a stale cached GET could cause a spurious 409 loop or a merge against outdated state), SvelteKit's `__data.json` requests, `_app/version.json`, non-GET requests, and every cross-origin request — is left untouched, so it hits the network exactly as before and can never end up in a cache.
+
+Pages are network-first (with a 3-second timeout for a connection that's up but useless), falling back to the precached copy only when the network fails. Online, you always get the current HTML, so a stale shell can't pin anyone to an old build — the cache is only ever written at install, never at runtime, so the cached HTML always matches the cached chunks. Install fetches the pages first and the assets second, so a deploy landing mid-install fails the install rather than caching mismatched builds, and a new worker replaces the old one immediately, so a broken one can always be fixed. A page that genuinely needs the network (a share link, say) shows a small "You're offline" page built into the worker instead of the browser's error. For long-lived tabs — a home-screen PWA can stay open for days — SvelteKit now polls for new builds every 30 minutes and a small banner offers a reload, and the worker re-checks for updates whenever the app returns to the foreground.
+
+Anything that needs a connection now says so instead of failing silently: Add's search is disabled with "You're offline — search needs a connection. Your queue and lists still work.", the error page reads "You're offline" rather than "500 · Failed to fetch" when offline navigation to Add fails its server load, and sync now pushes queued edits the moment a connection returns rather than waiting for the next tab switch.
+
+Two things worked out differently than expected, both found by testing in a real browser rather than by reading code. First, the offline page was originally a static file, but Cloudflare Pages redirects `/offline.html` to `/offline` (a route that doesn't exist), which made the worker's install fail outright and would have meant it never activated in production — so it's now a string the worker builds a response from. Second, TMDB posters are deliberately *not* cached by the worker: its own `fetch()` calls are checked against the CSP it's served with (`connect-src` doesn't include `image.tmdb.org`), which blocked every poster including online ones, and fixing that would have meant a CSP exception for the worker with a failure mode that breaks posters for everyone. It turns out not to be needed for the common case — TMDB serves posters with a year-long `max-age`, and the browser's own HTTP cache already shows any poster you've seen while offline. A poster you never loaded online can't appear offline, and a browser that evicts its HTTP cache under storage pressure (iOS Safari is the likeliest) may drop some; worth revisiting if that shows up in practice.
+
+The worker is registered manually and only in production builds (`serviceWorker: { register: false }` in `svelte.config.js`), so `vite dev` never runs one under HMR. CSP needed no change for registration itself; `worker-src 'self'` is now stated explicitly in `kit.csp`, `hooks.server.ts`'s fallback, and `_headers`. Playwright blocks service workers by default now so the existing specs still see the network directly; the new `e2e/offline.spec.ts` opts back in and covers booting and navigating offline, the search and error-page messaging, the offline page, that nothing from `/api/*`, `__data.json`, or `version.json` ever lands in a cache, and that registering raises no CSP violations on either the prerendered landing page or a dynamic one.
+
+### fix: real app icons and matching launch colors (#316)
+
+The manifest's only icon was the 1200×630 social-share banner, and there was no `apple-touch-icon` at all. Checked against Chrome itself rather than assumed: headed Chromium reported `manifest-missing-suitable-icon` and `no-acceptable-icon` for the manifest as shipped, and reports neither now (headless Chromium skips these checks entirely and reports nothing either way, so it isn't evidence).
+
+Added 192×192 and 512×512 icons, a 512×512 maskable icon (full-bleed, with the glyph kept inside the central safe zone launchers crop to), and a 180×180 `apple-touch-icon` linked from `app.html` — all rendered from the mark the inline favicon already used (a white bold "Q" on `#f97316`), so no new design, just that mark at the sizes installers ask for. `og-image.png` is now only for link previews and is out of the manifest's `icons`. The manifest's `background_color` and `theme_color` are now the dark palette (`#030712` / `#0f172a`): dark is the app's default, and `background_color` is what an installed app paints while launching, so it used to open on a white flash.
+
+The service worker's precache now also skips `og-image.png`, `robots.txt` and the icons — they're only read by crawlers or at install time, so downloading them on every worker install was wasted bytes.
+
 ## [1.42.0] — 2026-09-20
 
 ### fix: importing a list or accepting a share link no longer drops previously removed titles (#313)

@@ -14,7 +14,10 @@ export default defineConfig({
 	timeout: 30_000,
 	use: {
 		baseURL: 'http://localhost:8788',
-		trace: 'retain-on-failure'
+		trace: 'retain-on-failure',
+		// The app registers a service worker (#257). Block it by default so the
+		// existing specs keep seeing the network directly; offline.spec.ts opts back in.
+		serviceWorkers: 'block'
 	},
 	projects: [
 		{
