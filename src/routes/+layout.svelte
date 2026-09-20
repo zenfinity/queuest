@@ -7,10 +7,13 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { initTheme } from '$lib/theme.svelte';
 	import { initSyncTriggers } from '$lib/sync';
+	import { initNetwork } from '$lib/network.svelte';
+	import { initServiceWorker } from '$lib/pwa';
 	import '$lib/motion.svelte';
 	import { queueControls } from '$lib/queue-controls.svelte';
 	import QueueDock from '$lib/components/QueueDock.svelte';
 	import DragActionBar from '$lib/components/DragActionBar.svelte';
+	import UpdateBanner from '$lib/components/UpdateBanner.svelte';
 
 	let { children } = $props();
 
@@ -179,6 +182,8 @@
 
 	onMount(() => {
 		initTheme();
+		const stopNetwork = initNetwork();
+		initServiceWorker();
 		// No-ops until sync is actually enabled (#103's job) — syncNow() bails
 		// immediately when there's no DEK in IndexedDB yet. Registering the
 		// triggers unconditionally here just means enabling sync later doesn't
@@ -208,6 +213,7 @@
 		window.addEventListener('resize', updateCurve);
 		updateCurve();
 		return () => {
+			stopNetwork();
 			window.removeEventListener('resize', fixViewport);
 			window.removeEventListener('resize', updateCurve);
 		};
@@ -342,6 +348,7 @@
 	</main>
 
 	<DragActionBar />
+	<UpdateBanner />
 
 	<footer class="mt-8 border-t border-gray-200 py-4 sm:mt-16 sm:py-6 dark:border-gray-800">
 		<div

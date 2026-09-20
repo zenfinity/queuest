@@ -439,5 +439,10 @@ export function initSyncTriggers(): void {
 		if (document.visibilityState === 'visible') void syncNow();
 	});
 
+	// Edits made offline are queued by the mutation trigger below but can't
+	// push; the moment a connection returns, push them rather than waiting for
+	// the next tab switch or edit.
+	window.addEventListener('online', () => void syncNow());
+
 	onMutation(scheduleDebouncedSync);
 }
