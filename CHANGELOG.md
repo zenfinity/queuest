@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.42.0] — 2026-09-20
+
+### fix: importing a list or accepting a share link no longer drops previously removed titles (#313)
+
+The same tombstone collision v1.41.0 fixed for search and "Copy to my queue" (#312) was still live at the other two places that add titles: a removed title still occupies its slot in `watchlist`'s unique `[tmdb_id, media_type]` index, so re-adding it throws the same `ConstraintError` a genuine live duplicate does — and both call sites checked `existing.deleted_at` afterward but treated the tombstoned case as a dead end.
+
+**Pasting/importing a list** (`importRows`) was the worse of the two: on a tombstoned collision it skipped the tag/shared-push branch but then incremented the added counter unconditionally, so the banner read "✓ Added 1 title." while the queue stayed empty — and the title wasn't listed under "Not found" either, so nothing anywhere hinted it hadn't landed. **Accepting a read-only share link** (`addAllToQueue`) reported the title as a skip, which the share page renders as "already in your Queue" — inaccurate, since it had been removed — and still didn't add it.
+
+Both now revive the row via `reviveItem` (added in v1.41.0), the same fix in the same shape: the revive carries the target list tag through the payload itself (a wholesale write, so no separate `addQueueTag` call), and an imported title revived into a shared-list target is pushed to the shared collection like any newly added one. `share-token-actions.ts`'s "one case genuinely left to skip" is gone; a skip is now reserved for a collision with no matching row at all. Confirmed against the real IndexedDB in the dev server, before and after: import, remove, re-import went from a false "Added 1 title" with an empty queue to the title actually returning, and the share-link path went from a wrong skip to a real add.
+
 ## [1.41.0] — 2026-09-17
 
 ### fix: re-adding a previously removed title silently did nothing (#311)

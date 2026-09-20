@@ -4,6 +4,7 @@ import type { WatchlistItem } from './types';
 const addItem = vi.fn();
 const addQueueTag = vi.fn();
 const getItemByTmdbId = vi.fn();
+const reviveItem = vi.fn();
 const replaceAll = vi.fn();
 const setServices = vi.fn();
 const decrypt = vi.fn();
@@ -17,6 +18,7 @@ vi.mock('./db', () => ({
 	addItem: (...args: unknown[]) => addItem(...args),
 	addQueueTag: (...args: unknown[]) => addQueueTag(...args),
 	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args),
+	reviveItem: (...args: unknown[]) => reviveItem(...args),
 	nowIso: () => '2024-01-01T00:00:00.000Z',
 	replaceAll: (...args: unknown[]) => replaceAll(...args),
 	setServices: (...args: unknown[]) => setServices(...args)
@@ -105,6 +107,7 @@ beforeEach(() => {
 	addItem.mockReset();
 	addQueueTag.mockReset();
 	getItemByTmdbId.mockReset();
+	reviveItem.mockReset();
 	replaceAll.mockReset();
 	setServices.mockReset();
 	decrypt.mockReset();
@@ -166,6 +169,68 @@ describe('importRows', () => {
 		expect(state.importAdded).toBe(1);
 		expect(state.importError).toBe('');
 		expect(addQueueTag).not.toHaveBeenCalled(); // no target list on a plain import
+		expect(reviveItem).not.toHaveBeenCalled(); // a live duplicate is already satisfied
+	});
+
+	it('revives a tombstoned (previously removed) row instead of counting a title that never landed', async () => {
+		const { state, deps } = makeImportDeps();
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => [{ title: 'Arrival', result: makeItem({ tmdb_id: 5, title: 'Arrival' }) }]
+		});
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({
+			id: 7,
+			tmdb_id: 5,
+			deleted_at: '2026-01-01T00:00:00.000Z'
+		});
+		reviveItem.mockResolvedValue({ id: 7, tmdb_id: 5, deleted_at: null });
+
+		await importRows([{ title: 'Arrival', year: null, mediaTypeHint: 'auto' }], deps, {
+			tag: 'Date Night'
+		});
+
+		// The revive carries the target tag via the payload itself — a
+		// wholesale write, so there's no separate addQueueTag call.
+		expect(reviveItem).toHaveBeenCalledWith(
+			7,
+			expect.objectContaining({
+				tmdb_id: 5,
+				queue_tags: { 'Date Night': { at: expect.any(String) } }
+			})
+		);
+		expect(addQueueTag).not.toHaveBeenCalled();
+		expect(state.importAdded).toBe(1);
+		expect(state.missedTitles).toEqual([]);
+	});
+
+	it('pushes a revived row to the shared collection like any newly added one', async () => {
+		const { state, deps } = makeImportDeps();
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => [{ title: 'Arrival', result: makeItem({ tmdb_id: 5, title: 'Arrival' }) }]
+		});
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({
+			id: 7,
+			tmdb_id: 5,
+			deleted_at: '2026-01-01T00:00:00.000Z'
+		});
+		const revived = { id: 7, tmdb_id: 5, deleted_at: null };
+		reviveItem.mockResolvedValue(revived);
+		addItemsToSharedCollection.mockResolvedValue(true);
+		const collection = { id: 'coll-1', name: 'Movie Night' };
+
+		await importRows([{ title: 'Arrival', year: null, mediaTypeHint: 'auto' }], deps, {
+			collection: collection as never
+		});
+
+		expect(addItemsToSharedCollection).toHaveBeenCalledWith(
+			collection,
+			[revived],
+			expect.anything()
+		);
+		expect(state.importAdded).toBe(1);
 	});
 
 	it('surfaces a non-ConstraintError add failure and still clears importing', async () => {
