@@ -45,7 +45,7 @@ The **Gantt view** groups your queue by provider. Each bar's width represents wa
 The **Suggest** tab ranks providers by total remaining watch time across your unwatched titles — useful for deciding what to subscribe to first. Checking off seasons reduces a show's contribution automatically.
 
 ### 3. Your data, your device
-Everything is stored locally in your browser's IndexedDB. No account is required and nothing is tracked — the whole app works signed-out. It also works offline: once you've opened Queuest on a device, your queue, lists, and budget load with no connection at all (searching for new titles and syncing are the parts that need one, and say so). Use **Settings → Export** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and list colors — a complete restore of everything local. Shared lists aren't included, since they never touch local storage — see below.
+Everything is stored locally in your browser's IndexedDB. No account is required and no one is tracked — the whole app works signed-out (the two aggregate counters that do exist are spelled out under [Data & Privacy](#data--privacy)). It also works offline: once you've opened Queuest on a device, your queue, lists, and budget load with no connection at all (searching for new titles and syncing are the parts that need one, and say so). Use **Settings → Export** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and list colors — a complete restore of everything local. Shared lists aren't included, since they never touch local storage — see below.
 
 If you want the same queue on more than one device, **Settings → Sync** adds an optional account. Your queue is encrypted on your device before it's sent, under a key derived from a passphrase that never leaves your browser — so the server stores ciphertext it has no way to read.
 
@@ -147,7 +147,10 @@ npm run preview   # uses wrangler pages dev
 
 ## Data & Privacy
 
-- **No account required, and none by default.** No analytics, no tracking cookies. Everything works signed-out.
+- **No account required, and none by default.** Everything works signed-out. No tracking cookies, no user or device identifiers, and nothing you add, search for, or name is ever part of what's measured.
+- **Two things are measured, in aggregate, and neither is tied to a person.**
+  - *Page loads.* Cloudflare Web Analytics counts which pages are loaded (by path — never the query string or `#fragment`), how quickly, and roughly where from (country, browser, device type). It uses no cookies or `localStorage` and doesn't fingerprint visitors.
+  - *Sync failure counts.* Only if you turn on sync: when a sync fails in one of a handful of specific ways, the app sends just the name of the failure (for example `sync_409_exhausted`) and the server adds one to that day's count for it. The count is all that's stored — no account, device, or item comes with it.
 - **Your watch data lives in your browser's IndexedDB.** It leaves your device only if you export it, create a read-only link, turn on sync, or share a list with someone — all four encrypt on your device first.
 - **Sync is opt-in and end-to-end encrypted.** Turning it on creates an account (email + passphrase). Your queue is encrypted client-side under a key derived from your passphrase, which is never sent to the server — the server only ever stores ciphertext it cannot read. Shared lists build on the same account and the same guarantee, extended to multiple people. See [Sync and privacy](#sync-and-privacy) and [Shared lists](#shared-lists).
 - Provider data is sourced from TMDB/JustWatch and reflects US availability only. It can lag real-world changes by a few days.

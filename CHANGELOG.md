@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.43.1] — 2026-09-20
+
+### docs: the README now says what's actually measured (#259)
+
+The README said "No analytics" (Data & Privacy) and "nothing is tracked" (How it works), but two aggregate measurements already ship: Cloudflare Web Analytics, which Cloudflare's edge injects into every page (the CSP was opened for it in #233), and #254's content-free failure counters, which post a failure-class name to `/api/failure` when a sync fails in one of six specific ways (signed-in sync users only). Neither is per-person, but "no analytics" wasn't accurate, and for a product that leads with privacy the wording is the point.
+
+Both are now described under Data & Privacy, and the "nothing is tracked" line points there. The claims are limited to what was checked: Cloudflare's docs state Web Analytics uses no cookies or `localStorage` and doesn't fingerprint, and the beacon's own source passes every reported `location` and `referrer` through a function that strips the query string and `#fragment`, so a search term in `/add?q=` isn't sent. Page paths are, so a share-link path (`/share/<token>`) is visible to Web Analytics as a path; the key lives in the fragment and is never sent.
+
+This also records the decision on #259, whether onboarding thresholds (the ~10-item Lists hint, the ~20-item sync nudge, the weekly-hours default of 6) deserve measuring: not now. No new measurement is added, and those thresholds stand as explicit guesses to revisit through feedback rather than data.
+
 ## [1.43.0] — 2026-09-20
 
 ### feat: Queuest now opens offline (#257)
