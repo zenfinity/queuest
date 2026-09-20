@@ -560,6 +560,86 @@ describe('db: soft-delete tombstones', () => {
 		expect(removed).toBe(0);
 		expect(await db.getAll()).toHaveLength(1);
 	});
+
+	// A removed title's [tmdb_id, media_type] slot is still occupied by its
+	// tombstone, so a plain re-add collides on the unique index exactly like a
+	// live duplicate would — addItem alone can't tell the two apart, which is
+	// why this stays a ConstraintError rather than silently reviving. Callers
+	// are expected to inspect the collision via getItemByTmdbId and call
+	// reviveItem themselves (see add-actions.ts/queue-actions.ts).
+	it('addItem still rejects when the collision is a tombstone, not a live duplicate', async () => {
+		await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie' }));
+		const [{ id }] = await db.getAll();
+		await db.removeItem(id);
+
+		await expect(db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie' }))).rejects.toThrow();
+	});
+
+	describe('reviveItem', () => {
+		it("clears the tombstone and reuses the row's existing id", async () => {
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie', title: 'Arrival' }));
+			const [{ id }] = await db.getAll();
+			await db.removeItem(id);
+
+			const revived = await db.reviveItem(id, makeItem({ tmdb_id: 1, media_type: 'movie' }));
+
+			expect(revived.id).toBe(id);
+			expect(revived.deleted_at).toBeFalsy();
+			const all = await db.getAll();
+			expect(all).toHaveLength(1);
+			expect(all[0].id).toBe(id);
+			expect(all[0].deleted_at).toBeFalsy();
+		});
+
+		it('bumps updated_at so the revival outraces the tombstone in a sync LWW merge', async () => {
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie' }));
+			const [{ id }] = await db.getAll();
+			await db.removeItem(id);
+			const tombstoned = (await db.getAllIncludingDeleted())[0];
+
+			const revived = await db.reviveItem(id, makeItem({ tmdb_id: 1, media_type: 'movie' }));
+
+			expect(typeof revived.updated_at).toBe('string');
+			expect(revived.updated_at! >= tombstoned.updated_at!).toBe(true);
+		});
+
+		it('treats the revival as a fresh add, not a merge with the tombstoned state', async () => {
+			await db.addItem(
+				makeItem({
+					tmdb_id: 1,
+					media_type: 'movie',
+					queue_tags: { Horror: { at: '2024-01-01T00:00:00.000Z' } },
+					notes: 'watch with the lights off',
+					watched_seasons: [1]
+				})
+			);
+			const [{ id }] = await db.getAll();
+			await db.setWatched(id, true);
+			await db.removeItem(id);
+
+			const revived = await db.reviveItem(
+				id,
+				makeItem({ tmdb_id: 1, media_type: 'movie', watched_seasons: [] })
+			);
+
+			expect(revived.watched_at).toBeNull();
+			expect(revived.watched_seasons).toEqual([]);
+			expect(revived.notes).toBeUndefined();
+			expect(revived.queue_tags).toBeUndefined();
+		});
+
+		it('lands the revived item at the end of custom Rank order, like a brand-new add', async () => {
+			await db.addItem(makeItem({ tmdb_id: 1, media_type: 'movie', title: 'A' }));
+			const [{ id }] = await db.getAll();
+			await db.removeItem(id);
+			await db.addItem(makeItem({ tmdb_id: 2, media_type: 'movie', title: 'B' }));
+
+			const revived = await db.reviveItem(id, makeItem({ tmdb_id: 1, media_type: 'movie' }));
+
+			const b = (await db.getAll()).find((i) => i.title === 'B')!;
+			expect(revived.sort_order).toBeGreaterThan(b.sort_order!);
+		});
+	});
 });
 
 describe('db: collection tag bulk updates', () => {

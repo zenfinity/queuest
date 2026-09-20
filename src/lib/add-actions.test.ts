@@ -5,12 +5,14 @@ import { makeItem } from './test-fixtures';
 const addItem = vi.fn();
 const addQueueTag = vi.fn();
 const getItemByTmdbId = vi.fn();
+const reviveItem = vi.fn();
 const addItemsToSharedCollection = vi.fn();
 
 vi.mock('./db', () => ({
 	addItem: (...args: unknown[]) => addItem(...args),
 	addQueueTag: (...args: unknown[]) => addQueueTag(...args),
 	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args),
+	reviveItem: (...args: unknown[]) => reviveItem(...args),
 	nowIso: () => '2024-01-01T00:00:00.000Z'
 }));
 vi.mock('./collection-actions', () => ({
@@ -77,6 +79,7 @@ beforeEach(() => {
 	addItem.mockReset();
 	addQueueTag.mockReset();
 	getItemByTmdbId.mockReset();
+	reviveItem.mockReset();
 	addItemsToSharedCollection.mockReset();
 });
 
@@ -113,6 +116,28 @@ describe('addSearchResultToQueue', () => {
 		expect(state.added.has(2)).toBe(true);
 		expect(state.errors.has(2)).toBe(false);
 		// No target list on this path — nothing to additively tag.
+		expect(addQueueTag).not.toHaveBeenCalled();
+		// A live duplicate is already satisfied — nothing to revive.
+		expect(reviveItem).not.toHaveBeenCalled();
+	});
+
+	it('revives a tombstoned (previously removed) row instead of leaving it deleted', async () => {
+		const { state, deps } = makeDeps();
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({
+			id: 2,
+			tmdb_id: 2,
+			deleted_at: '2024-01-01T00:00:00.000Z'
+		});
+		reviveItem.mockResolvedValue({ id: 2, tmdb_id: 2, deleted_at: null });
+
+		await addSearchResultToQueue(makeResult({ id: 2 }), deps);
+
+		expect(reviveItem).toHaveBeenCalledWith(2, expect.objectContaining({ tmdb_id: 2 }));
+		expect(state.added.has(2)).toBe(true);
+		expect(state.errors.has(2)).toBe(false);
+		// Reviving a plain "Add to Queue" re-add carries no list — same as a
+		// fresh add, and distinct from addQueueTag's "already active elsewhere" path.
 		expect(addQueueTag).not.toHaveBeenCalled();
 	});
 
@@ -156,7 +181,7 @@ describe('addSearchResultToList', () => {
 		expect(state.added.has(99)).toBe(true);
 	});
 
-	it('does not additively tag a tombstoned (previously removed) row', async () => {
+	it('revives a tombstoned (previously removed) row into the target list, rather than a silent no-op', async () => {
 		const { state, deps } = makeDeps();
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
 		getItemByTmdbId.mockResolvedValue({
@@ -164,9 +189,16 @@ describe('addSearchResultToList', () => {
 			tmdb_id: 99,
 			deleted_at: '2024-01-01T00:00:00.000Z'
 		});
+		reviveItem.mockResolvedValue({ id: 99, tmdb_id: 99, deleted_at: null });
 
 		await addSearchResultToList(makeResult({ id: 99 }), { tag: 'Date Night' }, deps);
 
+		// The revive itself carries the target tag (via the item's own
+		// queue_tags) — addQueueTag is only for the still-live-elsewhere case.
+		expect(reviveItem).toHaveBeenCalledWith(
+			99,
+			expect.objectContaining({ queue_tags: { 'Date Night': { at: expect.any(String) } } })
+		);
 		expect(addQueueTag).not.toHaveBeenCalled();
 		expect(state.added.has(99)).toBe(true);
 	});

@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.41.0] — 2026-09-17
+
+### fix: re-adding a previously removed title silently did nothing (#311)
+
+Found while manually testing Phase 3 of drag-to-reorder (#306) against the real local backend: remove a title from the queue, then re-add it — via search's "Add to Queue," or a shared list's "Copy to my queue" drag action — and nothing visibly happened. No error, but the title never reappeared.
+
+Root cause: `removeItem` soft-deletes (stamps `deleted_at`, never calls `store.delete()`), so a removed row keeps occupying its slot in `watchlist`'s unique `[tmdb_id, media_type]` index. Re-adding the same title collides with that tombstone and throws the same `ConstraintError` a genuine live duplicate would throw — and every call site catching that error (`addAndPlace` in `add-actions.ts`, the new `addCollectionItemToQueue` in `queue-actions.ts`) treated it as "already satisfied, nothing more to do" without checking whether the row it collided with was actually still active.
+
+New `reviveItem` in `db.ts` clears the tombstone and writes the row as a wholesale-fresh add (unwatched, no stale list membership or notes carried over, landed at the end of custom Rank order same as any new item) — reusing the tombstoned row's id rather than the old data. Both call sites now check `existing.deleted_at` after a collision and revive instead of no-op. `updated_at` is stamped fresh on revival, so it wins the sync engine's last-write-wins merge against a still-tombstoned copy on another device once they sync.
+
 ## [1.40.0] — 2026-09-16
 
 ### fix: Choose List dialog's inactive chips now preview the list's own color (#308)

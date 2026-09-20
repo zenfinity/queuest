@@ -370,8 +370,16 @@ export async function getAllIncludingDeleted(): Promise<WatchlistItem[]> {
 	});
 }
 
-export async function addItem(
-	item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at' | 'updated_at'>
+/**
+ * Shared write path for addItem/reviveItem below — identical in every way
+ * except how the row lands in the store: a brand-new add lets the key
+ * generator assign an id (`store.add`), while a revive reuses the tombstoned
+ * row's own id (`store.put`) so it doesn't collide with itself on the unique
+ * [tmdb_id, media_type] index a second time.
+ */
+async function writeItem(
+	item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at' | 'updated_at'>,
+	reviveId?: number
 ): Promise<WatchlistItem> {
 	const db = await open();
 	return new Promise((resolve, reject) => {
@@ -391,17 +399,56 @@ export async function addItem(
 				added_at: now,
 				watched_at: null,
 				updated_at: now,
-				sort_order: countReq.result
+				sort_order: countReq.result,
+				deleted_at: null
 			};
-			const addReq = store.add(full);
-			addReq.onsuccess = () => {
+			const writeReq =
+				reviveId !== undefined ? store.put({ ...full, id: reviveId }) : store.add(full);
+			writeReq.onsuccess = () => {
 				notifyMutation();
-				resolve({ ...full, id: addReq.result as number });
+				resolve({ ...full, id: reviveId ?? (writeReq.result as number) });
 			};
-			addReq.onerror = () => reject(addReq.error);
+			writeReq.onerror = () => reject(writeReq.error);
 		};
 		countReq.onerror = () => reject(countReq.error);
 	});
+}
+
+export async function addItem(
+	item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at' | 'updated_at'>
+): Promise<WatchlistItem> {
+	return writeItem(item);
+}
+
+/**
+ * Revives a tombstoned row in place of adding a new one — the fix for a
+ * previously-removed title's [tmdb_id, media_type] slot still occupying the
+ * unique index, which makes a plain `addItem()` throw `ConstraintError` on
+ * re-add indistinguishable from "already actively queued" (see
+ * getItemByTmdbId's doc comment). Callers are expected to have already
+ * confirmed via getItemByTmdbId that `id`'s row is in fact tombstoned.
+ *
+ * Writes `item` as a wholesale replacement, same as a fresh addItem() would —
+ * not a merge with whatever the tombstoned row used to hold. Re-adding a
+ * title is treated exactly like adding it for the first time (fresh
+ * watched_at/watched_seasons/queue_tags/sort_order/notes from `item`, nothing
+ * carried over): a removed item's old progress, list membership, or note
+ * shouldn't silently reappear attached to a title the user is, from their own
+ * perspective, adding anew. The only thing that survives is the numeric id,
+ * which has to stay put to satisfy the unique index.
+ *
+ * `updated_at` is stamped fresh (via writeItem's shared `now`), which is what
+ * makes this propagate correctly through sync's whole-field LWW merge
+ * (sync.ts's mergeOne): a revived row's newer timestamp beats a still-
+ * tombstoned copy sitting on another device, so the revival — not the old
+ * deletion — wins once they sync. No gcTombstones interaction: a revived row
+ * has deleted_at cleared, so it no longer matches gcTombstones' sweep.
+ */
+export async function reviveItem(
+	id: number,
+	item: Omit<WatchlistItem, 'id' | 'added_at' | 'watched_at' | 'updated_at'>
+): Promise<WatchlistItem> {
+	return writeItem(item, id);
 }
 
 /**

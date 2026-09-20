@@ -1,5 +1,5 @@
 import { hasActiveTag, soloTagMap, type SearchResult, type WatchlistItem } from './types';
-import { addItem, addQueueTag, getItemByTmdbId, nowIso } from './db';
+import { addItem, addQueueTag, getItemByTmdbId, nowIso, reviveItem } from './db';
 import { isConstraintError } from './http';
 import { addItemsToSharedCollection, type SharedCollection } from './collection-actions';
 
@@ -54,12 +54,20 @@ async function addAndPlace(
 			// treating the collision as fully satisfied and silently dropping
 			// the list/collection this add was actually targeting.
 			const existing = await getItemByTmdbId(result.id, result.media_type);
-			if (!existing || existing.deleted_at) {
+			if (!existing) {
 				deps.setAdded(result.id, true);
 				return;
 			}
-			if (queueTag) await addQueueTag(existing.id, queueTag);
-			created = existing;
+			if (existing.deleted_at) {
+				// A previously-removed title still occupies this [tmdb_id,
+				// media_type] slot as a tombstone — the ConstraintError above
+				// means "was queued," not "still is." Revive it rather than
+				// silently no-oping (see reviveItem's doc comment in db.ts).
+				created = await reviveItem(existing.id, item);
+			} else {
+				if (queueTag) await addQueueTag(existing.id, queueTag);
+				created = existing;
+			}
 		}
 
 		if (sharedCollection) {
