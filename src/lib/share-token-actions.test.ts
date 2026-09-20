@@ -5,12 +5,14 @@ import type { DuplicateSkip } from './share-token-actions';
 const addItem = vi.fn();
 const addQueueTag = vi.fn();
 const getItemByTmdbId = vi.fn();
+const reviveItem = vi.fn();
 const getOrAssignColor = vi.fn();
 
 vi.mock('./db', () => ({
 	addItem: (...args: unknown[]) => addItem(...args),
 	addQueueTag: (...args: unknown[]) => addQueueTag(...args),
 	getItemByTmdbId: (...args: unknown[]) => getItemByTmdbId(...args),
+	reviveItem: (...args: unknown[]) => reviveItem(...args),
 	nowIso: () => '2024-01-01T00:00:00.000Z'
 }));
 
@@ -66,6 +68,7 @@ beforeEach(() => {
 	addQueueTag.mockReset();
 	getItemByTmdbId.mockReset();
 	getItemByTmdbId.mockResolvedValue(undefined);
+	reviveItem.mockReset();
 	getOrAssignColor.mockReset();
 });
 
@@ -107,7 +110,7 @@ describe('addAllToQueue', () => {
 		expect(state.addError).toBe('');
 	});
 
-	it('still reports a skip when the matching row is a tombstone (previously removed)', async () => {
+	it('revives a tombstoned (previously removed) row instead of claiming it is already queued', async () => {
 		const { state, deps } = makeDeps();
 		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
 		getItemByTmdbId.mockResolvedValue({
@@ -115,11 +118,45 @@ describe('addAllToQueue', () => {
 			tmdb_id: 100,
 			deleted_at: '2026-01-01T00:00:00.000Z'
 		});
+		reviveItem.mockResolvedValue({ id: 1, tmdb_id: 100, deleted_at: null });
+
+		await addAllToQueue([makeShareItem()], 'My Queue', deps);
+
+		// The revive carries the list tag via the payload itself (a wholesale
+		// write), so there's no separate addQueueTag call.
+		expect(reviveItem).toHaveBeenCalledWith(
+			1,
+			expect.objectContaining({
+				tmdb_id: 100,
+				queue_tags: { 'My Queue': { at: expect.any(String) } }
+			})
+		);
+		expect(addQueueTag).not.toHaveBeenCalled();
+		expect(state.skips).toEqual([]);
+		expect(state.addedCount).toBe(1);
+	});
+
+	it('does not revive a live duplicate', async () => {
+		const { deps } = makeDeps();
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue({ id: 1, tmdb_id: 100, deleted_at: null });
+
+		await addAllToQueue([makeShareItem()], 'My Queue', deps);
+
+		expect(reviveItem).not.toHaveBeenCalled();
+	});
+
+	it('still reports a skip if the collision has no matching row at all', async () => {
+		const { state, deps } = makeDeps();
+		addItem.mockRejectedValue(new DOMException('dup', 'ConstraintError'));
+		getItemByTmdbId.mockResolvedValue(undefined);
 
 		await addAllToQueue([makeShareItem()], 'My Queue', deps);
 
 		expect(addQueueTag).not.toHaveBeenCalled();
+		expect(reviveItem).not.toHaveBeenCalled();
 		expect(state.skips).toEqual([{ title: 'Arrival', existingTag: null }]);
+		expect(state.addedCount).toBe(0);
 	});
 
 	it('only surfaces an error when nothing was added or skipped', async () => {

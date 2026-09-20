@@ -1,6 +1,14 @@
 import type { ImportFormat, ImportRow } from './import';
 import { soloTagMap, type WatchlistItem } from './types';
-import { addItem, addQueueTag, getItemByTmdbId, nowIso, replaceAll, setServices } from './db';
+import {
+	addItem,
+	addQueueTag,
+	getItemByTmdbId,
+	nowIso,
+	replaceAll,
+	reviveItem,
+	setServices
+} from './db';
 import { decrypt } from './crypto';
 import { deserializeAppState } from './app-state';
 import { setQueueName, setQueueColor } from './queue-colors';
@@ -59,11 +67,9 @@ export async function importRows(
 			}>;
 			for (const { title, result } of matched) {
 				if (result) {
+					const payload = { ...result, queue_tags: soloTagMap(queueTag, nowIso()) };
 					try {
-						const created = await addItem({
-							...result,
-							queue_tags: soloTagMap(queueTag, nowIso())
-						});
+						const created = await addItem(payload);
 						importAdded++;
 						if (target && 'collection' in target) addedForSharedPush.push(created);
 					} catch (e) {
@@ -76,8 +82,17 @@ export async function importRows(
 						// import's actual target (the list, or the shared
 						// collection) silently unfulfilled for a title that
 						// happened to already be queued.
+						//
+						// A tombstoned row (previously removed) still occupies the
+						// unique index slot, so the collision only means "was
+						// queued," not "still is" — revive it rather than counting
+						// a title as imported that never actually landed (see
+						// reviveItem in db.ts).
 						const existing = await getItemByTmdbId(result.tmdb_id, result.media_type);
-						if (existing && !existing.deleted_at) {
+						if (existing?.deleted_at) {
+							const revived = await reviveItem(existing.id, payload);
+							if (target && 'collection' in target) addedForSharedPush.push(revived);
+						} else if (existing) {
 							if (queueTag) await addQueueTag(existing.id, queueTag);
 							if (target && 'collection' in target) addedForSharedPush.push(existing);
 						}

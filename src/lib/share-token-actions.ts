@@ -1,5 +1,5 @@
 import { soloTagMap, type ShareItem } from './types';
-import { addItem, addQueueTag, getItemByTmdbId, nowIso } from './db';
+import { addItem, addQueueTag, getItemByTmdbId, nowIso, reviveItem } from './db';
 import { getOrAssignColor } from './queue-colors';
 import { isConstraintError } from './http';
 
@@ -34,30 +34,31 @@ export async function addAllToQueue(
 		for (const item of items) {
 			const tag = item.queue_tag || fallbackTag;
 			if (tag !== fallbackTag) getOrAssignColor(tag);
+			const payload = {
+				tmdb_id: item.tmdb_id,
+				media_type: item.media_type,
+				title: item.title,
+				poster_path: item.poster_path,
+				overview: null,
+				providers: item.providers.map((p) => ({
+					provider_id: p.provider_id,
+					provider_name: p.provider_name,
+					logo_path: p.logo_path
+				})),
+				rentable: false,
+				runtime_minutes: item.runtime_minutes,
+				seasons: (item.seasons ?? []).map((s) => ({
+					season_number: s.season_number,
+					episode_count: 0,
+					name: '',
+					runtime_minutes: s.runtime_minutes
+				})),
+				watched_seasons: [],
+				release: null,
+				queue_tags: soloTagMap(tag, nowIso())
+			};
 			try {
-				await addItem({
-					tmdb_id: item.tmdb_id,
-					media_type: item.media_type,
-					title: item.title,
-					poster_path: item.poster_path,
-					overview: null,
-					providers: item.providers.map((p) => ({
-						provider_id: p.provider_id,
-						provider_name: p.provider_name,
-						logo_path: p.logo_path
-					})),
-					rentable: false,
-					runtime_minutes: item.runtime_minutes,
-					seasons: (item.seasons ?? []).map((s) => ({
-						season_number: s.season_number,
-						episode_count: 0,
-						name: '',
-						runtime_minutes: s.runtime_minutes
-					})),
-					watched_seasons: [],
-					release: null,
-					queue_tags: soloTagMap(tag, nowIso())
-				});
+				await addItem(payload);
 				added++;
 			} catch (err) {
 				if (!isConstraintError(err)) {
@@ -69,11 +70,15 @@ export async function addAllToQueue(
 				// #274 — identity is global again, so a conflict here means
 				// "already in the queue somewhere," not "already in this exact
 				// list." Membership is additive now, so this gains the tag
-				// rather than reporting a no-op skip — a tombstoned row
-				// (previously removed, still occupying the index slot) is the
-				// one case genuinely left to skip.
+				// rather than reporting a no-op skip. A tombstoned row
+				// (previously removed, still occupying the index slot) means
+				// "was queued," not "still is" — revive it instead of telling
+				// the user it's already in their queue (see reviveItem in db.ts).
 				const existing = await getItemByTmdbId(item.tmdb_id, item.media_type);
-				if (existing && !existing.deleted_at) {
+				if (existing?.deleted_at) {
+					await reviveItem(existing.id, payload);
+					added++;
+				} else if (existing) {
 					await addQueueTag(existing.id, tag);
 					added++;
 				} else {
