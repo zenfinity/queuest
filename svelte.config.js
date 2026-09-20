@@ -9,12 +9,21 @@ export default {
 		env: {
 			publicPrefix: 'PUBLIC_'
 		},
-		// src/service-worker.ts is built regardless; this only stops Kit from
-		// registering it itself. Registration is manual and prod-only
-		// (src/lib/pwa.ts) so `vite dev` never runs a worker that would cache
-		// static files under HMR's feet.
-		// robots.txt is for crawlers; Kit's default filter already drops .DS_Store.
-		serviceWorker: { register: false, files: (file) => !/\.DS_Store|robots\.txt$/.test(file) },
+		serviceWorker: {
+			// src/service-worker.ts is built regardless; this only stops Kit from
+			// registering it itself. Registration is manual and prod-only
+			// (src/lib/pwa.ts) so `vite dev` never runs a worker that would cache
+			// static files under HMR's feet.
+			register: false,
+			// Not worth downloading at install: robots.txt is for crawlers,
+			// og-image.png for link-preview scrapers, and the icons are only read
+			// when installing (an installed app already has its icon). Kit's default
+			// filter also drops .DS_Store.
+			files: (file) =>
+				!/\.DS_Store|robots\.txt$|og-image\.png$|apple-touch-icon\.png$|icon-[\w-]+\.png$/.test(
+					file
+				)
+		},
 		// Poll _app/version.json so a long-lived tab (a home-screen PWA can stay
 		// open for days) learns a new build shipped — drives UpdateBanner.
 		version: { pollInterval: 30 * 60 * 1000 },

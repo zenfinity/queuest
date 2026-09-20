@@ -16,6 +16,14 @@ Two things worked out differently than expected, both found by testing in a real
 
 The worker is registered manually and only in production builds (`serviceWorker: { register: false }` in `svelte.config.js`), so `vite dev` never runs one under HMR. CSP needed no change for registration itself; `worker-src 'self'` is now stated explicitly in `kit.csp`, `hooks.server.ts`'s fallback, and `_headers`. Playwright blocks service workers by default now so the existing specs still see the network directly; the new `e2e/offline.spec.ts` opts back in and covers booting and navigating offline, the search and error-page messaging, the offline page, that nothing from `/api/*`, `__data.json`, or `version.json` ever lands in a cache, and that registering raises no CSP violations on either the prerendered landing page or a dynamic one.
 
+### fix: real app icons and matching launch colors (#316)
+
+The manifest's only icon was the 1200×630 social-share banner, and there was no `apple-touch-icon` at all. Checked against Chrome itself rather than assumed: headed Chromium reported `manifest-missing-suitable-icon` and `no-acceptable-icon` for the manifest as shipped, and reports neither now (headless Chromium skips these checks entirely and reports nothing either way, so it isn't evidence).
+
+Added 192×192 and 512×512 icons, a 512×512 maskable icon (full-bleed, with the glyph kept inside the central safe zone launchers crop to), and a 180×180 `apple-touch-icon` linked from `app.html` — all rendered from the mark the inline favicon already used (a white bold "Q" on `#f97316`), so no new design, just that mark at the sizes installers ask for. `og-image.png` is now only for link previews and is out of the manifest's `icons`. The manifest's `background_color` and `theme_color` are now the dark palette (`#030712` / `#0f172a`): dark is the app's default, and `background_color` is what an installed app paints while launching, so it used to open on a white flash.
+
+The service worker's precache now also skips `og-image.png`, `robots.txt` and the icons — they're only read by crawlers or at install time, so downloading them on every worker install was wasted bytes.
+
 ## [1.42.0] — 2026-09-20
 
 ### fix: importing a list or accepting a share link no longer drops previously removed titles (#313)
