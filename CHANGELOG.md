@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.46.1] — 2026-11-21
+
+### docs: bring the README up to date with v0.9.5–v1.46.0
+
+The README was last fully refreshed in v0.9.5. This pass checks it against every release since then and against the code.
+
+- **Removed an inaccurate claim:** Criterion import. Criterion is only on the import-fetch proxy's list of allowed sites, from the v0.5.2 SSRF fix (#65). No parser or UI handles a Criterion export, and a Criterion link would fail as an unrecognised format. Import is now described as Letterboxd and IMDb CSVs plus pasted lists, in both Features and Known limitations.
+- **Corrected names:** "Refresh provider data" is now **Settings → Refresh Data**, which also refreshes cast, release dates, and seasons. "Settings → Export" is now **Settings → Export Watchlist**.
+- **Added shipped features the README didn't mention:**
+  - notes on titles (v1.3.1)
+  - a title in several lists at once, each list with its own order (v1.19–1.20)
+  - drag-and-drop actions (v1.32–1.39)
+  - installable and offline (v1.43)
+  - the desktop backdrop image in the detail panel (v1.13)
+  - the services step in onboarding, and signing in from the landing page or the Import section (v1.46)
+- **Development section** now covers `PUBLIC_ORIGIN`, `npm run db:migrate:local` (needed for sync, sign-in, and shared lists locally), and the check, lint, unit, and e2e test commands.
+
 ## [1.46.0] — 2026-11-21
 
 ### feat: sign in from the landing page and the Import section
