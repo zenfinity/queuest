@@ -7,10 +7,12 @@ You can always mark titles by hand with the checkbox in a title's detail panel. 
 ## How the check works
 
 - Your browser talks to Jellyfin directly. Queuest's servers never see the request, your server address, or your token.
-- The address and token are saved on that one device only. They aren't synced to your other devices or included in backups. **Settings → Danger Zone → Reset everything** clears them.
+- The address and token are saved on the device where you connect. If you use sync, they're also saved to your account, so every device you sign in on is connected too. Like the rest of your synced data, they're encrypted on your device before upload, so Queuest's servers can't read them. They're never included in `.queuest` backup files. **Disconnect** disconnects every signed-in device. **Settings → Danger Zone → Reset everything** only clears them from that one device.
 - Queuest asks Jellyfin for every movie and series it has, matches them to your queue by TMDB ID (with IMDb ID as a fallback), and checks the box on any match. It only ever adds marks. It never unchecks a title, so a title you marked by hand for a different server stays marked.
 - It runs when you open the app, at most every 6 hours, and from **Settings → Media Server → Check library now**. If your device isn't on Tailscale at the time, the automatic check fails quietly and tries again next time.
-- It covers titles in your own queue. Titles that are only in a shared list aren't checked automatically. You can still mark those by hand, and each member's mark is their own.
+- It covers your queue, your personal lists (a title in a list is part of your queue), and, if you use sync, every shared list you belong to.
+- On a shared list, everyone on the list sees a title as available when any member has it on their server, on the assumption that people sharing a list can use each other's library. The detail panel says whose server it's on. Each member's own checkbox is still theirs: unchecking yours never removes someone else's mark.
+- Movies that Jellyfin groups into a collection (a BoxSet) are checked individually, so a movie inside a collection still matches.
 
 ## Why it has to be https on a `.ts.net` address
 
@@ -87,7 +89,7 @@ The response's `AccessToken` field is the token. It stays valid until you sign t
 
 In **Settings → Media Server**, enter the `https://….ts.net` address (no port) and the token, then choose **Connect and check**. Queuest runs a first check right away. If it fails, nothing is saved and you'll see why. If it works, you'll see how many movies and shows it found and how many queue titles it marked.
 
-Repeat this on each device you want to run the check from. The connection is saved per device.
+With sync on, that's the only setup you need: your other signed-in devices pick up the connection on their next sync. Without sync, repeat this on each device you want to run the check from. Each device only runs the check while it's on Tailscale. A list member who isn't on your tailnet doesn't need to connect at all, because they see your marks on shared lists.
 
 ## Troubleshooting
 

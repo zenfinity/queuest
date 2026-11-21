@@ -1,21 +1,28 @@
 /**
  * Jellyfin library check: asks the user's own Jellyfin server which titles it
- * has, and marks matching queue items as "On my media server"
- * (`in_library_at`).
+ * has, and marks matching titles as "On my media server": `in_library_at` on
+ * queue items, and this account's own `in_library` entry on shared-list items.
  *
- * Runs entirely in the browser. The server URL and token live only in this
- * device's IndexedDB meta store, outside the sync blob, so they never reach
- * Queuest's servers or other devices. The browser talks to Jellyfin directly,
- * which is what lets this work with a server that's reachable only over a
- * Tailscale tailnet.
+ * Runs entirely in the browser, which talks to Jellyfin directly. That's what
+ * lets this work with a server reachable only over a Tailscale tailnet. The
+ * saved connection lives on the device and, with sync on, in the encrypted
+ * sync payload (see media-server-config.ts), never in readable form on
+ * Queuest's servers.
  *
- * Only `https://*.ts.net` addresses are accepted. An https page can't call a
- * plain-http server (mixed content), and the CSP's connect-src only allows
- * `https://*.ts.net:*` for anything outside TMDB. Tailscale's `serve` command
- * gives a tailnet-only https address with a real certificate, which fits both.
+ * Only `https://*.ts.net` addresses are accepted (see normalizeServerUrl).
  */
 import { getMeta, setMeta, deleteMeta, getAll, markInLibrary } from './db';
 import { itemKey, type WatchlistItem } from './types';
+import { isSyncEnabled, getSyncStatus, restoreSyncState, syncNow } from './sync';
+import { markSharedInLibrary } from './collection-actions';
+import {
+	normalizeServerUrl,
+	readStoredMediaServer,
+	writeStoredMediaServer,
+	deleteStoredMediaServer
+} from './media-server-config';
+
+export { normalizeServerUrl };
 
 export interface JellyfinConfig {
 	/** Normalized base URL, no trailing slash, e.g. https://media.tail1234.ts.net */
@@ -23,7 +30,6 @@ export interface JellyfinConfig {
 	token: string;
 }
 
-const CONFIG_KEY = 'jellyfin_config';
 const LAST_CHECK_KEY = 'jellyfin_last_check';
 /** How often the automatic check on app open is allowed to run. */
 export const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -32,53 +38,33 @@ const PAGE_SIZE = 1000;
 const MAX_PAGES = 100;
 const REQUEST_TIMEOUT_MS = 15_000;
 
-/**
- * Validates and normalizes a user-entered server address. Returns the
- * normalized URL, or an error message suitable for showing in Settings.
- * Keeps any path prefix (Jellyfin can run under e.g. /jellyfin).
- */
-export function normalizeServerUrl(raw: string): { url: string } | { error: string } {
-	let parsed: URL;
-	try {
-		parsed = new URL(raw.trim());
-	} catch {
-		return { error: 'That doesn’t look like a web address.' };
-	}
-	if (parsed.protocol !== 'https:') {
-		return { error: 'The address must start with https://.' };
-	}
-	if (!parsed.hostname.endsWith('.ts.net')) {
-		return {
-			error: 'Only Tailscale addresses (ending in .ts.net) are supported. See the setup note below.'
-		};
-	}
-	if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-		return { error: 'Enter just the server address, without a login, query, or #fragment.' };
-	}
-	const path = parsed.pathname.replace(/\/+$/, '');
-	return { url: `${parsed.origin}${path}` };
-}
-
 export async function getJellyfinConfig(): Promise<JellyfinConfig | null> {
-	const raw = await getMeta(CONFIG_KEY);
-	if (!raw) return null;
-	try {
-		const parsed = JSON.parse(raw) as Partial<JellyfinConfig>;
-		if (typeof parsed.url === 'string' && typeof parsed.token === 'string') {
-			return { url: parsed.url, token: parsed.token };
-		}
-	} catch {
-		// Corrupt entry: treat as not configured
-	}
-	return null;
+	const record = await readStoredMediaServer();
+	if (!record || record.cleared || !record.url || !record.token) return null;
+	return { url: record.url, token: record.token };
 }
 
+/** Saves the connection and, with sync on, pushes it to the account. */
 export async function setJellyfinConfig(config: JellyfinConfig): Promise<void> {
-	await setMeta(CONFIG_KEY, JSON.stringify(config));
+	await writeStoredMediaServer({ ...config, updatedAt: new Date().toISOString() });
+	void syncNow().catch(() => {
+		// Sync reports its own status; the connection is saved locally either way
+	});
 }
 
+/** Disconnect: a synced tombstone, so every signed-in device disconnects. */
 export async function clearJellyfinConfig(): Promise<void> {
-	await Promise.all([deleteMeta(CONFIG_KEY), deleteMeta(LAST_CHECK_KEY)]);
+	await Promise.all([
+		writeStoredMediaServer({ cleared: true, updatedAt: new Date().toISOString() }),
+		deleteMeta(LAST_CHECK_KEY)
+	]);
+	void syncNow().catch(() => {});
+}
+
+/** Reset everything: forgets the connection on this device only. With sync
+ * on, the next pull brings it back, same as the rest of the account's data. */
+export async function forgetJellyfinConfigLocally(): Promise<void> {
+	await Promise.all([deleteStoredMediaServer(), deleteMeta(LAST_CHECK_KEY)]);
 }
 
 export async function getLastCheck(): Promise<string | undefined> {
@@ -137,6 +123,11 @@ export async function fetchLibraryKeys(
 			Fields: 'ProviderIds',
 			EnableImages: 'false',
 			EnableUserData: 'false',
+			// Jellyfin's "group movies into collections" otherwise returns a
+			// BoxSet in place of every movie that belongs to one, so those
+			// movies never appear here. On a real library this hid 59 of 175
+			// movies (Ghostbusters 2016 among them, inside its collection).
+			CollapseBoxSetItems: 'false',
 			StartIndex: String(page * PAGE_SIZE),
 			Limit: String(PAGE_SIZE)
 		});
@@ -172,20 +163,30 @@ export async function fetchLibraryKeys(
 	return { keys, count };
 }
 
+/** Whether a title (queue or shared-list item) is in the library: by
+ * type + TMDB id, or by IMDb id as a fallback. */
+export function matchesLibrary(
+	item: { tmdb_id: number; media_type: 'movie' | 'tv'; imdb_id?: string | null },
+	keys: Set<string>
+): boolean {
+	return keys.has(itemKey(item)) || (item.imdb_id ? keys.has(`imdb:${item.imdb_id}`) : false);
+}
+
 /** Queue items that are in the library but not yet marked. Add-only: an
  * existing mark is never removed, since it may have been set by hand for a
  * title on a different server. */
 export function itemsToMark(items: WatchlistItem[], keys: Set<string>): WatchlistItem[] {
-	return items.filter(
-		(item) =>
-			!item.in_library_at &&
-			(keys.has(itemKey(item)) || (item.imdb_id ? keys.has(`imdb:${item.imdb_id}`) : false))
-	);
+	return items.filter((item) => !item.in_library_at && matchesLibrary(item, keys));
 }
 
 export interface LibraryCheckResult {
 	libraryCount: number;
+	/** Personal queue titles newly marked (this covers personal lists too:
+	 * a title in a personal list is a queue row). */
 	newlyMarked: number;
+	/** Shared-list titles newly marked with this account's own mark. Zero
+	 * when sync is off, since shared lists need an account. */
+	sharedMarked: number;
 }
 
 /** Runs a full check against the saved config and marks any new matches. */
@@ -194,11 +195,46 @@ export async function runLibraryCheck(
 ): Promise<LibraryCheckResult | null> {
 	const config = await getJellyfinConfig();
 	if (!config) return null;
-	const { keys, count } = await fetchLibraryKeys(config, fetchFn);
+	return applyLibrary(await fetchLibraryKeys(config, fetchFn));
+}
+
+/**
+ * Settings' "Connect and check": tries the new connection first and saves
+ * (and syncs) it only once that works, so a typo never reaches other devices.
+ * Throws a JellyfinError on failure, with nothing saved.
+ */
+export async function connectAndCheck(
+	config: JellyfinConfig,
+	fetchFn: typeof fetch = fetch
+): Promise<LibraryCheckResult> {
+	const library = await fetchLibraryKeys(config, fetchFn);
+	await setJellyfinConfig(config);
+	return applyLibrary(library);
+}
+
+async function applyLibrary({ keys, count }: LibraryKeys): Promise<LibraryCheckResult> {
 	const toMark = itemsToMark(await getAll(), keys);
 	if (toMark.length > 0) await markInLibrary(toMark.map((i) => i.id));
+	const sharedMarked = await markSharedTitles(keys);
 	await setMeta(LAST_CHECK_KEY, new Date().toISOString());
-	return { libraryCount: count, newlyMarked: toMark.length };
+	return { libraryCount: count, newlyMarked: toMark.length, sharedMarked };
+}
+
+/** Shared lists only exist with sync on. Best-effort: a failure here (a
+ * list that won't load, the API unreachable) never fails the personal pass
+ * that already ran. */
+async function markSharedTitles(keys: Set<string>): Promise<number> {
+	try {
+		if (!(await isSyncEnabled())) return 0;
+		// The email is how a non-owner finds their own member id; it's loaded
+		// into sync status on startup, which may not have finished yet.
+		if (!getSyncStatus().email) await restoreSyncState();
+		const email = getSyncStatus().email;
+		if (!email) return 0;
+		return await markSharedInLibrary((item) => matchesLibrary(item, keys), email);
+	} catch {
+		return 0;
+	}
 }
 
 /** Fired on `window` when a background check marks new titles, so an
@@ -214,7 +250,7 @@ export async function maybeAutoCheck(now: Date = new Date()): Promise<void> {
 		const last = await getLastCheck();
 		if (last && now.getTime() - new Date(last).getTime() < AUTO_CHECK_INTERVAL_MS) return;
 		const result = await runLibraryCheck();
-		if (result && result.newlyMarked > 0 && typeof window !== 'undefined') {
+		if (result && result.newlyMarked + result.sharedMarked > 0 && typeof window !== 'undefined') {
 			window.dispatchEvent(new Event(LIBRARY_MARKED_EVENT));
 		}
 	} catch {

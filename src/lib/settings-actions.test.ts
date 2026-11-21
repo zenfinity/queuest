@@ -19,9 +19,9 @@ vi.mock('./db', () => ({
 	setServices: (...args: unknown[]) => setServices(...args)
 }));
 
-const clearJellyfinConfig = vi.fn().mockResolvedValue(undefined);
+const forgetJellyfinConfigLocally = vi.fn().mockResolvedValue(undefined);
 vi.mock('./jellyfin', () => ({
-	clearJellyfinConfig: () => clearJellyfinConfig()
+	forgetJellyfinConfigLocally: () => forgetJellyfinConfigLocally()
 }));
 
 vi.mock('./crypto', () => ({
@@ -259,7 +259,7 @@ describe('resetEverything', () => {
 
 		expect(replaceAll).toHaveBeenCalledWith([]);
 		expect(setServices).toHaveBeenCalledWith([]);
-		expect(clearJellyfinConfig).toHaveBeenCalled();
+		expect(forgetJellyfinConfigLocally).toHaveBeenCalled();
 	});
 
 	it('removes the actual localStorage keys the app writes, not stale hyphenated names', async () => {

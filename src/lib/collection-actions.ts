@@ -498,6 +498,53 @@ export async function setCollectionInLibrary(
 }
 
 /**
+ * The Jellyfin library check's shared-list pass: across every shared list
+ * this account belongs to, sets this account's own `in_library` entry on each
+ * live item `isInLibrary` accepts and that isn't already marked by this
+ * account. Add-only, like the personal pass, and one push per list that
+ * actually has new matches. A list that fails to load or push is skipped so
+ * the rest still get checked. Returns how many items were newly marked.
+ */
+export async function markSharedInLibrary(
+	isInLibrary: (item: CollectionItem) => boolean,
+	myEmail: string
+): Promise<number> {
+	const quiet: CollectionActionDeps = { setBusy: () => {}, setError: () => {} };
+	let marked = 0;
+	for (const collection of await listCollections(quiet)) {
+		try {
+			// Same account-id lookup SharedListSection uses.
+			const myId =
+				collection.role === 'owner'
+					? collection.ownerUserId
+					: (await listMembers(collection.id, quiet)).find((m) => m.email === myEmail)?.userId;
+			if (!myId) continue;
+			const needsMark = (i: CollectionItem) =>
+				!i.deleted_at && !i.in_library?.[myId] && isInLibrary(i);
+			const dek = await importDek(await openCollectionKey(collection.wrappedKey), false);
+			const { items } = await fetchCollectionState(collection.id, dek, collection.memberDekVersion);
+			const count = items.filter(needsMark).length;
+			if (count === 0) continue;
+			const now = new Date().toISOString();
+			await syncCollectionItems(
+				collection.id,
+				dek,
+				items,
+				(merged) =>
+					merged.map((i) =>
+						needsMark(i) ? { ...i, in_library: { ...(i.in_library ?? {}), [myId]: now } } : i
+					),
+				collection.memberDekVersion
+			);
+			marked += count;
+		} catch {
+			// One unreadable or conflicting list shouldn't stop the others
+		}
+	}
+	return marked;
+}
+
+/**
  * Sets the one shared note on an item (#155/#236) — a single string, not a
  * per-account map like `watch`, so this replaces the whole field rather than
  * merging one account's entry into it. Owner-only is enforced by which

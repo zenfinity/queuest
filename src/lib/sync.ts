@@ -17,6 +17,13 @@ import {
 	onMutation
 } from './db';
 import {
+	parseStoredMediaServer,
+	mergeMediaServer,
+	readStoredMediaServer,
+	writeStoredMediaServer,
+	type StoredMediaServer
+} from './media-server-config';
+import {
 	serializeSyncSnapshot,
 	deserializeAppState,
 	applyPrefs,
@@ -343,10 +350,16 @@ async function runSyncCycle(dek: CryptoKey): Promise<void> {
 		let remoteItems: BackupItem[] = [];
 		let remotePrefs: AppStatePrefs | undefined;
 		let remoteServices: Provider[] | undefined;
+		let remoteMediaServer: StoredMediaServer | null = null;
 		if (pulled.bytes) {
 			const plainGz = await decryptBytesWithDek(pulled.bytes, dek);
 			const json = new TextDecoder().decode(await gunzip(plainGz));
-			const parsed = deserializeAppState(JSON.parse(json));
+			const raw = JSON.parse(json);
+			const parsed = deserializeAppState(raw);
+			// Sync-only (never in an export), so it's read here rather than in
+			// deserializeAppState. Validated: it decides where the browser sends
+			// a token.
+			remoteMediaServer = parseStoredMediaServer(raw?.mediaServer);
 			remoteItems = parsed.items;
 			remotePrefs = parsed.prefs;
 			remoteServices = parsed.services;
@@ -357,11 +370,14 @@ async function runSyncCycle(dek: CryptoKey): Promise<void> {
 			if (parsed.rejectedItemCount > 0) reportFailure('backup_item_parse_rejected');
 		}
 
-		const [localSnapshot, localServicesUpdatedAt, lastPushedAt] = await Promise.all([
-			serializeSyncSnapshot(),
-			getMeta('services_updated_at'),
-			getMeta(LAST_PUSHED_AT_KEY)
-		]);
+		const [localSnapshot, localServicesUpdatedAt, lastPushedAt, localMediaServer] =
+			await Promise.all([
+				serializeSyncSnapshot(),
+				getMeta('services_updated_at'),
+				getMeta(LAST_PUSHED_AT_KEY),
+				readStoredMediaServer()
+			]);
+		const mergedMediaServer = mergeMediaServer(localMediaServer, remoteMediaServer);
 
 		const mergedItems = mergeItems(localSnapshot.items, remoteItems);
 		const mergedServices = mergeServices(
@@ -386,6 +402,9 @@ async function runSyncCycle(dek: CryptoKey): Promise<void> {
 			setServices(mergedServices, { silent: true })
 		]);
 		applyPrefs(mergedPrefs);
+		if (mergedMediaServer && mergedMediaServer !== localMediaServer) {
+			await writeStoredMediaServer(mergedMediaServer);
+		}
 
 		const finalItems = (await getAllIncludingDeleted()).map(
 			({ id: _id, ...rest }) => rest as BackupItem
@@ -394,7 +413,8 @@ async function runSyncCycle(dek: CryptoKey): Promise<void> {
 			version: localSnapshot.version,
 			prefs: mergedPrefs,
 			items: finalItems,
-			services: mergedServices
+			services: mergedServices,
+			...(mergedMediaServer ? { mediaServer: mergedMediaServer } : {})
 		});
 		const compressed = await gzip(new TextEncoder().encode(payload));
 		const ciphertext = await encryptBytesWithDek(compressed, dek);

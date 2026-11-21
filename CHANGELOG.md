@@ -1,8 +1,8 @@
 # Changelog
 
-## [1.46.1] — 2026-11-21
+## [1.48.1] — 2026-11-21
 
-### docs: bring the README up to date with v0.9.5–v1.46.0
+### docs: bring the README up to date with v0.9.5–v1.48.0
 
 The README was last fully refreshed in v0.9.5. This pass checks it against every release since then and against the code.
 
@@ -16,6 +16,37 @@ The README was last fully refreshed in v0.9.5. This pass checks it against every
   - the desktop backdrop image in the detail panel (v1.13)
   - the services step in onboarding, and signing in from the landing page or the Import section (v1.46)
 - **Development section** now covers `PUBLIC_ORIGIN`, `npm run db:migrate:local` (needed for sync, sign-in, and shared lists locally), and the check, lint, unit, and e2e test commands.
+
+## [1.48.0] — 2026-11-21
+
+### feat: the Jellyfin connection follows your account
+
+Before, the server address and token were saved only on the device where you connected, so each device needed its own setup. With sync on, they're now saved to your account too, and every device you sign in on is connected after its next sync.
+
+- **Privacy:** the connection travels as its own field in the sync payload, which is encrypted on your device before upload, so Queuest's server never sees the token in readable form. It's still never included in a `.queuest` export.
+- **Merging:** it's merged last-write-wins on a timestamp. **Disconnect** writes a "disconnected" marker that syncs too, so disconnecting on one device disconnects them all instead of being undone by another device's copy. **Reset everything** still only clears it from that device.
+- **Validation:** a pulled connection is accepted only if it's a `https://….ts.net` address with a bounded token, so a bad sync payload can't send your token anywhere else.
+- **Connect and check** now tests the connection before saving anything, so a mistyped address or token is never stored or synced.
+
+### feat: everyone on a shared list sees titles on any member's media server
+
+On a shared list, the 📀 badge now shows for every member when *anyone* on the list has the title on their server, on the assumption that people sharing a list can use each other's library. The detail panel says whose server it's on, for example "On you@example.com's media server". Each member's own checkbox stays theirs, so one member unchecking never removes another's mark. Nothing changes in storage: each member's mark was already kept separately on shared titles. Only what's shown changed.
+
+The setup guide and README now describe both changes, including that other members of a shared list can see which titles are on your server.
+
+## [1.47.0] — 2026-11-21
+
+### fix: the Jellyfin check missed every movie that's part of a collection
+
+Jellyfin groups movies into collections by default. When it does, a library listing returns one BoxSet in place of each collection's movies, so those movies never reached Queuest's matching. On the library this was found on, 59 of 175 movies were hidden this way, including Ghostbusters (2016) inside its collection. The check still reported success, because it matched every movie that isn't in a collection.
+
+The library request now sends `CollapseBoxSetItems=false`, so every movie comes back individually. Checked against that same real server: the listing goes from 116 movies plus 14 BoxSets to all 175 movies, and Ghostbusters (2016) now matches by its TMDB id.
+
+### feat: the Jellyfin check also marks titles in shared lists
+
+The check used to cover only your queue, which includes your personal lists, since a title in a personal list is a queue row. It now also goes through every shared list you belong to, when sync is on. It sets only your own entry in each matching title's per-member `in_library` map, the same mark the checkbox sets, and never touches other members' marks. Like the personal pass, it only adds marks. It skips titles you've already marked and titles removed from the list, and pushes once per list that has new matches. A list that fails to load or save is skipped without stopping the rest, and the shared pass never fails the personal one. **Check library now** reports both counts, for example "Marked 3 new titles in your queue and 2 in shared lists."
+
+Titles that were missed are marked on the next check: automatically within 6 hours of opening the app, or straight away with **Settings → Media Server → Check library now**. The setup guide now says shared lists and movies in collections are covered.
 
 ## [1.46.0] — 2026-11-21
 
