@@ -28,11 +28,9 @@ export const GET: RequestHandler = async ({ params, platform, locals }) => {
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Collections unavailable');
+	if (!db) return apiError(503, 'Collections unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`coll-members:${user.id}`,
 		LIST_LIMIT.max,
 		LIST_LIMIT.windowSeconds
@@ -107,11 +105,9 @@ export const DELETE: RequestHandler = async ({ request, params, platform, locals
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Collections unavailable');
+	if (!db) return apiError(503, 'Collections unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`coll-rotate:${user.id}`,
 		ROTATE_LIMIT.max,
 		ROTATE_LIMIT.windowSeconds

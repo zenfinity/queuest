@@ -38,14 +38,12 @@ function reject(reason: InviteRejection): Response {
  */
 export const GET: RequestHandler = async ({ params, platform, getClientAddress }) => {
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Collections unavailable');
+	if (!db) return apiError(503, 'Collections unavailable');
 
 	// No session to key on for an unauthenticated preview, so throttle by IP —
 	// this endpoint is otherwise an unauthenticated token-guessing oracle,
 	// infeasible at 192 bits but not worth leaving uncapped.
 	const allowed = await checkRateLimit(
-		kv,
 		`coll-inv-preview:${getClientAddress()}`,
 		PREVIEW_LIMIT.max,
 		PREVIEW_LIMIT.windowSeconds
@@ -78,11 +76,9 @@ export const POST: RequestHandler = async ({ request, params, platform, locals }
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Collections unavailable');
+	if (!db) return apiError(503, 'Collections unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`coll-inv-claim:${user.id}`,
 		CLAIM_LIMIT.max,
 		CLAIM_LIMIT.windowSeconds

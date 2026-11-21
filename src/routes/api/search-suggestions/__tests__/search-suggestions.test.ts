@@ -64,9 +64,10 @@ describe('GET /api/search-suggestions', () => {
 		expect(searchMulti).not.toHaveBeenCalled();
 	});
 
-	it('returns 503 when the KV binding is unavailable', async () => {
+	it('no longer needs a KV binding (rate limiting is in memory)', async () => {
+		searchMulti.mockResolvedValue([]);
 		const res = await GET(mockEvent('batman', { kv: undefined }));
-		expect(res.status).toBe(503);
+		expect(res.status).toBe(200);
 	});
 
 	it('returns 429 once the rate limit is exceeded', async () => {

@@ -25,11 +25,9 @@ export const PATCH: RequestHandler = async ({ request, params, platform, locals 
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Collections unavailable');
+	if (!db) return apiError(503, 'Collections unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`coll-rename:${user.id}`,
 		RENAME_LIMIT.max,
 		RENAME_LIMIT.windowSeconds
@@ -102,11 +100,9 @@ export const DELETE: RequestHandler = async ({ request, params, platform, locals
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Collections unavailable');
+	if (!db) return apiError(503, 'Collections unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`coll-delete:${user.id}`,
 		DELETE_LIMIT.max,
 		DELETE_LIMIT.windowSeconds

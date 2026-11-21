@@ -29,11 +29,9 @@ export const GET: RequestHandler = async ({ params, platform, locals }) => {
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Collections unavailable');
+	if (!db) return apiError(503, 'Collections unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`coll-blob-get:${user.id}`,
 		GET_LIMIT.max,
 		GET_LIMIT.windowSeconds
@@ -88,11 +86,9 @@ export const PUT: RequestHandler = async ({ request, params, url, platform, loca
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Collections unavailable');
+	if (!db) return apiError(503, 'Collections unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`coll-blob-put:${user.id}`,
 		PUT_LIMIT.max,
 		PUT_LIMIT.windowSeconds

@@ -24,7 +24,7 @@ const RATE_LIMIT = { max: 60, windowSeconds: 60 };
  * of the up-to-16 the full search does, since this fires on every debounced
  * keystroke rather than once per submit.
  */
-export const GET: RequestHandler = async ({ url, request, platform, getClientAddress }) => {
+export const GET: RequestHandler = async ({ url, request, getClientAddress }) => {
 	const originError = checkSameOrigin(request);
 	if (originError) return originError;
 
@@ -34,11 +34,7 @@ export const GET: RequestHandler = async ({ url, request, platform, getClientAdd
 	const apiKey = env.TMDB_API_KEY;
 	if (!apiKey) return apiError(503, 'Search not configured');
 
-	const kv = platform?.env?.SHARE_KV;
-	if (!kv) return apiError(503, 'Search not configured');
-
 	const allowed = await checkRateLimit(
-		kv,
 		`search-suggest:${getClientAddress()}`,
 		RATE_LIMIT.max,
 		RATE_LIMIT.windowSeconds

@@ -43,7 +43,6 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 	if (!kv) return new Response(null, { status: 204 });
 
 	const allowed = await checkRateLimit(
-		kv,
 		`failure-report:${getClientAddress()}`,
 		RATE_LIMIT.max,
 		RATE_LIMIT.windowSeconds
