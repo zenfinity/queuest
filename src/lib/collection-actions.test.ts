@@ -297,6 +297,8 @@ describe('promoteCollection', () => {
 				watch: Record<string, string>;
 				added_by_account_id: string;
 				notes?: string;
+				in_library?: Record<string, string>;
+				in_library_at?: string | null;
 			}[];
 		};
 	}
@@ -317,6 +319,27 @@ describe('promoteCollection', () => {
 		const { items: blob } = await decryptSeeded(seeded()!, created!.wrappedKey);
 		expect(blob.map((i) => i.tmdb_id).sort()).toEqual([1, 2]);
 		expect(blob.every((i) => i.added_by_account_id === ALICE)).toBe(true);
+	});
+
+	it("turns a personal media-server mark into the promoter's in_library entry", async () => {
+		const seeded = await seedLocal([
+			{ tmdb_id: 1, queue_tag: 'Date night' },
+			{ tmdb_id: 2, queue_tag: 'Date night' }
+		]);
+		const db = await dbMod();
+		await db.setInLibrary(seeded.find((i) => i.tmdb_id === 1)!.id, true);
+		const items = await db.getAll();
+		const { mock, seeded: blobOf } = stubPromoteFetch();
+		vi.stubGlobal('fetch', mock);
+
+		const created = await promoteCollection('Date night', items, noop);
+
+		const { items: blob } = await decryptSeeded(blobOf()!, created!.wrappedKey);
+		const one = blob.find((i) => i.tmdb_id === 1)!;
+		const two = blob.find((i) => i.tmdb_id === 2)!;
+		expect(Object.keys(one.in_library ?? {})).toEqual([ALICE]);
+		expect(one.in_library_at).toBeUndefined();
+		expect(two.in_library).toBeUndefined();
 	});
 
 	// #274: promotion is additive now, not a move — the personal copy stays

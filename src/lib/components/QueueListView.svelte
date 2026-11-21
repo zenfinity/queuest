@@ -182,6 +182,9 @@
 			{item.media_type === 'movie' ? '🎬' : '📺'}
 		</span>
 		{#if item.notes}<span class="shrink-0 text-xs leading-none" title="Has a note">📝</span>{/if}
+		{#if item.in_library_at}<span class="shrink-0 text-xs leading-none" title="On your media server"
+				>📀</span
+			>{/if}
 		{#if item.providers.length > 0}
 			<div class="flex shrink-0 gap-0.5">
 				{#each item.providers.slice(0, 3) as p (p.provider_id)}

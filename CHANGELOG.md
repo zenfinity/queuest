@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.44.0] — 2026-11-21
+
+### feat: mark a title as on your media server
+
+The detail panel for a personal-queue title now has an **On my media server** checkbox. Checking it records when you marked it (shown as "since <date>"), and a 📀 badge appears next to the note badge in the queue's list and grid views. The mark is stored as a new optional `in_library_at` timestamp on the item, so it syncs between devices and carries through backup export/import like notes do. It's a user edit, so it stamps `updated_at` and follows the existing whole-item last-write-wins merge. Checking it again on a title that's already marked does nothing, so the original date is kept. Shared-list titles get the checkbox too, but stored per person. A new `in_library` map on shared items records each member's own mark (account id → when they marked it), so your mark shows only for you. It's merged per account the same way the shared-list watch marks are, so two members marking at once don't overwrite each other. Promoting a personal list to a shared one turns your existing marks into your entries in that map, and copying a shared title into your queue drops the map. It's manual only for now. Pulling this automatically from Jellyfin is a possible follow-up.
+
 ## [1.43.1] — 2026-09-20
 
 ### docs: the README now says what's actually measured (#259)

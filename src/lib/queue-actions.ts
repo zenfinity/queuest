@@ -13,6 +13,7 @@ import {
 	addQueueTag,
 	removeQueueTag,
 	setNote,
+	setInLibrary,
 	setSortOrder,
 	setTagRank,
 	gcTombstones,
@@ -406,6 +407,22 @@ export async function setItemNote(
 	}
 }
 
+export async function setItemInLibrary(
+	item: WatchlistItem,
+	inLibrary: boolean,
+	deps: QueueActionDeps
+): Promise<void> {
+	deps.setBusy(item.id, true);
+	try {
+		await setInLibrary(item.id, inLibrary);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not update media server status.');
+	} finally {
+		deps.setBusy(item.id, false);
+	}
+}
+
 /**
  * Bulk versions of addItemToCollection/removeItemFromCollection/
  * toggleWatched/removeItem (#113) — same shape, applied to many items at
@@ -523,6 +540,8 @@ export async function addCollectionItemToQueue(
 	try {
 		const {
 			watch: _watch,
+			in_library: _inLibrary,
+			in_library_at: _inLibraryAt,
 			added_by_account_id: _addedBy,
 			queue_tags: _tags,
 			added_at: _addedAt,

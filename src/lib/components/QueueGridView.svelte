@@ -185,6 +185,9 @@
 				{item.media_type === 'movie' ? '🎬' : '📺'}
 			</span>
 			{#if item.notes}<span class="text-sm leading-none" title="Has a note">📝</span>{/if}
+			{#if item.in_library_at}<span class="text-sm leading-none" title="On your media server"
+					>📀</span
+				>{/if}
 			{#each item.providers.slice(0, 4) as p (p.provider_id)}
 				<img
 					src="{TMDB_IMG}/w92{p.logo_path}"

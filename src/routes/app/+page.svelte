@@ -17,6 +17,7 @@
 		bulkAddToCollection,
 		bulkClearCollections,
 		setItemNote,
+		setItemInLibrary,
 		reorderItems,
 		snapshotSortOrderLocally,
 		moveItemToEdge,
@@ -986,6 +987,10 @@
 		onChooseLists={() => (chooseListItem = di)}
 		onSetNote={async (notes) => {
 			await setItemNote(di, notes, actionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
+		onSetInLibrary={async (inLibrary) => {
+			await setItemInLibrary(di, inLibrary, actionDeps);
 			detailItem = items.find((i) => i.id === di.id) ?? null;
 		}}
 		{sharedCollections}

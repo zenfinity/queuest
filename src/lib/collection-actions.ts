@@ -393,11 +393,14 @@ export async function promoteCollection(
  * collection itself, not whatever personal lists it also happens to sit in.
  */
 function toCollectionItem(item: WatchlistItem, accountId: string): CollectionItem {
-	const { id: _id, queue_tags: _tags, watched_at, ...rest } = item;
+	const { id: _id, queue_tags: _tags, watched_at, in_library_at, ...rest } = item;
 	return {
 		...rest,
 		watched_at,
 		watch: watched_at ? { [accountId]: watched_at } : {},
+		// Same move as watched_at: a personal "on my server" mark becomes this
+		// account's entry in the per-member map.
+		...(in_library_at ? { in_library: { [accountId]: in_library_at } } : {}),
 		added_by_account_id: accountId
 	} as CollectionItem;
 }
@@ -429,17 +432,18 @@ export async function loadCollectionItems(
 }
 
 /**
- * Toggles this account's own watch mark on one item and pushes the change.
- * Only this account's entry in the `watch` map is touched — see
- * mergeCollectionWatch for why a whole-item write would risk clobbering
- * someone else's mark on retry.
+ * Sets or clears this account's own entry in one of an item's per-account
+ * maps (`watch` or `in_library`) and pushes the change. Only this account's
+ * entry is touched — see mergeCollectionWatch for why a whole-item write
+ * would risk clobbering someone else's mark on retry.
  */
-export async function toggleCollectionWatched(
+async function setMyCollectionMark(
+	field: 'watch' | 'in_library',
 	collection: SharedCollection,
 	current: CollectionItem[],
 	item: CollectionItem,
 	myAccountId: string,
-	watched: boolean,
+	on: boolean,
 	deps: CollectionActionDeps
 ): Promise<CollectionItem[] | null> {
 	deps.setBusy(true);
@@ -454,10 +458,10 @@ export async function toggleCollectionWatched(
 			(merged) =>
 				merged.map((i) => {
 					if (i.tmdb_id !== item.tmdb_id || i.media_type !== item.media_type) return i;
-					const watch = { ...(i.watch ?? {}) };
-					if (watched) watch[myAccountId] = new Date().toISOString();
-					else delete watch[myAccountId];
-					return { ...i, watch };
+					const marks = { ...(i[field] ?? {}) };
+					if (on) marks[myAccountId] = new Date().toISOString();
+					else delete marks[myAccountId];
+					return { ...i, [field]: marks };
 				}),
 			collection.memberDekVersion
 		);
@@ -467,6 +471,30 @@ export async function toggleCollectionWatched(
 	} finally {
 		deps.setBusy(false);
 	}
+}
+
+/** Toggles this account's own watch mark on one item. */
+export async function toggleCollectionWatched(
+	collection: SharedCollection,
+	current: CollectionItem[],
+	item: CollectionItem,
+	myAccountId: string,
+	watched: boolean,
+	deps: CollectionActionDeps
+): Promise<CollectionItem[] | null> {
+	return setMyCollectionMark('watch', collection, current, item, myAccountId, watched, deps);
+}
+
+/** Sets this account's own "On my media server" mark on one shared item. */
+export async function setCollectionInLibrary(
+	collection: SharedCollection,
+	current: CollectionItem[],
+	item: CollectionItem,
+	myAccountId: string,
+	inLibrary: boolean,
+	deps: CollectionActionDeps
+): Promise<CollectionItem[] | null> {
+	return setMyCollectionMark('in_library', collection, current, item, myAccountId, inLibrary, deps);
 }
 
 /**
