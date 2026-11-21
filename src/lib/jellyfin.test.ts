@@ -88,6 +88,9 @@ describe('fetchLibraryKeys', () => {
 		const [url, init] = fetchFn.mock.calls[1];
 		expect(url).toContain('https://media.tail1234.ts.net/Items?');
 		expect(url).toContain('StartIndex=1000');
+		// Without this, movies inside a collection come back as one BoxSet
+		// and never match (the Ghostbusters 2016 bug).
+		expect(new URL(url).searchParams.get('CollapseBoxSetItems')).toBe('false');
 		expect(init.headers.Authorization).toBe('MediaBrowser Token="abc123"');
 	});
 
@@ -141,7 +144,8 @@ describe('runLibraryCheck', () => {
 
 		const result = await runLibraryCheck(fetchFn);
 
-		expect(result).toEqual({ libraryCount: 1, newlyMarked: 1 });
+		// Sync is off in this test, so there are no shared lists to check.
+		expect(result).toEqual({ libraryCount: 1, newlyMarked: 1, sharedMarked: 0 });
 		const byTitle = Object.fromEntries((await db.getAll()).map((i) => [i.title, i]));
 		expect(byTitle['In library'].in_library_at).toEqual(expect.any(String));
 		expect(byTitle['Not in library'].in_library_at).toBeUndefined();

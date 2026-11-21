@@ -95,7 +95,10 @@
 		try {
 			const result = await runLibraryCheck();
 			if (result) {
-				jellyfinResult = `Found ${result.libraryCount} movies and shows. Marked ${result.newlyMarked} new title${result.newlyMarked === 1 ? '' : 's'} in your queue.`;
+				const queuePart = `Marked ${result.newlyMarked} new title${result.newlyMarked === 1 ? '' : 's'} in your queue`;
+				const sharedPart =
+					result.sharedMarked > 0 ? ` and ${result.sharedMarked} in shared lists` : '';
+				jellyfinResult = `Found ${result.libraryCount} movies and shows. ${queuePart}${sharedPart}.`;
 			}
 			jellyfinLastCheck = await getLastCheck();
 			return true;
