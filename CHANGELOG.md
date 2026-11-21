@@ -11,6 +11,7 @@ Settings has a new **Media Server** section. Enter your Jellyfin server's addres
 - **Matching** uses TMDB id plus movie/series type, with IMDb id as a fallback. Jellyfin's provider-id keys are read case-insensitively.
 - **It only ever adds marks.** It never unchecks a title, since you may have marked one by hand for a different server.
 - **The automatic check fails silently** (usually you're just off the tailnet) and tries again next time you open the app. The Settings button shows a specific error instead: can't reach the server, rejected token, or an HTTP error. A connect attempt whose first check fails isn't saved.
+- **Setup guide:** [docs/jellyfin-tailscale.md](docs/jellyfin-tailscale.md), linked from the README, covers `tailscale serve`, getting a token, and troubleshooting. That includes the most common mistake: adding `:8096` to the address, which points at Jellyfin's plain-http port instead of Tailscale's https one.
 - **Matches are written in one transaction,** so a large first match triggers one sync push, not one per title. If the Queue page is already open, it reloads to show the new badges.
 
 ## [1.44.0] — 2026-11-21
