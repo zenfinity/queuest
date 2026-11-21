@@ -1,10 +1,11 @@
 import type { RequestHandler } from './$types';
 import { apiError, checkSameOrigin } from '$lib/server/api';
 import { checkRateLimit } from '$lib/server/rate-limit';
-import { requireMembership } from '$lib/server/collections';
+import { requireMembership, purgeIfEmpty } from '$lib/server/collections';
 
 const MAX_NAME_LEN = 100;
 const RENAME_LIMIT = { max: 20, windowSeconds: 300 };
+const DELETE_LIMIT = { max: 20, windowSeconds: 300 };
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
 /**
@@ -37,6 +38,7 @@ export const PATCH: RequestHandler = async ({ request, params, platform, locals 
 
 	const membership = await requireMembership(db, params.id, user.id);
 	if (!membership) return apiError(404, 'Not found');
+	if (membership.deletedAt) return apiError(410, 'This list was deleted');
 	if (membership.role !== 'owner') return apiError(403, 'Only the owner can rename this list');
 
 	let body: unknown;
@@ -82,4 +84,55 @@ export const PATCH: RequestHandler = async ({ request, params, platform, locals 
 		.run();
 
 	return Response.json(responseBody);
+};
+
+/**
+ * Owner deletes the list. It disappears for the owner right away, but the
+ * rows aren't dropped while anyone else is in it: each member's client reads
+ * the encrypted blob once more to keep its titles as a plain personal list,
+ * then leaves (DELETE ./membership), and the last one out purges it. So this
+ * marks the collection deleted, revokes unclaimed invites, removes the
+ * owner's membership, and purges straight away if the owner was alone.
+ */
+export const DELETE: RequestHandler = async ({ request, params, platform, locals }) => {
+	const originError = checkSameOrigin(request);
+	if (originError) return originError;
+
+	const user = locals.user;
+	if (!user) return apiError(401, 'Sign in required');
+
+	const db = platform?.env?.DB;
+	const kv = platform?.env?.SHARE_KV;
+	if (!db || !kv) return apiError(503, 'Collections unavailable');
+
+	const allowed = await checkRateLimit(
+		kv,
+		`coll-delete:${user.id}`,
+		DELETE_LIMIT.max,
+		DELETE_LIMIT.windowSeconds
+	);
+	if (!allowed) return apiError(429, 'Too many requests');
+
+	const membership = await requireMembership(db, params.id, user.id);
+	if (!membership) return apiError(404, 'Not found');
+	if (membership.role !== 'owner') return apiError(403, 'Only the owner can delete this list');
+
+	await db.batch([
+		db
+			.prepare(
+				"UPDATE collections SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL"
+			)
+			.bind(params.id),
+		db
+			.prepare(
+				"UPDATE collection_invites SET revoked_at = datetime('now') WHERE collection_id = ? AND claimed_at IS NULL AND revoked_at IS NULL"
+			)
+			.bind(params.id),
+		db
+			.prepare('DELETE FROM collection_members WHERE collection_id = ? AND user_id = ?')
+			.bind(params.id, user.id)
+	]);
+	const purged = await purgeIfEmpty(db, params.id);
+
+	return Response.json({ id: params.id, deleted: true, purged });
 };

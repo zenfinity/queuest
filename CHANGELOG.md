@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.49.0] — 2026-11-21
+
+### feat: delete a shared list, or leave one
+
+There was no way to get rid of a shared list once a personal list had been promoted. Now the owner gets **Delete** and members get **Leave**, both with a confirm step, in an expanded shared list's actions on the Lists page.
+
+- **The owner deletes:** the list disappears for the owner right away. Every member keeps its titles as a plain personal list with the same name and color, the next time they open the app, and sees a one-time note saying the owner deleted it.
+- **A member leaves:** same result for them, straight away, with no effect on anyone else. Their ranked picks are removed first, so the group ranking stops counting a vote from someone who's gone.
+- **What's kept:** each member's own watched and "on my media server" marks, and the list's note where their personal copy has none. Titles already in their queue just gain the list; their existing marks and notes are never cleared. Season progress isn't carried, since on a shared list it's the group's (same as **Copy to my queue**).
+
+**Why the delete is staged on the server.** Shared lists are end-to-end encrypted, so the server can't turn a list into anyone's personal list. Only each member's own app can, by reading the list one last time. So the owner's delete doesn't erase anything at first:
+- `DELETE /api/collections/[id]` (owner only) sets a new `deleted_at`, revokes unclaimed invites, and removes the owner.
+- Each member's app sees `deletedAt` in the shared-lists listing, keeps the titles, then calls the new `DELETE /api/collections/[id]/membership`.
+- Whoever leaves last triggers `purgeIfEmpty`, which erases the encrypted data, invites, and the list itself. An owner alone in a list purges it straight away.
+- Every write endpoint (save list data, rename or recolor, remove a member, create an invite) now refuses a deleted list with `410 Gone`. Reading it and leaving still work.
+- The owner can't leave a live list, because a list with no owner couldn't be managed. They delete it instead.
+- Leaving doesn't rotate the list's key the way an owner removing someone does. The person chose to go, and the server stops serving them the list's data the moment their membership row is gone.
+
+**Needs migration `0006_collection_deleted_at.sql`** (one nullable column on `collections`), applied before this code deploys.
+
+**Known gap:** if a member never opens the app again, the deleted list's encrypted data stays on the server, unreadable to it. A scheduled clean-up after some months could close that later.
+
 ## [1.48.1] — 2026-11-21
 
 ### docs: bring the README up to date with v0.9.5–v1.48.0

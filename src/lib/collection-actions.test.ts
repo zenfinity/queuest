@@ -21,7 +21,11 @@ import {
 	setSharedCollectionColor,
 	addItemsToSharedCollection,
 	removeItemFromSharedCollection,
-	setMyBallot
+	setMyBallot,
+	listCollections,
+	leaveSharedCollection,
+	keepTitlesAsPersonalList,
+	takeDemotedListNotices
 } from './collection-actions';
 
 const noop = { setBusy: () => {}, setError: () => {} };
@@ -973,5 +977,183 @@ describe('setMyBallot', () => {
 
 		expect(result).toBeNull();
 		expect(c.err()).toBeTruthy();
+	});
+});
+
+describe('deleting and leaving shared lists', () => {
+	function sharedItem(tmdb_id: number, over: Record<string, unknown> = {}) {
+		return {
+			tmdb_id,
+			media_type: 'movie',
+			title: `Title ${tmdb_id}`,
+			poster_path: null,
+			overview: null,
+			providers: [],
+			runtime_minutes: 100,
+			seasons: [],
+			watched_seasons: [1],
+			added_at: '2026-08-01T00:00:00.000Z',
+			watched_at: null,
+			updated_at: '2026-08-01T00:00:00.000Z',
+			watch: {},
+			added_by_account_id: ALICE,
+			...over
+		};
+	}
+
+	/** Fake server for one collection that Bob belongs to: listing, members,
+	 *  blob GET/PUT, and the leave endpoint. Records what happened. */
+	function stubServer(opts: {
+		items: unknown[];
+		ballots?: Record<string, unknown>;
+		deletedAt?: string | null;
+	}) {
+		let stored = { items: opts.items, ballots: opts.ballots ?? {} };
+		let version = 1;
+		const calls = { left: false, puts: 0 };
+		const mock = vi.fn(async (url: string, init?: RequestInit) => {
+			const u = String(url);
+			const method = init?.method ?? 'GET';
+			if (u === '/api/collections' && method === 'GET') {
+				return Response.json({
+					collections: [
+						collection({ role: 'member', name: 'Movie night', deletedAt: opts.deletedAt ?? null })
+					]
+				});
+			}
+			if (u.endsWith('/members') && method === 'GET') {
+				return Response.json({
+					members: [{ userId: BOB, email: 'bob@example.test', role: 'member', publicKey: null }]
+				});
+			}
+			if (u.endsWith('/membership') && method === 'DELETE') {
+				calls.left = true;
+				return Response.json({ left: true });
+			}
+			if (u.includes('/blob') && method === 'GET') {
+				const { gzip } = await import('./gzip');
+				const { encryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const bytes = await encryptBytesWithDek(
+					await gzip(new TextEncoder().encode(JSON.stringify(stored))),
+					dek
+				);
+				return new Response(bytes, {
+					headers: { 'X-Sync-Version': String(version), 'X-Collection-Dek-Version': '1' }
+				});
+			}
+			if (u.includes('/blob') && method === 'PUT') {
+				const { gunzip } = await import('./gzip');
+				const { decryptBytesWithDek } = await import('./crypto');
+				const dek = await importDek(collectionDek, false);
+				const body = await new Response(init!.body as BodyInit).arrayBuffer();
+				stored = JSON.parse(
+					new TextDecoder().decode(await gunzip(await decryptBytesWithDek(body, dek)))
+				);
+				version++;
+				calls.puts++;
+				return Response.json({ version });
+			}
+			throw new Error(`unexpected request: ${method} ${u}`);
+		});
+		return { mock, calls, stored: () => stored };
+	}
+
+	beforeEach(async () => {
+		takeDemotedListNotices();
+		const { setMeta } = await import('./db');
+		await setMeta('sync_email', 'bob@example.test');
+		const { restoreSyncState } = await import('./sync');
+		await restoreSyncState();
+		// Plain node test env: give queue-colors.ts a localStorage to write to.
+		const mem = new Map<string, string>();
+		vi.stubGlobal('localStorage', {
+			getItem: (k: string) => mem.get(k) ?? null,
+			setItem: (k: string, v: string) => void mem.set(k, String(v)),
+			removeItem: (k: string) => void mem.delete(k),
+			clear: () => mem.clear()
+		});
+	});
+
+	it('keeps titles as a plain list, with my own marks, without clobbering existing ones', async () => {
+		const db = await import('./db');
+		const { makeNewItem } = await import('./test-fixtures');
+		// Already in Bob's queue, with his own note and no marks.
+		await db.addItem(makeNewItem({ tmdb_id: 2, notes: 'my note' }));
+
+		const items = [
+			sharedItem(1, { watch: { [BOB]: '2026-08-02T00:00:00.000Z' }, notes: 'list note' }),
+			sharedItem(2, { in_library: { [BOB]: '2026-08-03T00:00:00.000Z' }, notes: 'list note' }),
+			sharedItem(3, { watch: { [ALICE]: '2026-08-02T00:00:00.000Z' } }),
+			sharedItem(4, { deleted_at: '2026-08-05T00:00:00.000Z' })
+		];
+		const kept = await keepTitlesAsPersonalList(items as never, 'Movie night', '#123456', BOB);
+
+		expect(kept).toBe(3);
+		const byId = Object.fromEntries((await db.getAll()).map((i) => [i.tmdb_id, i]));
+		expect(Object.keys(byId).map(Number).sort()).toEqual([1, 2, 3]);
+		for (const id of [1, 2, 3]) expect(byId[id].queue_tags?.['Movie night']).toBeTruthy();
+		expect(byId[1].watched_at).toBeTruthy(); // Bob's own watch mark carried
+		expect(byId[1].notes).toBe('list note');
+		expect(byId[1].watched_seasons).toEqual([]); // group progress not carried
+		expect(byId[2].in_library_at).toBeTruthy(); // Bob's own media-server mark carried
+		expect(byId[2].notes).toBe('my note'); // existing note kept
+		expect(byId[3].watched_at).toBeNull(); // Alice's watch mark is hers
+		expect(JSON.parse(localStorage.getItem('sq:queue:colors')!)['Movie night']).toBe('#123456');
+	});
+
+	it('listCollections turns an owner-deleted list into a plain list, leaves it, and hides it', async () => {
+		const db = await import('./db');
+		const { mock, calls } = stubServer({
+			items: [sharedItem(10, { watch: { [BOB]: '2026-08-02T00:00:00.000Z' } })],
+			deletedAt: '2026-11-21 00:00:00'
+		});
+		vi.stubGlobal('fetch', mock);
+
+		const live = await listCollections(noop);
+
+		expect(live).toEqual([]);
+		expect(calls.left).toBe(true);
+		const [kept] = await db.getAll();
+		expect(kept.tmdb_id).toBe(10);
+		expect(kept.queue_tags?.['Movie night']).toBeTruthy();
+		expect(kept.watched_at).toBeTruthy();
+		expect(takeDemotedListNotices()).toEqual([{ name: 'Movie night', reason: 'deleted' }]);
+	});
+
+	it('lists a live list as usual without touching it', async () => {
+		const { mock, calls } = stubServer({ items: [sharedItem(11)] });
+		vi.stubGlobal('fetch', mock);
+
+		const live = await listCollections(noop);
+
+		expect(live).toHaveLength(1);
+		expect(calls.left).toBe(false);
+		expect(takeDemotedListNotices()).toEqual([]);
+	});
+
+	it('leaving clears my ranked picks, keeps the titles, then leaves', async () => {
+		const db = await import('./db');
+		const { mock, calls, stored } = stubServer({
+			items: [sharedItem(20), sharedItem(21)],
+			ballots: {
+				[BOB]: { items: ['movie:20'], updatedAt: '2026-08-01T00:00:00.000Z' },
+				[ALICE]: { items: ['movie:21'], updatedAt: '2026-08-01T00:00:00.000Z' }
+			}
+		});
+		vi.stubGlobal('fetch', mock);
+
+		const kept = await leaveSharedCollection(
+			collection({ role: 'member', name: 'Movie night' }),
+			noop
+		);
+
+		expect(kept).toBe(2);
+		expect(calls.left).toBe(true);
+		const ballots = stored().ballots as Record<string, { items: string[] }>;
+		expect(ballots[BOB]?.items ?? []).toEqual([]);
+		expect(ballots[ALICE].items).toEqual(['movie:21']);
+		expect((await db.getAll()).map((i) => i.tmdb_id).sort()).toEqual([20, 21]);
+		expect(takeDemotedListNotices()).toEqual([{ name: 'Movie night', reason: 'left' }]);
 	});
 });

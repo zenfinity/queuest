@@ -101,6 +101,7 @@ export const PUT: RequestHandler = async ({ request, params, url, platform, loca
 
 	const membership = await requireMembership(db, params.id, user.id);
 	if (!membership) return apiError(404, 'Not found');
+	if (membership.deletedAt) return apiError(410, 'This list was deleted');
 
 	// Read-only fallback for an unentitled member (decided on #187): they keep
 	// seeing the collection — the GET above is ungated — but cannot write to

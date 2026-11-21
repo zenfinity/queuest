@@ -26,6 +26,9 @@
 		listMembers,
 		loadCollectionItems,
 		addItemsToSharedCollection,
+		deleteSharedCollection,
+		leaveSharedCollection,
+		takeDemotedListNotices,
 		type SharedCollection,
 		type CollectionMember,
 		type OutstandingInvite,
@@ -124,11 +127,53 @@
 		new Map()
 	);
 
+	// ── Delete (owner) / Leave (member) a shared list ─────────────────────
+	// Either way the titles are kept: an owner's members get a plain list on
+	// their next visit; a leaving member gets one right away. See
+	// collection-actions.ts's leaveSharedCollection / listCollections.
+	let sharedRemoveArmed = $state<string | null>(null);
+	let sharedRemoveBusy = $state(false);
+	let sharedRemoveError = $state('');
+	let demotedNotices = $state<{ name: string; reason: 'deleted' | 'left' }[]>([]);
+
+	/** Picks up lists that just became plain ones and refreshes the personal
+	 * lists above, since their titles landed there. */
+	async function absorbDemotions() {
+		const notices = takeDemotedListNotices();
+		if (notices.length === 0) return;
+		demotedNotices = [...demotedNotices, ...notices];
+		items = await getAll();
+		queueColors = getQueueColors();
+		collections = listCollections(items, Object.keys(queueColors));
+		updateCounts();
+	}
+
+	async function removeSharedList(coll: SharedCollection) {
+		if (sharedRemoveArmed !== coll.id) {
+			sharedRemoveArmed = coll.id;
+			sharedRemoveError = '';
+			return;
+		}
+		sharedRemoveBusy = true;
+		const deps = { setBusy: () => {}, setError: (e: string) => (sharedRemoveError = e) };
+		const ok =
+			coll.role === 'owner'
+				? await deleteSharedCollection(coll, deps)
+				: (await leaveSharedCollection(coll, deps)) !== null;
+		sharedRemoveBusy = false;
+		if (!ok) return;
+		sharedRemoveArmed = null;
+		if (openCollection?.id === coll.id) openCollection = null;
+		await loadSharedCollections();
+		await absorbDemotions();
+	}
+
 	async function loadSharedCollections() {
 		sharedCollections = await listSharedCollections({
 			setBusy: () => {},
 			setError: () => {}
 		});
+		await absorbDemotions();
 		// Fire off per-list "what's new" checks in the background — each is
 		// a decrypt, so this shouldn't block the list itself from rendering.
 		for (const coll of sharedCollections) {
@@ -1198,6 +1243,27 @@
 				<span class="font-medium">Share</span> on a list above.
 			</p>
 
+			{#each demotedNotices as notice, i (notice.name + notice.reason + i)}
+				<div
+					class="flex items-start justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-gray-900 dark:text-gray-400"
+				>
+					<p>
+						{#if notice.reason === 'deleted'}
+							“{notice.name}” was deleted by its owner. Its titles are now in your own list of the
+							same name, above.
+						{:else}
+							You left “{notice.name}”. Its titles are now in your own list of the same name, above.
+						{/if}
+					</p>
+					<button
+						type="button"
+						aria-label="Dismiss"
+						onclick={() => (demotedNotices = demotedNotices.filter((_, j) => j !== i))}
+						class="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">×</button
+					>
+				</div>
+			{/each}
+
 			{#if sharedCollections.length === 0}
 				<p class="text-sm text-gray-400 dark:text-gray-600">No shared lists yet.</p>
 			{:else}
@@ -1302,6 +1368,40 @@
 								>
 									{openCollection?.id === coll.id ? 'Hide' : 'Info'}
 								</button>
+								{#if sharedRemoveArmed === coll.id}
+									<span class="text-xs text-gray-600 dark:text-gray-400">
+										{coll.role === 'owner'
+											? 'Delete for everyone? Members keep its titles as their own list.'
+											: 'Leave this list? You keep its titles as your own list.'}
+									</span>
+									<button
+										disabled={sharedRemoveBusy}
+										onclick={() => removeSharedList(coll)}
+										class="text-xs px-2 py-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
+									>
+										{sharedRemoveBusy ? 'Working…' : 'Confirm'}
+									</button>
+									<button
+										disabled={sharedRemoveBusy}
+										onclick={() => {
+											sharedRemoveArmed = null;
+											sharedRemoveError = '';
+										}}
+										class="text-xs px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+									>
+										Cancel
+									</button>
+								{:else}
+									<button
+										onclick={() => removeSharedList(coll)}
+										class="text-xs px-2 py-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20"
+									>
+										{coll.role === 'owner' ? 'Delete' : 'Leave'}
+									</button>
+								{/if}
+								{#if sharedRemoveError && sharedRemoveArmed === coll.id}
+									<p class="w-full text-xs text-red-600 dark:text-red-400">{sharedRemoveError}</p>
+								{/if}
 								{#if sharedRenameError && isRenamingShared}
 									<p class="w-full text-xs text-red-600 dark:text-red-400">{sharedRenameError}</p>
 								{/if}

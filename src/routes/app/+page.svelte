@@ -484,6 +484,9 @@
 		const updated: Record<string, string> = {};
 		for (const coll of sharedCollections) updated[coll.id] = sharedListColor(coll);
 		sharedListColors = updated;
+		// Listing can turn an owner-deleted shared list into a plain list,
+		// adding its titles to the queue; reload so they show.
+		await reload();
 	}
 
 	// Best-effort background enhancement (chip display only) — silent-error

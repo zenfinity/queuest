@@ -20,6 +20,9 @@ export interface CollectionMembership {
 	/** The collection's current generation. A mismatch means the member must
 	 *  re-fetch their wrapped key before it can decrypt the current blob. */
 	collectionDekVersion: number;
+	/** Set once the owner deletes the list. Members can still read it (to
+	 *  keep its titles as a plain list) and leave, but nothing else. */
+	deletedAt: string | null;
 }
 
 interface MembershipRow {
@@ -28,6 +31,7 @@ interface MembershipRow {
 	role: CollectionRole;
 	member_dek_version: number;
 	collection_dek_version: number;
+	deleted_at?: string | null;
 }
 
 /** uuid v4 as produced by crypto.randomUUID(), which is what mints these ids. */
@@ -67,7 +71,8 @@ export async function requireMembership(
 			        c.owner_user_id     AS owner_user_id,
 			        m.role              AS role,
 			        m.dek_version       AS member_dek_version,
-			        c.dek_version       AS collection_dek_version
+			        c.dek_version       AS collection_dek_version,
+			        c.deleted_at        AS deleted_at
 			   FROM collection_members m
 			   JOIN collections c ON c.id = m.collection_id
 			  WHERE m.collection_id = ? AND m.user_id = ?`
@@ -83,8 +88,29 @@ export async function requireMembership(
 		ownerUserId: row.owner_user_id,
 		role: row.role,
 		memberDekVersion: row.member_dek_version,
-		collectionDekVersion: row.collection_dek_version
+		collectionDekVersion: row.collection_dek_version,
+		deletedAt: row.deleted_at ?? null
 	};
+}
+
+/**
+ * Erases a deleted collection once nobody is left in it: its blob, invites,
+ * and the collection row itself. A no-op while any member remains, since
+ * they still need the blob to keep the titles, and for a list that isn't
+ * deleted (the owner never leaves one without deleting it).
+ */
+export async function purgeIfEmpty(db: D1Database, collectionId: string): Promise<boolean> {
+	const remaining = await db
+		.prepare('SELECT COUNT(*) AS n FROM collection_members WHERE collection_id = ?')
+		.bind(collectionId)
+		.first<{ n: number }>();
+	if ((remaining?.n ?? 0) > 0) return false;
+	await db.batch([
+		db.prepare('DELETE FROM collection_blobs WHERE collection_id = ?').bind(collectionId),
+		db.prepare('DELETE FROM collection_invites WHERE collection_id = ?').bind(collectionId),
+		db.prepare('DELETE FROM collections WHERE id = ? AND deleted_at IS NOT NULL').bind(collectionId)
+	]);
+	return true;
 }
 
 /**
