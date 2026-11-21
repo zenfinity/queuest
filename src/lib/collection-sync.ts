@@ -79,6 +79,7 @@ export function mergeCollectionItem(
 	const added_at = local.added_at < remote.added_at ? local.added_at : remote.added_at;
 
 	const watch = mergeCollectionWatch(local.watch, remote.watch);
+	const in_library = mergeCollectionWatch(local.in_library, remote.in_library);
 	const added_by_account_id = local.added_by_account_id ?? remote.added_by_account_id ?? null;
 
 	return {
@@ -86,6 +87,7 @@ export function mergeCollectionItem(
 		added_at,
 		watched_seasons,
 		...(watch ? { watch } : {}),
+		...(in_library ? { in_library } : {}),
 		added_by_account_id
 	};
 }

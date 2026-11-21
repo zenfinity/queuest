@@ -540,6 +540,8 @@ export async function addCollectionItemToQueue(
 	try {
 		const {
 			watch: _watch,
+			in_library: _inLibrary,
+			in_library_at: _inLibraryAt,
 			added_by_account_id: _addedBy,
 			queue_tags: _tags,
 			added_at: _addedAt,

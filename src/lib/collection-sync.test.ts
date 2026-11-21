@@ -126,6 +126,21 @@ describe('mergeCollectionItem', () => {
 		expect(merged.added_by_account_id).toBe(ALICE);
 	});
 
+	it('merges in_library marks per account, like watch', () => {
+		const local = item({
+			in_library: { [ALICE]: '2026-08-01T00:00:00Z' },
+			updated_at: '2026-08-05T00:00:00Z'
+		});
+		const remote = item({
+			in_library: { [BOB]: '2026-08-02T00:00:00Z' },
+			updated_at: '2026-08-01T00:00:00Z'
+		});
+		expect(mergeCollectionItem(local, remote).in_library).toEqual({
+			[ALICE]: '2026-08-01T00:00:00Z',
+			[BOB]: '2026-08-02T00:00:00Z'
+		});
+	});
+
 	it('unions watched_seasons the same way personal sync does', () => {
 		const local = item({ watched_seasons: [1, 2] });
 		const remote = item({ watched_seasons: [2, 3] });

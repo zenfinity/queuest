@@ -448,6 +448,17 @@ describe('watch / added_by_account_id (#188 — collection blob fields)', () => 
 		expect(result.items[0].added_by_account_id).toBe('account-1');
 	});
 
+	it('round-trips a per-account in_library map and drops bad entries', () => {
+		const result = deserializeAppState(
+			backupWith({
+				in_library: { 'account-1': '2026-08-01T00:00:00.000Z', 'account-2': 'nope' }
+			})
+		);
+		expect({ ...result.items[0].in_library }).toEqual({
+			'account-1': '2026-08-01T00:00:00.000Z'
+		});
+	});
+
 	it('accepts a null added_by_account_id', () => {
 		const result = deserializeAppState(backupWith({ added_by_account_id: null }));
 		expect(result.items[0].added_by_account_id).toBeNull();

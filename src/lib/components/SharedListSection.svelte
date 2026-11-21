@@ -25,6 +25,7 @@
 		listMembers,
 		loadCollectionItems,
 		toggleCollectionWatched,
+		setCollectionInLibrary,
 		removeItemFromSharedCollection,
 		setCollectionItemNote,
 		setMyBallot,
@@ -211,6 +212,22 @@
 		if (result) items = result;
 		removingKey = '';
 		removeArmedKey = null;
+	}
+
+	function inLibraryForMe(item: CollectionItem): string | null {
+		return (myUserId && item.in_library?.[myUserId]) || null;
+	}
+
+	async function setInLibraryAction(item: CollectionItem, inLibrary: boolean) {
+		if (!myUserId) return;
+		const result = await setCollectionInLibrary(collection, items, item, myUserId, inLibrary, noop);
+		if (result) {
+			items = result;
+			// The detail panel reads from detailItem, a snapshot; refresh it.
+			if (detailItem && itemKey(detailItem) === itemKey(item)) {
+				detailItem = result.find((i) => itemKey(i) === itemKey(item)) ?? detailItem;
+			}
+		}
 	}
 
 	async function setNoteAction(item: CollectionItem, notes: string | null) {
@@ -502,6 +519,9 @@
 					{item.media_type === 'movie' ? '🎬' : '📺'}
 				</span>
 				{#if item.notes}<span class="text-sm leading-none" title="Has a note">📝</span>{/if}
+				{#if inLibraryForMe(item)}<span class="text-sm leading-none" title="On your media server"
+						>📀</span
+					>{/if}
 				{#each item.providers.slice(0, 4) as p (p.provider_id)}
 					<img
 						src="{TMDB_IMG}/w92{p.logo_path}"
@@ -661,6 +681,10 @@
 				{item.media_type === 'movie' ? '🎬' : '📺'}
 			</span>
 			{#if item.notes}<span class="shrink-0 text-xs leading-none" title="Has a note">📝</span>{/if}
+			{#if inLibraryForMe(item)}<span
+					class="shrink-0 text-xs leading-none"
+					title="On your media server">📀</span
+				>{/if}
 			{#if item.providers.length > 0}
 				<div class="flex shrink-0 gap-0.5">
 					{#each item.providers.slice(0, 3) as p (p.provider_id)}
@@ -738,6 +762,10 @@
 			>
 				{item.title}
 				{#if item.notes}<span class="shrink-0 text-xs leading-none" title="Has a note">📝</span
+					>{/if}
+				{#if inLibraryForMe(item)}<span
+						class="shrink-0 text-xs leading-none"
+						title="On your media server">📀</span
 					>{/if}
 				{#if isNew}
 					<span
@@ -1049,12 +1077,14 @@
 			addedByEmail: di.added_by_account_id
 				? (members.find((m) => m.userId === di.added_by_account_id)?.email ?? 'A member')
 				: null,
-			addedByColor: itemBorderColor(di)
+			addedByColor: itemBorderColor(di),
+			in_library_at: inLibraryForMe(di)
 		}}
 		{budgetHours}
 		showSeasons={true}
 		onClose={() => (detailItem = null)}
 		onSetNote={collection.role === 'owner' ? (notes) => setNoteAction(di, notes) : undefined}
+		onSetInLibrary={myUserId ? (inLibrary) => setInLibraryAction(di, inLibrary) : undefined}
 	>
 		{#snippet footer()}
 			<button
