@@ -7,6 +7,7 @@ export default mergeConfig(
 		test: {
 			environment: 'jsdom',
 			include: ['src/**/*.test.ts', 'src/**/*.svelte.test.ts'],
+			setupFiles: ['src/test-setup.ts'],
 			coverage: {
 				provider: 'v8',
 				reporter: ['text', 'html']

@@ -28,11 +28,9 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Sync unavailable');
+	if (!db) return apiError(503, 'Sync unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`sync-get:${user.id}`,
 		GET_LIMIT.max,
 		GET_LIMIT.windowSeconds
@@ -72,11 +70,9 @@ export const PUT: RequestHandler = async ({ request, url, platform, locals }) =>
 	if (!user) return apiError(401, 'Sign in required');
 
 	const db = platform?.env?.DB;
-	const kv = platform?.env?.SHARE_KV;
-	if (!db || !kv) return apiError(503, 'Sync unavailable');
+	if (!db) return apiError(503, 'Sync unavailable');
 
 	const allowed = await checkRateLimit(
-		kv,
 		`sync-put:${user.id}`,
 		PUT_LIMIT.max,
 		PUT_LIMIT.windowSeconds

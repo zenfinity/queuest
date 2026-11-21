@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.49.1] — 2026-11-21
+
+### perf: rate limiting no longer writes to KV on every request
+
+Cloudflare warned the account had used half of the daily Workers KV free tier. The rate limiter was the cause: on every API request it let through, it read a KV counter and wrote it back. That's two network calls per request, and the free tier allows only 1,000 KV writes a day for the whole app. Search suggestions, which fire as you type, sync, and shared-list loads all counted.
+
+- **The counter is now kept in memory** in each running Worker instance (`src/lib/server/rate-limit.ts`). Rate limiting uses no KV reads or writes and adds no network calls, so every API request is also a little faster. The 21 call sites drop their KV argument, and the 11 endpoints that only fetched KV for rate limiting no longer need it.
+- **Tradeoff:** counts are per instance, and Cloudflare runs many, so the limits are approximate. That's fine for what they guard: almost every limited endpoint needs a signed-in account, and the point is to stop a runaway client or a flood from running up costs. The hard backstop against one IP flooding `/api/*` is a Cloudflare WAF rate-limiting rule, set up in the dashboard, which blocks requests before they reach the app.
+- **Why not Cloudflare's Rate Limiting binding:** it would be the ideal replacement, but Cloudflare doesn't offer it to Pages projects, only to Workers. Moving hosting to Workers would make it available later.
+- **KV writes that remain** are only for things that must be stored: a sign-in session (one per login), a read-only share link (one per link created), and the rare sync-failure counter.
+- Tests reset the in-memory counter before each test (`src/test-setup.ts`), and new unit tests cover windows, separate keys, and sweeping expired keys.
+
 ## [1.49.0] — 2026-11-21
 
 ### feat: delete a shared list, or leave one

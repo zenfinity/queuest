@@ -76,9 +76,9 @@ describe('GET /api/person-external-id', () => {
 		expect(getPersonExternalId).not.toHaveBeenCalled();
 	});
 
-	it('returns 503 when the KV binding is unavailable', async () => {
+	it('no longer needs a KV binding (rate limiting is in memory)', async () => {
 		const res = await GET(mockEvent('123', { kv: undefined }));
-		expect(res.status).toBe(503);
+		expect(res.status).not.toBe(503);
 	});
 
 	it('returns 429 once the rate limit is exceeded', async () => {
