@@ -228,13 +228,35 @@
 		}
 	}
 
+	// Set when arriving from a fresh-browser "Sign in" link (landing page or
+	// /add's Import section) via ?sync=signin. A successful sign-in then
+	// finishes onboarding: marks this device welcomed, waits for the first
+	// pull so the queue isn't empty on arrival, and goes to /app.
+	let onboardingSignIn = $state(false);
+	let signingInRedirect = $state(false);
+
 	async function submitSyncSignin() {
 		const ok = await signIn(syncEmail, syncPassphrase, syncActionDeps);
-		if (ok) {
-			syncPassphrase = '';
+		if (!ok) return;
+		syncPassphrase = '';
+		// A pending shared-list invite has its own redirect (the $effect below),
+		// so only take over when there isn't one.
+		if (onboardingSignIn && !hasPendingInvite()) {
+			signingInRedirect = true;
+			try {
+				localStorage.setItem('sq:welcomed', '1');
+			} catch {
+				// Best-effort; worst case the landing page shows once more
+			}
+			await syncNow().catch(() => {
+				// The queue page shows sync status; don't block arriving there
+			});
 			syncEnabled = true;
-			syncView = 'status';
+			goto(resolve('/app'));
+			return;
 		}
+		syncEnabled = true;
+		syncView = 'status';
 	}
 
 	async function submitSyncRecover() {
@@ -322,6 +344,9 @@
 		syncEnabled = await isSyncEnabled();
 		if (syncEnabled) {
 			syncView = 'status';
+		} else if (new URLSearchParams(window.location.search).get('sync') === 'signin') {
+			syncView = 'signin';
+			onboardingSignIn = true;
 		} else if (hasPendingInvite()) {
 			// Arrived via an invite's "Create account" CTA (#265) — the whole
 			// reason they're here is already decided, so the choose-account-vs-
@@ -487,6 +512,12 @@
 			</div>
 		{:else if syncView === 'signin'}
 			<div class="space-y-3">
+				{#if onboardingSignIn}
+					<p class="text-xs text-gray-500 dark:text-gray-400">
+						Sign in with the email and passphrase you use on your other device. Your queue, lists,
+						and settings will download here.
+					</p>
+				{/if}
 				<input
 					type="email"
 					aria-label="Email"
@@ -506,10 +537,10 @@
 				<div class="flex flex-wrap items-center gap-2">
 					<Button
 						onclick={submitSyncSignin}
-						disabled={!syncEmail || !syncPassphrase || syncBusy}
+						disabled={!syncEmail || !syncPassphrase || syncBusy || signingInRedirect}
 						class="px-4 py-2 text-sm"
 					>
-						{syncBusy ? 'Signing in…' : 'Sign in'}
+						{syncBusy ? 'Signing in…' : signingInRedirect ? 'Loading your queue…' : 'Sign in'}
 					</Button>
 					<button
 						onclick={backToSyncChoose}

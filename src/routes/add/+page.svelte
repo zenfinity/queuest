@@ -97,6 +97,12 @@
 		}
 	}
 
+	// null until known, so the sign-in prompt doesn't flash for a synced device.
+	let syncEnabled = $state<boolean | null>(null);
+	// Settings opens straight to its sign-in form on ?sync=signin, and returns
+	// to /app once the first pull lands.
+	const signInHref = resolve('/settings?sync=signin#sync');
+
 	let importDetailsEl: HTMLDetailsElement | undefined = $state();
 	function openImport() {
 		if (!importDetailsEl) return;
@@ -213,6 +219,7 @@
 			loaded = true;
 		});
 		isSyncEnabled().then((enabled) => {
+			syncEnabled = enabled;
 			if (!enabled) return;
 			listSharedCollections({ setBusy: () => {}, setError: () => {} }).then((colls) => {
 				sharedCollections = colls;
@@ -684,7 +691,7 @@
 						clip-rule="evenodd"
 					/>
 				</svg>
-				Import from list or Queuest Backup
+				Import from list, Queuest Backup, or account
 			</span>
 			<svg
 				class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180"
@@ -700,6 +707,18 @@
 			</svg>
 		</summary>
 		<div class="border-t border-gray-200 px-4 py-4 dark:border-gray-800">
+			{#if syncEnabled === false}
+				<div
+					class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-900"
+				>
+					<p class="text-xs text-gray-600 dark:text-gray-400">
+						Already use Queuest on another device? Sign in to bring your queue here.
+					</p>
+					<a href={signInHref} class="text-xs font-medium text-orange-500 hover:text-orange-400">
+						Sign in →
+					</a>
+				</div>
+			{/if}
 			<ImportPanel {existingCollections} {queueColors} {sharedCollections} {sharedListColors} />
 		</div>
 	</details>
@@ -708,13 +727,23 @@
 		<div class="space-y-2 pt-2">
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<Button href={resolve('/app')} class="px-5 py-2.5 text-sm">Go to my queue →</Button>
-				<button
-					type="button"
-					onclick={openImport}
-					class="text-sm text-gray-500 underline decoration-gray-300 underline-offset-2 hover:text-gray-700 dark:text-gray-400 dark:decoration-gray-700 dark:hover:text-gray-200"
-				>
-					Import a watchlist instead
-				</button>
+				<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+					<button
+						type="button"
+						onclick={openImport}
+						class="text-sm text-gray-500 underline decoration-gray-300 underline-offset-2 hover:text-gray-700 dark:text-gray-400 dark:decoration-gray-700 dark:hover:text-gray-200"
+					>
+						Import a watchlist instead
+					</button>
+					{#if syncEnabled === false}
+						<a
+							href={signInHref}
+							class="text-sm text-gray-500 underline decoration-gray-300 underline-offset-2 hover:text-gray-700 dark:text-gray-400 dark:decoration-gray-700 dark:hover:text-gray-200"
+						>
+							Sign in to an existing account
+						</a>
+					{/if}
+				</div>
 			</div>
 			<p class="text-xs text-gray-400 dark:text-gray-600">
 				<kbd class="rounded bg-gray-100 px-1 py-0.5 font-mono dark:bg-gray-800">Alt</kbd>
