@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.48.0] — 2026-11-21
+
+### feat: the Jellyfin connection follows your account
+
+Before, the server address and token were saved only on the device where you connected, so each device needed its own setup. With sync on, they're now saved to your account too, and every device you sign in on is connected after its next sync.
+
+- **Privacy:** the connection travels as its own field in the sync payload, which is encrypted on your device before upload, so Queuest's server never sees the token in readable form. It's still never included in a `.queuest` export.
+- **Merging:** it's merged last-write-wins on a timestamp. **Disconnect** writes a "disconnected" marker that syncs too, so disconnecting on one device disconnects them all instead of being undone by another device's copy. **Reset everything** still only clears it from that device.
+- **Validation:** a pulled connection is accepted only if it's a `https://….ts.net` address with a bounded token, so a bad sync payload can't send your token anywhere else.
+- **Connect and check** now tests the connection before saving anything, so a mistyped address or token is never stored or synced.
+
+### feat: everyone on a shared list sees titles on any member's media server
+
+On a shared list, the 📀 badge now shows for every member when *anyone* on the list has the title on their server, on the assumption that people sharing a list can use each other's library. The detail panel says whose server it's on, for example "On you@example.com's media server". Each member's own checkbox stays theirs, so one member unchecking never removes another's mark. Nothing changes in storage: each member's mark was already kept separately on shared titles. Only what's shown changed.
+
+The setup guide and README now describe both changes, including that other members of a shared list can see which titles are on your server.
+
 ## [1.47.0] — 2026-11-21
 
 ### fix: the Jellyfin check missed every movie that's part of a collection

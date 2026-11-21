@@ -1,23 +1,28 @@
 /**
  * Jellyfin library check: asks the user's own Jellyfin server which titles it
- * has, and marks matching queue items as "On my media server"
- * (`in_library_at`).
+ * has, and marks matching titles as "On my media server": `in_library_at` on
+ * queue items, and this account's own `in_library` entry on shared-list items.
  *
- * Runs entirely in the browser. The server URL and token live only in this
- * device's IndexedDB meta store, outside the sync blob, so they never reach
- * Queuest's servers or other devices. The browser talks to Jellyfin directly,
- * which is what lets this work with a server that's reachable only over a
- * Tailscale tailnet.
+ * Runs entirely in the browser, which talks to Jellyfin directly. That's what
+ * lets this work with a server reachable only over a Tailscale tailnet. The
+ * saved connection lives on the device and, with sync on, in the encrypted
+ * sync payload (see media-server-config.ts), never in readable form on
+ * Queuest's servers.
  *
- * Only `https://*.ts.net` addresses are accepted. An https page can't call a
- * plain-http server (mixed content), and the CSP's connect-src only allows
- * `https://*.ts.net:*` for anything outside TMDB. Tailscale's `serve` command
- * gives a tailnet-only https address with a real certificate, which fits both.
+ * Only `https://*.ts.net` addresses are accepted (see normalizeServerUrl).
  */
 import { getMeta, setMeta, deleteMeta, getAll, markInLibrary } from './db';
 import { itemKey, type WatchlistItem } from './types';
-import { isSyncEnabled, getSyncStatus, restoreSyncState } from './sync';
+import { isSyncEnabled, getSyncStatus, restoreSyncState, syncNow } from './sync';
 import { markSharedInLibrary } from './collection-actions';
+import {
+	normalizeServerUrl,
+	readStoredMediaServer,
+	writeStoredMediaServer,
+	deleteStoredMediaServer
+} from './media-server-config';
+
+export { normalizeServerUrl };
 
 export interface JellyfinConfig {
 	/** Normalized base URL, no trailing slash, e.g. https://media.tail1234.ts.net */
@@ -25,7 +30,6 @@ export interface JellyfinConfig {
 	token: string;
 }
 
-const CONFIG_KEY = 'jellyfin_config';
 const LAST_CHECK_KEY = 'jellyfin_last_check';
 /** How often the automatic check on app open is allowed to run. */
 export const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -34,53 +38,33 @@ const PAGE_SIZE = 1000;
 const MAX_PAGES = 100;
 const REQUEST_TIMEOUT_MS = 15_000;
 
-/**
- * Validates and normalizes a user-entered server address. Returns the
- * normalized URL, or an error message suitable for showing in Settings.
- * Keeps any path prefix (Jellyfin can run under e.g. /jellyfin).
- */
-export function normalizeServerUrl(raw: string): { url: string } | { error: string } {
-	let parsed: URL;
-	try {
-		parsed = new URL(raw.trim());
-	} catch {
-		return { error: 'That doesn’t look like a web address.' };
-	}
-	if (parsed.protocol !== 'https:') {
-		return { error: 'The address must start with https://.' };
-	}
-	if (!parsed.hostname.endsWith('.ts.net')) {
-		return {
-			error: 'Only Tailscale addresses (ending in .ts.net) are supported. See the setup note below.'
-		};
-	}
-	if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-		return { error: 'Enter just the server address, without a login, query, or #fragment.' };
-	}
-	const path = parsed.pathname.replace(/\/+$/, '');
-	return { url: `${parsed.origin}${path}` };
-}
-
 export async function getJellyfinConfig(): Promise<JellyfinConfig | null> {
-	const raw = await getMeta(CONFIG_KEY);
-	if (!raw) return null;
-	try {
-		const parsed = JSON.parse(raw) as Partial<JellyfinConfig>;
-		if (typeof parsed.url === 'string' && typeof parsed.token === 'string') {
-			return { url: parsed.url, token: parsed.token };
-		}
-	} catch {
-		// Corrupt entry: treat as not configured
-	}
-	return null;
+	const record = await readStoredMediaServer();
+	if (!record || record.cleared || !record.url || !record.token) return null;
+	return { url: record.url, token: record.token };
 }
 
+/** Saves the connection and, with sync on, pushes it to the account. */
 export async function setJellyfinConfig(config: JellyfinConfig): Promise<void> {
-	await setMeta(CONFIG_KEY, JSON.stringify(config));
+	await writeStoredMediaServer({ ...config, updatedAt: new Date().toISOString() });
+	void syncNow().catch(() => {
+		// Sync reports its own status; the connection is saved locally either way
+	});
 }
 
+/** Disconnect: a synced tombstone, so every signed-in device disconnects. */
 export async function clearJellyfinConfig(): Promise<void> {
-	await Promise.all([deleteMeta(CONFIG_KEY), deleteMeta(LAST_CHECK_KEY)]);
+	await Promise.all([
+		writeStoredMediaServer({ cleared: true, updatedAt: new Date().toISOString() }),
+		deleteMeta(LAST_CHECK_KEY)
+	]);
+	void syncNow().catch(() => {});
+}
+
+/** Reset everything: forgets the connection on this device only. With sync
+ * on, the next pull brings it back, same as the rest of the account's data. */
+export async function forgetJellyfinConfigLocally(): Promise<void> {
+	await Promise.all([deleteStoredMediaServer(), deleteMeta(LAST_CHECK_KEY)]);
 }
 
 export async function getLastCheck(): Promise<string | undefined> {
@@ -211,7 +195,24 @@ export async function runLibraryCheck(
 ): Promise<LibraryCheckResult | null> {
 	const config = await getJellyfinConfig();
 	if (!config) return null;
-	const { keys, count } = await fetchLibraryKeys(config, fetchFn);
+	return applyLibrary(await fetchLibraryKeys(config, fetchFn));
+}
+
+/**
+ * Settings' "Connect and check": tries the new connection first and saves
+ * (and syncs) it only once that works, so a typo never reaches other devices.
+ * Throws a JellyfinError on failure, with nothing saved.
+ */
+export async function connectAndCheck(
+	config: JellyfinConfig,
+	fetchFn: typeof fetch = fetch
+): Promise<LibraryCheckResult> {
+	const library = await fetchLibraryKeys(config, fetchFn);
+	await setJellyfinConfig(config);
+	return applyLibrary(library);
+}
+
+async function applyLibrary({ keys, count }: LibraryKeys): Promise<LibraryCheckResult> {
 	const toMark = itemsToMark(await getAll(), keys);
 	if (toMark.length > 0) await markInLibrary(toMark.map((i) => i.id));
 	const sharedMarked = await markSharedTitles(keys);

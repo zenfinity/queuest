@@ -218,6 +218,20 @@
 		return (myUserId && item.in_library?.[myUserId]) || null;
 	}
 
+	/** Badge rule: on anyone's server in this list counts, on the
+	 * assumption that people sharing a list can use each other's library. */
+	function inLibraryForAnyone(item: CollectionItem): boolean {
+		return Object.keys(item.in_library ?? {}).length > 0;
+	}
+
+	/** Other members with this on their server, by email (or "a former list member" if
+	 * they've since left the list). */
+	function inLibraryElsewhere(item: CollectionItem): string[] {
+		return Object.keys(item.in_library ?? {})
+			.filter((id) => id !== myUserId)
+			.map((id) => members.find((m) => m.userId === id)?.email ?? 'a former list member');
+	}
+
 	async function setInLibraryAction(item: CollectionItem, inLibrary: boolean) {
 		if (!myUserId) return;
 		const result = await setCollectionInLibrary(collection, items, item, myUserId, inLibrary, noop);
@@ -519,8 +533,9 @@
 					{item.media_type === 'movie' ? '🎬' : '📺'}
 				</span>
 				{#if item.notes}<span class="text-sm leading-none" title="Has a note">📝</span>{/if}
-				{#if inLibraryForMe(item)}<span class="text-sm leading-none" title="On your media server"
-						>📀</span
+				{#if inLibraryForAnyone(item)}<span
+						class="text-sm leading-none"
+						title="On a list member's media server">📀</span
 					>{/if}
 				{#each item.providers.slice(0, 4) as p (p.provider_id)}
 					<img
@@ -681,9 +696,9 @@
 				{item.media_type === 'movie' ? '🎬' : '📺'}
 			</span>
 			{#if item.notes}<span class="shrink-0 text-xs leading-none" title="Has a note">📝</span>{/if}
-			{#if inLibraryForMe(item)}<span
+			{#if inLibraryForAnyone(item)}<span
 					class="shrink-0 text-xs leading-none"
-					title="On your media server">📀</span
+					title="On a list member's media server">📀</span
 				>{/if}
 			{#if item.providers.length > 0}
 				<div class="flex shrink-0 gap-0.5">
@@ -763,9 +778,9 @@
 				{item.title}
 				{#if item.notes}<span class="shrink-0 text-xs leading-none" title="Has a note">📝</span
 					>{/if}
-				{#if inLibraryForMe(item)}<span
+				{#if inLibraryForAnyone(item)}<span
 						class="shrink-0 text-xs leading-none"
-						title="On your media server">📀</span
+						title="On a list member's media server">📀</span
 					>{/if}
 				{#if isNew}
 					<span
@@ -1078,7 +1093,8 @@
 				? (members.find((m) => m.userId === di.added_by_account_id)?.email ?? 'A member')
 				: null,
 			addedByColor: itemBorderColor(di),
-			in_library_at: inLibraryForMe(di)
+			in_library_at: inLibraryForMe(di),
+			inLibraryElsewhere: inLibraryElsewhere(di)
 		}}
 		{budgetHours}
 		showSeasons={true}

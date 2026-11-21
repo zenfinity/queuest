@@ -32,10 +32,11 @@
 	import {
 		normalizeServerUrl,
 		getJellyfinConfig,
-		setJellyfinConfig,
 		clearJellyfinConfig,
 		getLastCheck,
-		runLibraryCheck
+		runLibraryCheck,
+		connectAndCheck,
+		type LibraryCheckResult
 	} from '$lib/jellyfin';
 	import Button from '$lib/components/Button.svelte';
 	import pkg from '../../../package.json';
@@ -72,7 +73,8 @@
 	}
 
 	// ── Media server (Jellyfin library check) ─────────────────────────────────
-	// URL and token stay on this device only; see $lib/jellyfin.
+	// Saved on this device and, with sync on, in the encrypted sync payload;
+	// see $lib/media-server-config.
 	let jellyfinConnectedUrl = $state<string | null>(null);
 	let jellyfinUrlInput = $state('');
 	let jellyfinTokenInput = $state('');
@@ -87,19 +89,22 @@
 		jellyfinLastCheck = await getLastCheck();
 	}
 
-	/** Returns whether the check succeeded. */
-	async function checkJellyfinLibrary(): Promise<boolean> {
+	function describeResult(result: LibraryCheckResult): string {
+		const queuePart = `Marked ${result.newlyMarked} new title${result.newlyMarked === 1 ? '' : 's'} in your queue`;
+		const sharedPart = result.sharedMarked > 0 ? ` and ${result.sharedMarked} in shared lists` : '';
+		return `Found ${result.libraryCount} movies and shows. ${queuePart}${sharedPart}.`;
+	}
+
+	/** Runs `work` with the busy/error/result UI; returns whether it worked. */
+	async function withJellyfinBusy(
+		work: () => Promise<LibraryCheckResult | null>
+	): Promise<boolean> {
 		jellyfinBusy = true;
 		jellyfinError = '';
 		jellyfinResult = '';
 		try {
-			const result = await runLibraryCheck();
-			if (result) {
-				const queuePart = `Marked ${result.newlyMarked} new title${result.newlyMarked === 1 ? '' : 's'} in your queue`;
-				const sharedPart =
-					result.sharedMarked > 0 ? ` and ${result.sharedMarked} in shared lists` : '';
-				jellyfinResult = `Found ${result.libraryCount} movies and shows. ${queuePart}${sharedPart}.`;
-			}
+			const result = await work();
+			if (result) jellyfinResult = describeResult(result);
 			jellyfinLastCheck = await getLastCheck();
 			return true;
 		} catch (e) {
@@ -108,6 +113,10 @@
 		} finally {
 			jellyfinBusy = false;
 		}
+	}
+
+	function checkJellyfinLibrary() {
+		return withJellyfinBusy(() => runLibraryCheck());
 	}
 
 	async function connectJellyfin() {
@@ -122,14 +131,11 @@
 			jellyfinError = 'Enter a Jellyfin access token.';
 			return;
 		}
-		// Save, then keep it only if the first check works, so a typo'd
-		// address or token doesn't get stuck as "Connected".
-		await setJellyfinConfig({ url: normalized.url, token });
-		if (await checkJellyfinLibrary()) {
+		// connectAndCheck saves (and syncs) only after the first check works,
+		// so a typo'd address or token is never stored or sent anywhere.
+		if (await withJellyfinBusy(() => connectAndCheck({ url: normalized.url, token }))) {
 			jellyfinTokenInput = '';
 			jellyfinConnectedUrl = normalized.url;
-		} else {
-			await clearJellyfinConfig();
 		}
 	}
 
@@ -881,7 +887,9 @@
 		<p class="body-text">
 			Connect your Jellyfin server to mark queue titles you already have as "On my media server".
 			The check runs when you open the app (at most every 6 hours) and only adds marks, never
-			removes them. Your server address and token stay on this device and aren't synced.
+			removes them. Your server address and token are saved on this device and, if you use sync, to
+			your account, encrypted on your device so Queuest can't read them. Disconnecting here
+			disconnects all your signed-in devices.
 		</p>
 		{#if jellyfinConnectedUrl}
 			<p class="text-xs text-gray-600 dark:text-gray-400">
