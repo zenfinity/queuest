@@ -18,6 +18,26 @@ All three go to `/settings?sync=signin#sync`, which opens Settings straight to t
 
 A pending shared-list invite keeps its own redirect. Signing in from Settings directly works as before.
 
+## [1.45.0] — 2026-11-21
+
+### feat: Jellyfin library check
+
+Settings has a new **Media Server** section. Enter your Jellyfin server's address and an access token, and Queuest asks Jellyfin which movies and shows it has, then marks matching queue titles as "On my media server" (the checkbox from 1.44.0). After that, the check runs when you open the app, at most every 6 hours, and there's a **Check library now** button.
+
+- **The browser talks to Jellyfin directly.** The address and token are stored only in this device's IndexedDB, outside the sync blob, so they never reach Queuest's servers or your other devices. Reset everything clears them.
+- **Tailscale addresses only.** The address must be `https://…ts.net`, which is what `tailscale serve` gives you. An https page can't call a plain-http server, and the CSP's `connect-src` now allows `https://*.ts.net:*` (any port) and nothing else new. Checked in the browser: a `.ts.net` request passes CSP and other hosts are still blocked.
+- **Matching** uses TMDB id plus movie/series type, with IMDb id as a fallback. Jellyfin's provider-id keys are read case-insensitively.
+- **It only ever adds marks.** It never unchecks a title, since you may have marked one by hand for a different server.
+- **The automatic check fails silently** (usually you're just off the tailnet) and tries again next time you open the app. The Settings button shows a specific error instead: can't reach the server, rejected token, or an HTTP error. A connect attempt whose first check fails isn't saved.
+- **Setup guide:** [docs/jellyfin-tailscale.md](docs/jellyfin-tailscale.md), linked from the README, covers `tailscale serve`, getting a token, and troubleshooting. That includes the most common mistake: adding `:8096` to the address, which points at Jellyfin's plain-http port instead of Tailscale's https one.
+- **Matches are written in one transaction,** so a large first match triggers one sync push, not one per title. If the Queue page is already open, it reloads to show the new badges.
+
+## [1.44.0] — 2026-11-21
+
+### feat: mark a title as on your media server
+
+The detail panel for a personal-queue title now has an **On my media server** checkbox. Checking it records when you marked it (shown as "since <date>"), and a 📀 badge appears next to the note badge in the queue's list and grid views. The mark is stored as a new optional `in_library_at` timestamp on the item, so it syncs between devices and carries through backup export/import like notes do. It's a user edit, so it stamps `updated_at` and follows the existing whole-item last-write-wins merge. Checking it again on a title that's already marked does nothing, so the original date is kept. Shared-list titles get the checkbox too, but stored per person. A new `in_library` map on shared items records each member's own mark (account id → when they marked it), so your mark shows only for you. It's merged per account the same way the shared-list watch marks are, so two members marking at once don't overwrite each other. Promoting a personal list to a shared one turns your existing marks into your entries in that map, and copying a shared title into your queue drops the map. It's manual only for now. Pulling this automatically from Jellyfin is a possible follow-up.
+
 ## [1.43.1] — 2026-09-20
 
 ### docs: the README now says what's actually measured (#259)

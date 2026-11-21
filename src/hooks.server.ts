@@ -17,7 +17,7 @@ const FALLBACK_CSP =
 	"script-src 'self' https://static.cloudflareinsights.com; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' https://image.tmdb.org https://www.themoviedb.org data:; " +
-	"connect-src 'self' https://api.themoviedb.org https://cloudflareinsights.com; " +
+	"connect-src 'self' https://api.themoviedb.org https://cloudflareinsights.com https://*.ts.net:*; " +
 	"worker-src 'self'; " +
 	"form-action 'self'; " +
 	"object-src 'none'; " +

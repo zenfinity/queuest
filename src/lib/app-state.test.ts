@@ -448,6 +448,17 @@ describe('watch / added_by_account_id (#188 — collection blob fields)', () => 
 		expect(result.items[0].added_by_account_id).toBe('account-1');
 	});
 
+	it('round-trips a per-account in_library map and drops bad entries', () => {
+		const result = deserializeAppState(
+			backupWith({
+				in_library: { 'account-1': '2026-08-01T00:00:00.000Z', 'account-2': 'nope' }
+			})
+		);
+		expect({ ...result.items[0].in_library }).toEqual({
+			'account-1': '2026-08-01T00:00:00.000Z'
+		});
+	});
+
 	it('accepts a null added_by_account_id', () => {
 		const result = deserializeAppState(backupWith({ added_by_account_id: null }));
 		expect(result.items[0].added_by_account_id).toBeNull();
@@ -698,6 +709,13 @@ describe('notes (#155)', () => {
 	it('drops an empty-string note rather than keeping it', () => {
 		const result = deserializeAppState(backupWith({ notes: '' }));
 		expect(result.items[0].notes).toBeUndefined();
+	});
+
+	it('round-trips in_library_at and drops an invalid one', () => {
+		const ok = deserializeAppState(backupWith({ in_library_at: '2026-03-01T00:00:00.000Z' }));
+		expect(ok.items[0].in_library_at).toBe('2026-03-01T00:00:00.000Z');
+		const bad = deserializeAppState(backupWith({ in_library_at: 'yes' }));
+		expect(bad.items[0].in_library_at).toBeUndefined();
 	});
 
 	it('ignores a non-string notes value rather than throwing', () => {

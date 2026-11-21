@@ -44,7 +44,14 @@ export default {
 				'script-src': ['self', 'https://static.cloudflareinsights.com'],
 				'style-src': ['self', 'unsafe-inline'],
 				'img-src': ['self', 'https://image.tmdb.org', 'https://www.themoviedb.org', 'data:'],
-				'connect-src': ['self', 'https://api.themoviedb.org', 'https://cloudflareinsights.com'],
+				// *.ts.net: the optional Jellyfin library check talks straight from
+				// the browser to the user's tailnet-only server (see $lib/jellyfin).
+				'connect-src': [
+					'self',
+					'https://api.themoviedb.org',
+					'https://cloudflareinsights.com',
+					'https://*.ts.net:*'
+				],
 				// Falls back to default-src anyway; stated so the service worker
 				// (#257) doesn't silently depend on that fallback staying put.
 				'worker-src': ['self'],

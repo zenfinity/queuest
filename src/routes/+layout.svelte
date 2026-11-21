@@ -189,6 +189,9 @@
 		// triggers unconditionally here just means enabling sync later doesn't
 		// also require wiring app-load/visibilitychange/debounce from scratch.
 		initSyncTriggers();
+		// Optional Jellyfin library check: no-op unless configured on this
+		// device, throttled, and silent on failure (usually just off-tailnet).
+		import('$lib/jellyfin').then((m) => m.maybeAutoCheck());
 		// E2E test seam (#253) — exposes addItem/syncNow on `window`, gated
 		// behind a URL param a real visitor would never carry, so Playwright
 		// can seed a queue item and force a sync cycle without a live TMDB

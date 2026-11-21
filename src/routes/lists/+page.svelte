@@ -55,6 +55,7 @@
 		removeItemFromCollection,
 		clearItemCollections,
 		setItemNote,
+		setItemInLibrary,
 		type QueueActionDeps
 	} from '$lib/queue-actions';
 	import { startDragSession, type DragAction } from '$lib/drag-session.svelte';
@@ -1467,6 +1468,10 @@
 		onChooseLists={() => (chooseListItem = di)}
 		onSetNote={async (notes) => {
 			await setItemNote(di, notes, listActionDeps);
+			detailItem = items.find((i) => i.id === di.id) ?? null;
+		}}
+		onSetInLibrary={async (inLibrary) => {
+			await setItemInLibrary(di, inLibrary, listActionDeps);
 			detailItem = items.find((i) => i.id === di.id) ?? null;
 		}}
 		{sharedCollections}

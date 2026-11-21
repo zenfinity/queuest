@@ -29,6 +29,14 @@
 	import { takePendingInvite, hasPendingInvite } from '$lib/pending-invite';
 	import { readBoolean } from '$lib/storage';
 	import { scrollToHashTarget } from '$lib/scroll-to-hash';
+	import {
+		normalizeServerUrl,
+		getJellyfinConfig,
+		setJellyfinConfig,
+		clearJellyfinConfig,
+		getLastCheck,
+		runLibraryCheck
+	} from '$lib/jellyfin';
 	import Button from '$lib/components/Button.svelte';
 	import pkg from '../../../package.json';
 
@@ -61,6 +69,73 @@
 		} finally {
 			exporting = false;
 		}
+	}
+
+	// ── Media server (Jellyfin library check) ─────────────────────────────────
+	// URL and token stay on this device only; see $lib/jellyfin.
+	let jellyfinConnectedUrl = $state<string | null>(null);
+	let jellyfinUrlInput = $state('');
+	let jellyfinTokenInput = $state('');
+	let jellyfinBusy = $state(false);
+	let jellyfinError = $state('');
+	let jellyfinResult = $state('');
+	let jellyfinLastCheck = $state<string | undefined>(undefined);
+
+	async function loadJellyfin() {
+		const config = await getJellyfinConfig();
+		jellyfinConnectedUrl = config?.url ?? null;
+		jellyfinLastCheck = await getLastCheck();
+	}
+
+	/** Returns whether the check succeeded. */
+	async function checkJellyfinLibrary(): Promise<boolean> {
+		jellyfinBusy = true;
+		jellyfinError = '';
+		jellyfinResult = '';
+		try {
+			const result = await runLibraryCheck();
+			if (result) {
+				jellyfinResult = `Found ${result.libraryCount} movies and shows. Marked ${result.newlyMarked} new title${result.newlyMarked === 1 ? '' : 's'} in your queue.`;
+			}
+			jellyfinLastCheck = await getLastCheck();
+			return true;
+		} catch (e) {
+			jellyfinError = e instanceof Error ? e.message : 'The library check failed.';
+			return false;
+		} finally {
+			jellyfinBusy = false;
+		}
+	}
+
+	async function connectJellyfin() {
+		jellyfinError = '';
+		const normalized = normalizeServerUrl(jellyfinUrlInput);
+		if ('error' in normalized) {
+			jellyfinError = normalized.error;
+			return;
+		}
+		const token = jellyfinTokenInput.trim();
+		if (!token) {
+			jellyfinError = 'Enter a Jellyfin access token.';
+			return;
+		}
+		// Save, then keep it only if the first check works, so a typo'd
+		// address or token doesn't get stuck as "Connected".
+		await setJellyfinConfig({ url: normalized.url, token });
+		if (await checkJellyfinLibrary()) {
+			jellyfinTokenInput = '';
+			jellyfinConnectedUrl = normalized.url;
+		} else {
+			await clearJellyfinConfig();
+		}
+	}
+
+	async function disconnectJellyfin() {
+		await clearJellyfinConfig();
+		jellyfinConnectedUrl = null;
+		jellyfinLastCheck = undefined;
+		jellyfinResult = '';
+		jellyfinError = '';
 	}
 
 	// ── Refresh providers ─────────────────────────────────────────────────────
@@ -340,6 +415,7 @@
 	onMount(async () => {
 		cancelAlertsEnabled = readBoolean('sq:cancel-alerts', false);
 		myQueueName = getQueueName();
+		loadJellyfin();
 
 		syncEnabled = await isSyncEnabled();
 		if (syncEnabled) {
@@ -792,6 +868,78 @@
 		{/if}
 		{#if refreshError}
 			<p class="text-xs text-red-500">{refreshError}</p>
+		{/if}
+	</section>
+
+	<div class="divider"></div>
+
+	<section id="media-server" class="space-y-3">
+		<h2 class="section-heading">Media Server</h2>
+		<p class="body-text">
+			Connect your Jellyfin server to mark queue titles you already have as "On my media server".
+			The check runs when you open the app (at most every 6 hours) and only adds marks, never
+			removes them. Your server address and token stay on this device and aren't synced.
+		</p>
+		{#if jellyfinConnectedUrl}
+			<p class="text-xs text-gray-600 dark:text-gray-400">
+				Connected to <span class="font-medium">{jellyfinConnectedUrl}</span>{#if jellyfinLastCheck}
+					· last checked {new Date(jellyfinLastCheck).toLocaleString()}{/if}
+			</p>
+			<div class="flex flex-wrap gap-2">
+				<button
+					onclick={checkJellyfinLibrary}
+					disabled={jellyfinBusy}
+					class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+				>
+					{jellyfinBusy ? 'Checking…' : '↻ Check library now'}
+				</button>
+				<button
+					onclick={disconnectJellyfin}
+					disabled={jellyfinBusy}
+					class="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-gray-700 disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
+				>
+					Disconnect
+				</button>
+			</div>
+		{:else}
+			<div class="flex flex-col gap-2">
+				<input
+					type="url"
+					aria-label="Jellyfin server address"
+					placeholder="https://your-server.your-tailnet.ts.net"
+					bind:value={jellyfinUrlInput}
+					autocomplete="off"
+					class="input-field px-4 py-2"
+				/>
+				<input
+					type="password"
+					aria-label="Jellyfin access token"
+					placeholder="Access token"
+					bind:value={jellyfinTokenInput}
+					autocomplete="off"
+					onkeydown={(e) => e.key === 'Enter' && connectJellyfin()}
+					class="input-field px-4 py-2"
+				/>
+				<button
+					onclick={connectJellyfin}
+					disabled={jellyfinBusy}
+					class="self-start rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+				>
+					{jellyfinBusy ? 'Connecting…' : 'Connect and check'}
+				</button>
+			</div>
+			<p class="text-xs text-gray-500 dark:text-gray-400">
+				The server must be reachable over https at a Tailscale address (ending in .ts.net). Running <code
+					>tailscale serve</code
+				> on the Jellyfin machine gives it one that only your tailnet can reach. For the token, a non-admin
+				Jellyfin user that can see your libraries is safer than an admin API key.
+			</p>
+		{/if}
+		{#if jellyfinResult && !jellyfinBusy}
+			<p class="text-xs text-teal-600 dark:text-teal-400">✓ {jellyfinResult}</p>
+		{/if}
+		{#if jellyfinError}
+			<p class="text-xs text-red-500">{jellyfinError}</p>
 		{/if}
 	</section>
 
