@@ -93,6 +93,11 @@ export interface WatchlistItem {
 	// a concurrent mark by someone else — see mergeCollectionWatch in
 	// collection-sync.ts for why this can't be whole-item LWW.
 	watch?: Record<string, string>;
+	// Per-account "On my media server" marks for a shared item: account id ->
+	// when they marked it. The shared-list counterpart of in_library_at, kept
+	// per account for the same reason as `watch` (one member's server says
+	// nothing about another's), and merged the same way.
+	in_library?: Record<string, string>;
 	// Which account originally added this title. Attribution, not edit
 	// tracking — kept stable across merges rather than following whichever
 	// side wins the field-group LWW.
