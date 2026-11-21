@@ -11,7 +11,20 @@ import {
 	importDek
 } from './crypto';
 import { b64urlEncode } from './base64url';
-import { getSyncDek, getUserPrivateKey } from './db';
+import {
+	getSyncDek,
+	getUserPrivateKey,
+	addItem,
+	addQueueTag,
+	getItemByTmdbId,
+	reviveItem,
+	setWatched,
+	setInLibrary,
+	setNote,
+	nowIso
+} from './db';
+import { isConstraintError } from './http';
+import { getOrAssignColor, getQueueColors, setQueueColor, sharedListColor } from './queue-colors';
 import { ensureKeypair } from './keypair';
 import { throwIfNotOk } from './http';
 import {
@@ -22,8 +35,8 @@ import {
 	type CollectionItem,
 	type BallotEntry
 } from './collection-sync';
-import { itemKey, hasActiveTag, type WatchlistItem } from './types';
-import { getSyncStatus } from './sync';
+import { itemKey, hasActiveTag, soloTagMap, type WatchlistItem } from './types';
+import { getSyncStatus, restoreSyncState } from './sync';
 
 export interface CollectionActionDeps {
 	setBusy: (busy: boolean) => void;
@@ -42,6 +55,8 @@ export interface SharedCollection {
 	wrappedKey: string;
 	dekVersion: number;
 	memberDekVersion: number;
+	/** Set once the owner has deleted the list; see listCollections. */
+	deletedAt?: string | null;
 }
 
 export interface CollectionMember {
@@ -76,7 +91,13 @@ export async function listCollections(deps: CollectionActionDeps): Promise<Share
 	try {
 		const res = await fetch('/api/collections');
 		await throwIfNotOk(res);
-		return ((await res.json()) as { collections: SharedCollection[] }).collections;
+		const all = ((await res.json()) as { collections: SharedCollection[] }).collections;
+		// Lists the owner deleted: keep their titles as a plain personal list,
+		// then leave. Done here so every surface that lists shared lists
+		// handles it, and returns only the live ones.
+		const deleted = all.filter((c) => c.deletedAt);
+		if (deleted.length > 0) await keepDeletedListsAsPersonal(deleted);
+		return all.filter((c) => !c.deletedAt);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not load shared collections.');
 		return [];
@@ -778,6 +799,201 @@ export async function removeItemFromSharedCollection(
 		);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not remove that. Try again.');
+		return null;
+	} finally {
+		deps.setBusy(false);
+	}
+}
+
+// ── Deleting and leaving shared lists ─────────────────────────────────────
+
+/** Names of shared lists turned into plain lists since the last call to
+ * takeDemotedListNotices, so the Lists page can say so once. */
+let demotedNotices: { name: string; reason: 'deleted' | 'left' }[] = [];
+
+export function takeDemotedListNotices(): { name: string; reason: 'deleted' | 'left' }[] {
+	const notices = demotedNotices;
+	demotedNotices = [];
+	return notices;
+}
+
+/** This account's member id in a collection: the owner id when it's ours,
+ * otherwise our email matched in the member list (same as SharedListSection). */
+async function myIdIn(collection: SharedCollection): Promise<string | null> {
+	if (collection.role === 'owner') return collection.ownerUserId;
+	if (!getSyncStatus().email) await restoreSyncState();
+	const email = getSyncStatus().email;
+	if (!email) return null;
+	const quiet: CollectionActionDeps = { setBusy: () => {}, setError: () => {} };
+	const members = await listMembers(collection.id, quiet);
+	return members.find((m) => m.email === email)?.userId ?? null;
+}
+
+/**
+ * Copies a shared list's live titles into a plain personal list with the
+ * same name (merging into it if one exists), carrying this account's own
+ * watched and media-server marks, and the list's note where the personal
+ * copy has none. Existing personal titles just gain the list; their own
+ * marks and notes are never cleared. Returns how many titles were kept.
+ */
+export async function keepTitlesAsPersonalList(
+	items: CollectionItem[],
+	listName: string,
+	listColor: string | null,
+	myId: string | null
+): Promise<number> {
+	if (!getQueueColors()[listName]) {
+		if (listColor) setQueueColor(listName, listColor);
+		else getOrAssignColor(listName);
+	}
+	let kept = 0;
+	for (const item of items) {
+		if (item.deleted_at) continue;
+		const {
+			watch,
+			in_library,
+			in_library_at: _inLibraryAt,
+			added_by_account_id: _addedBy,
+			queue_tags: _tags,
+			added_at: _addedAt,
+			watched_at: _watchedAt,
+			updated_at: _updatedAt,
+			deleted_at: _deletedAt,
+			...rest
+		} = item;
+		// Season progress on a shared list is the group's, not necessarily
+		// this person's, so new personal copies start fresh (same as the
+		// "Copy to my queue" drop action, addCollectionItemToQueue).
+		const payload = {
+			...rest,
+			watched_seasons: [],
+			queue_tags: soloTagMap(listName, nowIso())
+		};
+		let id: number;
+		let alreadyWatched = false;
+		let alreadyInLibrary = false;
+		try {
+			id = (await addItem(payload)).id;
+		} catch (e) {
+			if (!isConstraintError(e)) throw e;
+			const existing = await getItemByTmdbId(rest.tmdb_id, rest.media_type);
+			if (!existing) continue;
+			id = existing.id;
+			if (existing.deleted_at) {
+				await reviveItem(existing.id, payload);
+			} else {
+				await addQueueTag(existing.id, listName);
+				if (!existing.notes && rest.notes) await setNote(existing.id, rest.notes);
+				alreadyWatched = Boolean(existing.watched_at);
+				alreadyInLibrary = Boolean(existing.in_library_at);
+			}
+		}
+		if (myId && watch?.[myId] && !alreadyWatched) await setWatched(id, true);
+		if (myId && in_library?.[myId] && !alreadyInLibrary) await setInLibrary(id, true);
+		kept++;
+	}
+	return kept;
+}
+
+async function leaveMembership(collectionId: string): Promise<void> {
+	const res = await fetch(`/api/collections/${encodeURIComponent(collectionId)}/membership`, {
+		method: 'DELETE'
+	});
+	await throwIfNotOk(res);
+}
+
+/** Lists in flight, so two pages loading at once don't demote one twice. */
+const demoting = new Map<string, Promise<void>>();
+
+async function keepDeletedListsAsPersonal(deleted: SharedCollection[]): Promise<void> {
+	for (const collection of deleted) {
+		let job = demoting.get(collection.id);
+		if (!job) {
+			job = (async () => {
+				try {
+					const myId = await myIdIn(collection);
+					const dek = await importDek(await openCollectionKey(collection.wrappedKey), false);
+					const { items } = await fetchCollectionState(
+						collection.id,
+						dek,
+						collection.memberDekVersion
+					);
+					// The color it was shown with: the owner's pick, or the same
+					// derived color the Lists page used for it.
+					await keepTitlesAsPersonalList(items, collection.name, sharedListColor(collection), myId);
+					await leaveMembership(collection.id);
+					demotedNotices.push({ name: collection.name, reason: 'deleted' });
+				} catch {
+					// Try again on the next listing; nothing is lost while the
+					// membership (and so the blob) is still there.
+				} finally {
+					demoting.delete(collection.id);
+				}
+			})();
+			demoting.set(collection.id, job);
+		}
+		await job;
+	}
+}
+
+/** Owner deletes a shared list. It goes away for the owner now; members'
+ * apps keep its titles as a plain list on their next visit. */
+export async function deleteSharedCollection(
+	collection: SharedCollection,
+	deps: CollectionActionDeps
+): Promise<boolean> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const res = await fetch(`/api/collections/${encodeURIComponent(collection.id)}`, {
+			method: 'DELETE'
+		});
+		await throwIfNotOk(res);
+		return true;
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not delete this list.');
+		return false;
+	} finally {
+		deps.setBusy(false);
+	}
+}
+
+/**
+ * A member leaves a shared list, keeping its titles as a plain personal list.
+ * Their ranked picks are cleared first, so the group ranking stops counting
+ * a vote from someone who's gone. Returns how many titles were kept, or null
+ * on failure (in which case they're still a member).
+ */
+export async function leaveSharedCollection(
+	collection: SharedCollection,
+	deps: CollectionActionDeps
+): Promise<number | null> {
+	deps.setBusy(true);
+	deps.setError('');
+	try {
+		const myId = await myIdIn(collection);
+		const dek = await importDek(await openCollectionKey(collection.wrappedKey), false);
+		const { items, ballots } = await fetchCollectionState(
+			collection.id,
+			dek,
+			collection.memberDekVersion
+		);
+		if (myId && ballots[myId]?.items?.length) {
+			const quiet: CollectionActionDeps = { setBusy: () => {}, setError: () => {} };
+			await setMyBallot(collection, ballots, myId, [], quiet);
+		}
+		// Keeps the color it was shown with (see keepDeletedListsAsPersonal).
+		const kept = await keepTitlesAsPersonalList(
+			items,
+			collection.name,
+			sharedListColor(collection),
+			myId
+		);
+		await leaveMembership(collection.id);
+		demotedNotices.push({ name: collection.name, reason: 'left' });
+		return kept;
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not leave this list.');
 		return null;
 	} finally {
 		deps.setBusy(false);

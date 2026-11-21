@@ -120,6 +120,7 @@ export const DELETE: RequestHandler = async ({ request, params, platform, locals
 
 	const membership = await requireMembership(db, params.id, user.id);
 	if (!membership) return apiError(404, 'Not found');
+	if (membership.deletedAt) return apiError(410, 'This list was deleted');
 	if (membership.role !== 'owner') return apiError(403, 'Only the owner can remove members');
 	if (!(await isEntitled(db, user.id))) {
 		return apiError(402, 'Managing members requires an active subscription');

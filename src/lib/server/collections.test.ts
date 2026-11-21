@@ -117,7 +117,8 @@ describe('requireMembership', () => {
 			ownerUserId: ALICE,
 			role: 'member',
 			memberDekVersion: 1,
-			collectionDekVersion: 1
+			collectionDekVersion: 1,
+			deletedAt: null
 		});
 	});
 

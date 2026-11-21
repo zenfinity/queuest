@@ -97,6 +97,7 @@ export const POST: RequestHandler = async ({ request, params, platform, locals }
 	// would confirm the collection exists.
 	const membership = await requireMembership(db, params.id, user.id);
 	if (!membership) return apiError(404, 'Not found');
+	if (membership.deletedAt) return apiError(410, 'This list was deleted');
 	// Conservative default: only the owner can widen the group. Relaxing this
 	// to any member later is a one-line change; tightening it after people
 	// rely on it is not.

@@ -19,6 +19,7 @@ interface CollectionListRow {
 	owner_user_id: string;
 	dek_version: number;
 	created_at: string;
+	deleted_at?: string | null;
 	role: 'owner' | 'member';
 	wrapped_key: string;
 	member_dek_version: number;
@@ -55,6 +56,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 			        c.owner_user_id AS owner_user_id,
 			        c.dek_version   AS dek_version,
 			        c.created_at    AS created_at,
+			        c.deleted_at    AS deleted_at,
 			        m.role          AS role,
 			        m.wrapped_key   AS wrapped_key,
 			        m.dek_version   AS member_dek_version
@@ -78,7 +80,10 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 			wrappedKey: r.wrapped_key,
 			dekVersion: r.dek_version,
 			memberDekVersion: r.member_dek_version,
-			createdAt: r.created_at
+			createdAt: r.created_at,
+			// Owner deleted it; the client keeps its titles as a plain list,
+			// then leaves. Null for a live list.
+			deletedAt: r.deleted_at ?? null
 		}))
 	});
 };
