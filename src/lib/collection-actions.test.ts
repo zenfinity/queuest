@@ -15,6 +15,7 @@ import {
 	promoteCollection,
 	loadCollectionItems,
 	toggleCollectionWatched,
+	markSharedInLibrary,
 	setCollectionItemNote,
 	renameSharedCollection,
 	setSharedCollectionColor,
@@ -490,6 +491,67 @@ describe('loadCollectionItems / toggleCollectionWatched', () => {
 
 		expect(result![0].watch?.[ALICE]).toBeUndefined();
 		expect(result![0].watch?.[BOB]).toBeTruthy();
+	});
+
+	describe('markSharedInLibrary (Jellyfin check, shared-list pass)', () => {
+		/** The view stub plus the collections listing the pass starts from. */
+		function stubWithListing(initialItems: unknown[]) {
+			const view = stubViewFetch(initialItems);
+			const mock = vi.fn(async (url: string, init?: RequestInit) => {
+				if (String(url) === '/api/collections')
+					return Response.json({ collections: [collection()] });
+				return view.mock(url, init);
+			});
+			return { mock, stored: view.stored, view };
+		}
+
+		it('marks only matching, unmarked, live items with this account’s own entry', async () => {
+			const alreadyMine = seedItem(2);
+			(alreadyMine as Record<string, unknown>).in_library = { [ALICE]: '2026-01-01T00:00:00.000Z' };
+			const bobsOnly = seedItem(3);
+			(bobsOnly as Record<string, unknown>).in_library = { [BOB]: '2026-01-02T00:00:00.000Z' };
+			const removed = seedItem(4);
+			(removed as Record<string, unknown>).deleted_at = '2026-08-02T00:00:00.000Z';
+			const { mock, stored } = stubWithListing([
+				seedItem(1),
+				alreadyMine,
+				bobsOnly,
+				removed,
+				seedItem(5)
+			]);
+			vi.stubGlobal('fetch', mock);
+
+			const inLibrary = new Set([1, 2, 3, 4]);
+			const marked = await markSharedInLibrary(
+				(i) => inLibrary.has(i.tmdb_id),
+				'alice@example.test'
+			);
+
+			// 1 (new) and 3 (Bob had it, Alice didn't); 2 already Alice's, 4 removed, 5 not in library.
+			expect(marked).toBe(2);
+			const byId = Object.fromEntries(
+				(stored() as { tmdb_id: number; in_library?: Record<string, string> }[]).map((i) => [
+					i.tmdb_id,
+					i.in_library
+				])
+			);
+			expect(byId[1]?.[ALICE]).toBeTruthy();
+			expect(byId[2]?.[ALICE]).toBe('2026-01-01T00:00:00.000Z');
+			expect(byId[3]?.[ALICE]).toBeTruthy();
+			expect(byId[3]?.[BOB]).toBe('2026-01-02T00:00:00.000Z');
+			expect(byId[4]?.[ALICE]).toBeUndefined();
+			expect(byId[5]).toBeUndefined();
+		});
+
+		it('pushes nothing when there are no new matches', async () => {
+			const { mock } = stubWithListing([seedItem(1)]);
+			vi.stubGlobal('fetch', mock);
+
+			expect(await markSharedInLibrary(() => false, 'alice@example.test')).toBe(0);
+			expect(
+				mock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+			).toBe(false);
+		});
 	});
 
 	it('sets the shared note and pushes it to the blob', async () => {

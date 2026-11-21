@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.47.0] — 2026-11-21
+
+### fix: the Jellyfin check missed every movie that's part of a collection
+
+Jellyfin groups movies into collections by default. When it does, a library listing returns one BoxSet in place of each collection's movies, so those movies never reached Queuest's matching. On the library this was found on, 59 of 175 movies were hidden this way, including Ghostbusters (2016) inside its collection. The check still reported success, because it matched every movie that isn't in a collection.
+
+The library request now sends `CollapseBoxSetItems=false`, so every movie comes back individually. Checked against that same real server: the listing goes from 116 movies plus 14 BoxSets to all 175 movies, and Ghostbusters (2016) now matches by its TMDB id.
+
+### feat: the Jellyfin check also marks titles in shared lists
+
+The check used to cover only your queue, which includes your personal lists, since a title in a personal list is a queue row. It now also goes through every shared list you belong to, when sync is on. It sets only your own entry in each matching title's per-member `in_library` map, the same mark the checkbox sets, and never touches other members' marks. Like the personal pass, it only adds marks. It skips titles you've already marked and titles removed from the list, and pushes once per list that has new matches. A list that fails to load or save is skipped without stopping the rest, and the shared pass never fails the personal one. **Check library now** reports both counts, for example "Marked 3 new titles in your queue and 2 in shared lists."
+
+Titles that were missed are marked on the next check: automatically within 6 hours of opening the app, or straight away with **Settings → Media Server → Check library now**. The setup guide now says shared lists and movies in collections are covered.
+
 ## [1.46.0] — 2026-11-21
 
 ### feat: sign in from the landing page and the Import section

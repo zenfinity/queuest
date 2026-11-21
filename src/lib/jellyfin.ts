@@ -16,6 +16,8 @@
  */
 import { getMeta, setMeta, deleteMeta, getAll, markInLibrary } from './db';
 import { itemKey, type WatchlistItem } from './types';
+import { isSyncEnabled, getSyncStatus, restoreSyncState } from './sync';
+import { markSharedInLibrary } from './collection-actions';
 
 export interface JellyfinConfig {
 	/** Normalized base URL, no trailing slash, e.g. https://media.tail1234.ts.net */
@@ -137,6 +139,11 @@ export async function fetchLibraryKeys(
 			Fields: 'ProviderIds',
 			EnableImages: 'false',
 			EnableUserData: 'false',
+			// Jellyfin's "group movies into collections" otherwise returns a
+			// BoxSet in place of every movie that belongs to one, so those
+			// movies never appear here. On a real library this hid 59 of 175
+			// movies (Ghostbusters 2016 among them, inside its collection).
+			CollapseBoxSetItems: 'false',
 			StartIndex: String(page * PAGE_SIZE),
 			Limit: String(PAGE_SIZE)
 		});
@@ -172,20 +179,30 @@ export async function fetchLibraryKeys(
 	return { keys, count };
 }
 
+/** Whether a title (queue or shared-list item) is in the library: by
+ * type + TMDB id, or by IMDb id as a fallback. */
+export function matchesLibrary(
+	item: { tmdb_id: number; media_type: 'movie' | 'tv'; imdb_id?: string | null },
+	keys: Set<string>
+): boolean {
+	return keys.has(itemKey(item)) || (item.imdb_id ? keys.has(`imdb:${item.imdb_id}`) : false);
+}
+
 /** Queue items that are in the library but not yet marked. Add-only: an
  * existing mark is never removed, since it may have been set by hand for a
  * title on a different server. */
 export function itemsToMark(items: WatchlistItem[], keys: Set<string>): WatchlistItem[] {
-	return items.filter(
-		(item) =>
-			!item.in_library_at &&
-			(keys.has(itemKey(item)) || (item.imdb_id ? keys.has(`imdb:${item.imdb_id}`) : false))
-	);
+	return items.filter((item) => !item.in_library_at && matchesLibrary(item, keys));
 }
 
 export interface LibraryCheckResult {
 	libraryCount: number;
+	/** Personal queue titles newly marked (this covers personal lists too:
+	 * a title in a personal list is a queue row). */
 	newlyMarked: number;
+	/** Shared-list titles newly marked with this account's own mark. Zero
+	 * when sync is off, since shared lists need an account. */
+	sharedMarked: number;
 }
 
 /** Runs a full check against the saved config and marks any new matches. */
@@ -197,8 +214,26 @@ export async function runLibraryCheck(
 	const { keys, count } = await fetchLibraryKeys(config, fetchFn);
 	const toMark = itemsToMark(await getAll(), keys);
 	if (toMark.length > 0) await markInLibrary(toMark.map((i) => i.id));
+	const sharedMarked = await markSharedTitles(keys);
 	await setMeta(LAST_CHECK_KEY, new Date().toISOString());
-	return { libraryCount: count, newlyMarked: toMark.length };
+	return { libraryCount: count, newlyMarked: toMark.length, sharedMarked };
+}
+
+/** Shared lists only exist with sync on. Best-effort: a failure here (a
+ * list that won't load, the API unreachable) never fails the personal pass
+ * that already ran. */
+async function markSharedTitles(keys: Set<string>): Promise<number> {
+	try {
+		if (!(await isSyncEnabled())) return 0;
+		// The email is how a non-owner finds their own member id; it's loaded
+		// into sync status on startup, which may not have finished yet.
+		if (!getSyncStatus().email) await restoreSyncState();
+		const email = getSyncStatus().email;
+		if (!email) return 0;
+		return await markSharedInLibrary((item) => matchesLibrary(item, keys), email);
+	} catch {
+		return 0;
+	}
 }
 
 /** Fired on `window` when a background check marks new titles, so an
@@ -214,7 +249,7 @@ export async function maybeAutoCheck(now: Date = new Date()): Promise<void> {
 		const last = await getLastCheck();
 		if (last && now.getTime() - new Date(last).getTime() < AUTO_CHECK_INTERVAL_MS) return;
 		const result = await runLibraryCheck();
-		if (result && result.newlyMarked > 0 && typeof window !== 'undefined') {
+		if (result && result.newlyMarked + result.sharedMarked > 0 && typeof window !== 'undefined') {
 			window.dispatchEvent(new Event(LIBRARY_MARKED_EVENT));
 		}
 	} catch {

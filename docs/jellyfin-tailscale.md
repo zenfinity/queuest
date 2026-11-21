@@ -10,7 +10,8 @@ You can always mark titles by hand with the checkbox in a title's detail panel. 
 - The address and token are saved on that one device only. They aren't synced to your other devices or included in backups. **Settings → Danger Zone → Reset everything** clears them.
 - Queuest asks Jellyfin for every movie and series it has, matches them to your queue by TMDB ID (with IMDb ID as a fallback), and checks the box on any match. It only ever adds marks. It never unchecks a title, so a title you marked by hand for a different server stays marked.
 - It runs when you open the app, at most every 6 hours, and from **Settings → Media Server → Check library now**. If your device isn't on Tailscale at the time, the automatic check fails quietly and tries again next time.
-- It covers titles in your own queue. Titles that are only in a shared list aren't checked automatically. You can still mark those by hand, and each member's mark is their own.
+- It covers your queue, your personal lists (a title in a list is part of your queue), and, if you use sync, every shared list you belong to. On a shared list it sets only your own mark. Other members don't see it as theirs, and their marks are never touched.
+- Movies that Jellyfin groups into a collection (a BoxSet) are checked individually, so a movie inside a collection still matches.
 
 ## Why it has to be https on a `.ts.net` address
 
