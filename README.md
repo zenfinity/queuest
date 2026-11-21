@@ -45,7 +45,7 @@ The **Gantt view** groups your queue by provider. Each bar's width represents wa
 The **Suggest** tab ranks providers by total remaining watch time across your unwatched titles — useful for deciding what to subscribe to first. Checking off seasons reduces a show's contribution automatically.
 
 ### 3. Your data, your device
-Everything is stored locally in your browser's IndexedDB. No account is required and no one is tracked — the whole app works signed-out (the two aggregate counters that do exist are spelled out under [Data & Privacy](#data--privacy)). It also works offline: once you've opened Queuest on a device, your queue, lists, and budget load with no connection at all (searching for new titles and syncing are the parts that need one, and say so). Use **Settings → Export** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and list colors — a complete restore of everything local. Shared lists aren't included, since they never touch local storage — see below.
+Everything is stored locally in your browser's IndexedDB. No account is required and no one is tracked — the whole app works signed-out (the two aggregate counters that do exist are spelled out under [Data & Privacy](#data--privacy)). It also works offline: once you've opened Queuest on a device, your queue, lists, and budget load with no connection at all (searching for new titles and syncing are the parts that need one, and say so). Use **Settings → Export Watchlist** to save a passphrase-encrypted `.queuest` file you can restore on any device. The backup includes your full queue, theme, budget, sort and view preferences, queue name, and list colors — a complete restore of everything local. Shared lists aren't included, since they never touch local storage — see below.
 
 If you want the same queue on more than one device, **Settings → Sync** adds an optional account. Your queue is encrypted on your device before it's sent, under a key derived from a passphrase that never leaves your browser — so the server stores ciphertext it has no way to read.
 
@@ -79,25 +79,28 @@ Can't agree on what to watch? Everyone can **rank their top 5 picks**, and Queue
 
 ### Organising the queue
 
-- 🏷️ **Lists** — group titles into named, colour-coded lists (date night, with the kids, horror October). Each shows its own runtime total. Accepting a read-only link automatically creates a list from it. Select multiple titles at once from the queue to assign, clear, mark watched, or remove them in bulk.
+- 🏷️ **Lists** — group titles into named, colour-coded lists (date night, with the kids, horror October). A title can be in several lists at once, and each list keeps its own order and runtime total. Accepting a read-only link automatically creates a list from it. Select multiple titles at once from the queue to assign, clear, mark watched, or remove them in bulk.
 - 📋 **Grid, List, and Gantt views** with sort (A–Z, runtime, date added, watched, and a manual **Rank** you set by dragging) and optional grouping by list.
+- ✋ **Drag and drop** — every card has a drag handle. Drag to reorder, or drop a card on the action bar that appears to move it to the top or bottom, or copy it into another list. On a shared list, the same bar copies a title into your own queue or edits your ranked picks.
 - 🧭 **Queue dock** — the main filter surface: view switcher, inclusive Watched toggle, and sort/service/list filters.
 - 📀 **On my media server** — check a box in any title's detail panel to mark it as already on your own media server, with a badge on its card. On a shared list, everyone sees the badge when any member has the title on their server, and the detail panel says whose. Optionally, connect a Jellyfin server and Queuest marks the titles it has for you: see [Connecting Jellyfin over Tailscale](docs/jellyfin-tailscale.md).
+- 📝 **Notes** — add a note to any title. A shared list has one note per title, which only the list's owner can edit.
 - ✅ **Watch tracking** — mark titles done; season-level progress (with episode counts) shrinks bar widths automatically. On a shared list, each collaborator's own watch mark is tracked independently.
 
 ### Finding and adding titles
 
 - 🔍 **Search** movies and TV (TMDB) by title, actor, or director, with live suggestions as you type and a detail panel showing cast, providers, seasons, and release dates before you add.
-- 📥 **Import** an existing watchlist from Letterboxd, Criterion, or IMDb — CSV, URL, or pasted list.
+- 📥 **Import** an existing watchlist from a Letterboxd or IMDb CSV (uploaded file or IMDb export link), or paste a list of titles from anywhere.
 - 📺 **Streaming providers** per title (JustWatch / US), with bundle filtering and Disney+ inference (see below). Rent/Buy indicator when a title isn't on subscription, and Kanopy/Hoopla library links when it isn't streaming at all.
 - 📅 **Upcoming release dates** — theatrical windows, estimated streaming dates, and next-season/next-episode dates; mid-season episodes distinguished from premieres.
-- 🎬 **Detail panel** — poster lightbox, full overview, cast, genres, providers, per-season progress, and IMDb links for the title, its director, and each cast member.
+- 🎬 **Detail panel** — poster lightbox, a wide backdrop image on desktop, full overview, cast, genres, providers, per-season progress, and IMDb links for the title, its director, and each cast member.
 
 ### Everything else
 
-- 🚪 **Guided onboarding** for first-time visitors, from the landing page through setting a budget to adding a first title — including a swipe / <kbd>Alt</kbd>+←→ tab-switching tip shown on that onboarding screen.
+- 🚪 **Guided onboarding** for first-time visitors: one setup screen for your weekly viewing hours, the services you pay for, and a first title, plus a swipe / <kbd>Alt</kbd>+←→ tab-switching tip. Already have an account? Sign in from the landing page or the Import section and your queue downloads straight onto the new device.
+- 📱 **Installable and offline** — add Queuest to your home screen like an app. Once it's been opened on a device, your queue, lists, and budget work with no connection.
 - 🌙 **Dark / light mode**, persisted in preferences and backup file.
-- 🔄 **Refresh provider data** — re-fetch streaming info for every queued title in one click (Settings).
+- 🔄 **Refresh data** — re-fetch streaming providers, cast, release dates, and season info for every queued title in one click (**Settings → Refresh Data**).
 - 💬 **In-app feedback** — files a GitHub issue directly from Settings.
 
 ---
@@ -135,6 +138,29 @@ To enable in-app feedback (creates GitHub issues from Settings), add a fine-grai
 GITHUB_TOKEN=your_token_here
 ```
 
+For link previews (Open Graph images) to render, set the site's public origin:
+
+```
+PUBLIC_ORIGIN=https://your-domain.example
+```
+
+Sync, sign-in, and shared lists need the local D1 database. Apply the migrations once, and again whenever a new one lands in `migrations/`:
+
+```bash
+npm run db:migrate:local
+```
+
+### Checks and tests
+
+```bash
+npm run check      # svelte-check + TypeScript
+npm run lint       # ESLint + Prettier
+npm test           # Vitest unit tests
+npm run test:e2e   # Playwright end-to-end tests (run db:migrate:local first)
+```
+
+CI runs lint, type checks, and unit tests on every pull request. The end-to-end suite runs on demand from the Actions tab (**E2E (manual)**).
+
 ### Build & preview (Cloudflare)
 
 ```bash
@@ -160,7 +186,7 @@ npm run preview   # uses wrangler pages dev
 
 ### A note on Disney+ data
 
-Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API returns no Disney+ entries for the US. Queuest works around this by inferring Disney+ availability from first-party TMDB metadata that is still present — the show's network (Disney+) for TV, and the production company (Lucasfilm, Marvel Studios, Pixar, Walt Disney Pictures, Walt Disney Animation) for films. This correctly attributes titles like Star Wars, the MCU, and Loki to Disney+ rather than showing them as unavailable or mislabelled as Hulu. FX/Hulu originals like The Bear are unaffected. Use **Settings → Refresh provider data** if anything looks wrong after a streaming rights change.
+Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API returns no Disney+ entries for the US. Queuest works around this by inferring Disney+ availability from first-party TMDB metadata that is still present — the show's network (Disney+) for TV, and the production company (Lucasfilm, Marvel Studios, Pixar, Walt Disney Pictures, Walt Disney Animation) for films. This correctly attributes titles like Star Wars, the MCU, and Loki to Disney+ rather than showing them as unavailable or mislabelled as Hulu. FX/Hulu originals like The Bear are unaffected. Use **Settings → Refresh Data** if anything looks wrong after a streaming rights change.
 
 ---
 
@@ -168,7 +194,7 @@ Disney+ removed their catalogue from JustWatch, so TMDB's watch/providers API re
 
 - Provider data is US-only (JustWatch regional restriction via TMDB)
 - Bundle-only availability (e.g. Hulu + Disney+ bundle) is filtered where detected; Disney+ data is inferred rather than sourced directly — see [#5](https://github.com/zenfinity/queuest/issues/5)
-- Importing watchlists from other sources (Plex, additional Trakt-style feeds) is still open — see [#4](https://github.com/zenfinity/queuest/issues/4). Letterboxd, Criterion, and IMDb are already supported via **Add → Import**.
+- Importing watchlists from other sources (Plex, additional Trakt-style feeds) is still open — see [#4](https://github.com/zenfinity/queuest/issues/4). Letterboxd and IMDb CSVs and pasted lists are already supported via **Add → Import**.
 - Shared lists require an account on both sides — that's the tradeoff for multi-person editing under end-to-end encryption; it isn't push/real-time, it syncs on open and after each edit. The account-free option is a read-only link, which is one-way and doesn't stay in sync with future changes.
 
 ---
