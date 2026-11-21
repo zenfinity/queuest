@@ -1,4 +1,5 @@
 import { getAll, replaceAll, patchProviders, setServices } from './db';
+import { clearJellyfinConfig } from './jellyfin';
 import { encrypt } from './crypto';
 import { throwIfNotOk } from './http';
 import { serializeAppState, SYNCED_KEYS, LOCAL_KEYS } from './app-state';
@@ -98,7 +99,7 @@ export async function submitFeedback(
 }
 
 export async function resetEverything(): Promise<void> {
-	await Promise.all([replaceAll([]), setServices([])]);
+	await Promise.all([replaceAll([]), setServices([]), clearJellyfinConfig()]);
 	for (const k of [...SYNCED_KEYS, ...LOCAL_KEYS]) {
 		try {
 			localStorage.removeItem(k);

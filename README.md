@@ -153,6 +153,7 @@ npm run preview   # uses wrangler pages dev
   - *Sync failure counts.* Only if you turn on sync: when a sync fails in one of a handful of specific ways, the app sends just the name of the failure (for example `sync_409_exhausted`) and the server adds one to that day's count for it. The count is all that's stored — no account, device, or item comes with it.
 - **Your watch data lives in your browser's IndexedDB.** It leaves your device only if you export it, create a read-only link, turn on sync, or share a list with someone — all four encrypt on your device first.
 - **Sync is opt-in and end-to-end encrypted.** Turning it on creates an account (email + passphrase). Your queue is encrypted client-side under a key derived from your passphrase, which is never sent to the server — the server only ever stores ciphertext it cannot read. Shared lists build on the same account and the same guarantee, extended to multiple people. See [Sync and privacy](#sync-and-privacy) and [Shared lists](#shared-lists).
+- **The optional Jellyfin library check talks only to your own server.** If you connect one under **Settings → Media Server**, your browser asks it which movies and shows it has, and nothing about your queue is sent to it. The server address and token are stored on that one device, never synced, and never sent to Queuest's servers.
 - Provider data is sourced from TMDB/JustWatch and reflects US availability only. It can lag real-world changes by a few days.
 - This product uses the TMDB API but is not endorsed or certified by TMDB.
 

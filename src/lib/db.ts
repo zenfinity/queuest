@@ -621,6 +621,36 @@ export async function setInLibrary(id: number, inLibrary: boolean): Promise<void
 	});
 }
 
+/** Marks several titles as on the media server in one transaction (the
+ * Jellyfin library check). Skips rows that are missing, tombstoned, or
+ * already marked, so their original date and updated_at stay put. */
+export async function markInLibrary(ids: number[]): Promise<void> {
+	if (ids.length === 0) return;
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, 'readwrite');
+		const store = tx.objectStore(STORE);
+		const now = nowIso();
+		let changed = false;
+		for (const id of ids) {
+			const get = store.get(id);
+			get.onsuccess = () => {
+				const item = get.result as WatchlistItem | undefined;
+				if (!item || item.deleted_at || item.in_library_at) return;
+				item.in_library_at = now;
+				item.updated_at = now;
+				store.put(item);
+				changed = true;
+			};
+		}
+		tx.oncomplete = () => {
+			if (changed) notifyMutation();
+			resolve();
+		};
+		tx.onerror = () => reject(tx.error);
+	});
+}
+
 /**
  * Replaces an item's entire list membership with exactly `tag` (or none, for
  * `null`) — the single-select semantics `setItemCollection`/`bulkSetCollection`
@@ -1047,6 +1077,15 @@ export async function getMeta(key: string): Promise<string | undefined> {
 		const req = db.transaction(META_STORE).objectStore(META_STORE).get(key);
 		req.onsuccess = () =>
 			resolve((req.result as { key: string; value: string } | undefined)?.value);
+		req.onerror = () => reject(req.error);
+	});
+}
+
+export async function deleteMeta(key: string): Promise<void> {
+	const db = await open();
+	return new Promise((resolve, reject) => {
+		const req = db.transaction(META_STORE, 'readwrite').objectStore(META_STORE).delete(key);
+		req.onsuccess = () => resolve();
 		req.onerror = () => reject(req.error);
 	});
 }

@@ -19,6 +19,11 @@ vi.mock('./db', () => ({
 	setServices: (...args: unknown[]) => setServices(...args)
 }));
 
+const clearJellyfinConfig = vi.fn().mockResolvedValue(undefined);
+vi.mock('./jellyfin', () => ({
+	clearJellyfinConfig: () => clearJellyfinConfig()
+}));
+
 vi.mock('./crypto', () => ({
 	encrypt: (...args: unknown[]) => encrypt(...args)
 }));
@@ -254,6 +259,7 @@ describe('resetEverything', () => {
 
 		expect(replaceAll).toHaveBeenCalledWith([]);
 		expect(setServices).toHaveBeenCalledWith([]);
+		expect(clearJellyfinConfig).toHaveBeenCalled();
 	});
 
 	it('removes the actual localStorage keys the app writes, not stale hyphenated names', async () => {
