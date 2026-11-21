@@ -273,7 +273,16 @@
 				<p data-reveal class="mt-5 text-[13px] text-gray-500">
 					{welcomed
 						? 'No card required · Free while in beta · End-to-end encrypted'
-						: 'No account. Stays in your browser.'}
+						: 'No account needed. Stays in your browser.'}
+					{#if !welcomed}
+						<span class="whitespace-nowrap">
+							Have an account?
+							<a
+								href={resolve('/settings?sync=signin#sync')}
+								class="font-medium text-orange-500 hover:text-orange-400">Sign in</a
+							>
+						</span>
+					{/if}
 				</p>
 			</div>
 
@@ -780,6 +789,10 @@
 						onclick={start}
 						class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white"
 						>Get started</button
+					>
+					<a
+						href={resolve('/settings?sync=signin#sync')}
+						class="text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-white">Sign in</a
 					>
 				{/if}
 			</div>

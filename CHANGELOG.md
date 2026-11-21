@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.46.0] — 2026-11-21
+
+### feat: sign in from the landing page and the Import section
+
+Before, the only way to sign in to an existing account was Settings → Sync. On a fresh browser that meant going through onboarding first, or hunting for it. There are now three entry points:
+
+- **Landing page:** the hero says "No account needed. Stays in your browser. Have an account? Sign in". The page footer also has a Sign in link. Both show only to visitors who haven't been onboarded on this device.
+- **The Add page's Import section** (now titled "Import from list, Queuest Backup, or account") opens with "Already use Queuest on another device? Sign in to bring your queue here." This shows only when sync isn't on.
+- **The onboarding footer** has "Sign in to an existing account" next to "Import a watchlist instead".
+
+All three go to `/settings?sync=signin#sync`, which opens Settings straight to the sign-in form with a short explanation. A successful sign-in from there finishes onboarding:
+
+- it marks the device welcomed, so a cold load of `/` goes to the queue
+- it waits for the first sync pull, so the queue isn't empty on arrival
+- it goes to `/app`
+
+A pending shared-list invite keeps its own redirect. Signing in from Settings directly works as before.
+
 ## [1.45.0] — 2026-11-21
 
 ### feat: Jellyfin library check
