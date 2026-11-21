@@ -346,6 +346,9 @@ function parseBackupItem(raw: unknown): BackupItem | null {
 		...(typeof item.notes === 'string' && item.notes
 			? { notes: item.notes.slice(0, NOTE_MAX_LENGTH) }
 			: {}),
+		...(validateIsoDate(item.in_library_at)
+			? { in_library_at: validateIsoDate(item.in_library_at) }
+			: {}),
 		...(parseWatch(item.watch) ? { watch: parseWatch(item.watch) } : {}),
 		...(typeof item.added_by_account_id === 'string' && ACCOUNT_ID_RE.test(item.added_by_account_id)
 			? { added_by_account_id: item.added_by_account_id }

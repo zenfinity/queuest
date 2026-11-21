@@ -13,6 +13,7 @@ import {
 	addQueueTag,
 	removeQueueTag,
 	setNote,
+	setInLibrary,
 	setSortOrder,
 	setTagRank,
 	gcTombstones,
@@ -401,6 +402,22 @@ export async function setItemNote(
 		await reloadQueue(deps);
 	} catch (e) {
 		deps.setError(e instanceof Error ? e.message : 'Could not save that note.');
+	} finally {
+		deps.setBusy(item.id, false);
+	}
+}
+
+export async function setItemInLibrary(
+	item: WatchlistItem,
+	inLibrary: boolean,
+	deps: QueueActionDeps
+): Promise<void> {
+	deps.setBusy(item.id, true);
+	try {
+		await setInLibrary(item.id, inLibrary);
+		await reloadQueue(deps);
+	} catch (e) {
+		deps.setError(e instanceof Error ? e.message : 'Could not update media server status.');
 	} finally {
 		deps.setBusy(item.id, false);
 	}

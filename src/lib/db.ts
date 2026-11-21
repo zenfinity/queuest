@@ -611,6 +611,16 @@ export async function setNote(id: number, notes: string | null): Promise<void> {
 	});
 }
 
+/** Marks (or unmarks) a title as available on the user's own media server.
+ * A user edit, so it stamps updated_at and rides sync's whole-item LWW merge
+ * like notes do. No-ops on a repeat mark so the original date is kept. */
+export async function setInLibrary(id: number, inLibrary: boolean): Promise<void> {
+	return mutateItem(id, (item, now) => {
+		if (inLibrary === Boolean(item.in_library_at)) return false;
+		item.in_library_at = inLibrary ? now : null;
+	});
+}
+
 /**
  * Replaces an item's entire list membership with exactly `tag` (or none, for
  * `null`) — the single-select semantics `setItemCollection`/`bulkSetCollection`

@@ -700,6 +700,13 @@ describe('notes (#155)', () => {
 		expect(result.items[0].notes).toBeUndefined();
 	});
 
+	it('round-trips in_library_at and drops an invalid one', () => {
+		const ok = deserializeAppState(backupWith({ in_library_at: '2026-03-01T00:00:00.000Z' }));
+		expect(ok.items[0].in_library_at).toBe('2026-03-01T00:00:00.000Z');
+		const bad = deserializeAppState(backupWith({ in_library_at: 'yes' }));
+		expect(bad.items[0].in_library_at).toBeUndefined();
+	});
+
 	it('ignores a non-string notes value rather than throwing', () => {
 		const result = deserializeAppState(backupWith({ notes: 12345 }));
 		expect(result.items[0].notes).toBeUndefined();

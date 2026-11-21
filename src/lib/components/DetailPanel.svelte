@@ -40,6 +40,7 @@
 		 * addedByEmail/addedByColor below. */
 		activeQueueTags?: string[];
 		notes?: string;
+		in_library_at?: string | null;
 		// Shared-list attribution (#236) — who added this title, resolved to a
 		// display email + the same color used for its border in the list view.
 		// Left unset for personal-queue items, where there's no one to attribute to.
@@ -59,7 +60,8 @@
 		activeSharedCollectionIds = [],
 		sharedListColors = {},
 		onChooseLists,
-		onSetNote
+		onSetNote,
+		onSetInLibrary
 	}: {
 		item: DetailPanelItem;
 		budgetHours: number;
@@ -85,6 +87,9 @@
 		// Omitted entirely for a shared item the viewer doesn't own (#155/#236)
 		// — the note still renders, read-only, from item.notes.
 		onSetNote?: (notes: string | null) => Promise<void>;
+		// Personal queue only — marks the title as on the user's own media
+		// server. Omitted (section hidden) for shared-list and add-page items.
+		onSetInLibrary?: (inLibrary: boolean) => Promise<void>;
 	} = $props();
 
 	let overviewExpanded = $state(false);
@@ -92,6 +97,18 @@
 	let releasePopupOpen = $state(false);
 	let noteDraft = $state('');
 	let noteBusy = $state(false);
+	let libraryBusy = $state(false);
+
+	async function toggleInLibrary(e: Event) {
+		if (!onSetInLibrary) return;
+		const checked = (e.currentTarget as HTMLInputElement).checked;
+		libraryBusy = true;
+		try {
+			await onSetInLibrary(checked);
+		} finally {
+			libraryBusy = false;
+		}
+	}
 
 	// IMDb person links (#180) — lazy-resolved on click, not batch-fetched for
 	// every cast member up front (same amplification concern as #66/#73: most
@@ -363,6 +380,27 @@
 						</button>
 					</div>
 				</div>
+			{/if}
+
+			<!-- Media server — manual "I have this on Jellyfin/Plex" mark. -->
+			{#if onSetInLibrary}
+				<label
+					class="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300"
+				>
+					<input
+						type="checkbox"
+						checked={Boolean(item.in_library_at)}
+						onchange={toggleInLibrary}
+						disabled={libraryBusy}
+						class="h-4 w-4 rounded border-gray-300 accent-orange-500 disabled:opacity-50 dark:border-gray-600"
+					/>
+					<span>On my media server</span>
+					{#if item.in_library_at}
+						<span class="text-[10px] text-gray-400 dark:text-gray-500">
+							since {new Date(item.in_library_at).toLocaleDateString()}
+						</span>
+					{/if}
+				</label>
 			{/if}
 
 			<!-- Notes (#155) — editable when onSetNote is provided (personal queue,

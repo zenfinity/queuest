@@ -72,6 +72,11 @@ export interface WatchlistItem {
 	creator?: string | null; // TV show creator(s) — not linkable: a joined string of possibly several names, see #180
 	imdb_id?: string | null; // e.g. "tt0111161" — from TMDB external_ids, for a "View on IMDb" link
 	notes?: string; // free-text note (#155); on a shared item, one note for the whole list, owner-editable only (UI-enforced, see setCollectionItemNote)
+	// When the user marked this title as available on their own media server
+	// (Jellyfin/Plex/etc.) — a timestamp rather than a boolean so the detail
+	// panel can say when. Manual for now; unset/null means "not marked".
+	// Personal-queue only: shared-list items never set it.
+	in_library_at?: string | null;
 	backdrop_path?: string | null; // wide 16:9 image, distinct from poster_path; powers the detail panel's desktop-only hero (#133)
 
 	// ── Collaborative Collections (#188) ────────────────────────────────────

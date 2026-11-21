@@ -390,6 +390,24 @@ describe('db: watchlist items', () => {
 		expect((await db.getAll())[0].notes).toBeUndefined();
 	});
 
+	it('marks and unmarks a title as on the media server', async () => {
+		await db.addItem(makeItem());
+		const [{ id }] = await db.getAll();
+
+		await db.setInLibrary(id, true);
+		const marked = (await db.getAll())[0];
+		expect(marked.in_library_at).toEqual(expect.any(String));
+
+		// A repeat mark keeps the original date and doesn't bump updated_at.
+		await db.setInLibrary(id, true);
+		const again = (await db.getAll())[0];
+		expect(again.in_library_at).toBe(marked.in_library_at);
+		expect(again.updated_at).toBe(marked.updated_at);
+
+		await db.setInLibrary(id, false);
+		expect((await db.getAll())[0].in_library_at).toBeNull();
+	});
+
 	it('caps a note at NOTE_MAX_LENGTH', async () => {
 		await db.addItem(makeItem());
 		const [{ id }] = await db.getAll();
