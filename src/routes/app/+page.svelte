@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { LIBRARY_MARKED_EVENT } from '$lib/jellyfin';
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
@@ -526,6 +527,9 @@
 			if (items.length > 0) e.preventDefault();
 		}
 		window.addEventListener('beforeunload', onBeforeUnload);
+		// A background Jellyfin check (see +layout.svelte) can mark titles
+		// after this page has loaded; reload so their badges show.
+		window.addEventListener(LIBRARY_MARKED_EVENT, reload);
 
 		Promise.all([reload(), ensureSubscribedLoaded()]).then(() => {
 			loaded = true;
@@ -538,6 +542,7 @@
 
 		return () => {
 			window.removeEventListener('beforeunload', onBeforeUnload);
+			window.removeEventListener(LIBRARY_MARKED_EVENT, reload);
 			// Avoids a one-frame stale-dock window when navigating to /lists,
 			// which sets these independently on its own mount (#273) — queueControls
 			// is a module-level singleton that outlives this page's own lifecycle.

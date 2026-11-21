@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.45.0] — 2026-11-21
+
+### feat: Jellyfin library check
+
+Settings has a new **Media Server** section. Enter your Jellyfin server's address and an access token, and Queuest asks Jellyfin which movies and shows it has, then marks matching queue titles as "On my media server" (the checkbox from 1.44.0). After that, the check runs when you open the app, at most every 6 hours, and there's a **Check library now** button.
+
+- **The browser talks to Jellyfin directly.** The address and token are stored only in this device's IndexedDB, outside the sync blob, so they never reach Queuest's servers or your other devices. Reset everything clears them.
+- **Tailscale addresses only.** The address must be `https://…ts.net`, which is what `tailscale serve` gives you. An https page can't call a plain-http server, and the CSP's `connect-src` now allows `https://*.ts.net:*` (any port) and nothing else new. Checked in the browser: a `.ts.net` request passes CSP and other hosts are still blocked.
+- **Matching** uses TMDB id plus movie/series type, with IMDb id as a fallback. Jellyfin's provider-id keys are read case-insensitively.
+- **It only ever adds marks.** It never unchecks a title, since you may have marked one by hand for a different server.
+- **The automatic check fails silently** (usually you're just off the tailnet) and tries again next time you open the app. The Settings button shows a specific error instead: can't reach the server, rejected token, or an HTTP error. A connect attempt whose first check fails isn't saved.
+- **Setup guide:** [docs/jellyfin-tailscale.md](docs/jellyfin-tailscale.md), linked from the README, covers `tailscale serve`, getting a token, and troubleshooting. That includes the most common mistake: adding `:8096` to the address, which points at Jellyfin's plain-http port instead of Tailscale's https one.
+- **Matches are written in one transaction,** so a large first match triggers one sync push, not one per title. If the Queue page is already open, it reloads to show the new badges.
+
 ## [1.44.0] — 2026-11-21
 
 ### feat: mark a title as on your media server
