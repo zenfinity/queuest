@@ -41,6 +41,10 @@
 		activeQueueTags?: string[];
 		notes?: string;
 		in_library_at?: string | null;
+		/** Shared lists only: other members who have this on their media
+		 * server (display names, e.g. emails), so everyone on the list can
+		 * see it's available even if it isn't on their own server. */
+		inLibraryElsewhere?: string[];
 		// Shared-list attribution (#236) — who added this title, resolved to a
 		// display email + the same color used for its border in the list view.
 		// Left unset for personal-queue items, where there's no one to attribute to.
@@ -401,6 +405,12 @@
 						</span>
 					{/if}
 				</label>
+			{/if}
+			{#if item.inLibraryElsewhere?.length}
+				<p class="-mt-2 text-xs text-gray-600 dark:text-gray-400">
+					<span aria-hidden="true">📀</span>
+					On {item.inLibraryElsewhere.join(', ')}'s media server
+				</p>
 			{/if}
 
 			<!-- Notes (#155) — editable when onSetNote is provided (personal queue,

@@ -518,6 +518,112 @@ describe('syncNow', () => {
 		expect(all.map((i) => i.title)).toEqual(['Valid Item']);
 	});
 
+	describe('Jellyfin connection (mediaServer)', () => {
+		const URL_OK = 'https://media.tail1234.ts.net';
+
+		async function runAgainst(dekB64: string, remoteMediaServer: unknown) {
+			const remoteBlob = await buildRemoteBlob(dekB64, {
+				version: APP_STATE_VERSION,
+				prefs: {},
+				items: [],
+				services: [],
+				...(remoteMediaServer ? { mediaServer: remoteMediaServer } : {})
+			} as never);
+			let pushed: Record<string, unknown> | null = null;
+			vi.stubGlobal(
+				'fetch',
+				mockFetchSequence([
+					async () =>
+						new Response(remoteBlob, {
+							headers: { 'X-Sync-Version': '3', 'X-Sync-Updated-At': '2024-01-01T00:00:00.000Z' }
+						}),
+					async (_input, init) => {
+						const { decryptBytesWithDek } = await import('./crypto');
+						const { gunzip } = await import('./gzip');
+						const dek = await importDek(dekB64, false);
+						const body = await new Response(init!.body as BodyInit).arrayBuffer();
+						const plain = await gunzip(await decryptBytesWithDek(body, dek));
+						pushed = JSON.parse(new TextDecoder().decode(plain));
+						return new Response(JSON.stringify({ version: 4 }), {
+							status: 200,
+							headers: { Date: new Date().toUTCString() }
+						});
+					}
+				])
+			);
+			await syncNow();
+			return pushed as Record<string, unknown> | null;
+		}
+
+		async function local() {
+			const raw = await db.getMeta('jellyfin_config');
+			return raw ? JSON.parse(raw) : null;
+		}
+
+		beforeEach(async () => {
+			const { deleteStoredMediaServer } = await import('./media-server-config');
+			await deleteStoredMediaServer();
+		});
+
+		it('applies a newer connection from another device, and pushes it back', async () => {
+			const dek = await generateShareKey();
+			await enableSyncWithDek(dek, 'user@example.com');
+			const remote = { url: URL_OK, token: 'from-phone', updatedAt: '2026-11-21T00:00:00.000Z' };
+
+			const pushed = await runAgainst(dek, remote);
+
+			expect(await local()).toEqual(remote);
+			expect(pushed?.mediaServer).toEqual(remote);
+		});
+
+		it("pushes this device's connection when the account has none", async () => {
+			const dek = await generateShareKey();
+			await enableSyncWithDek(dek, 'user@example.com');
+			const mine = { url: URL_OK, token: 'mine', updatedAt: '2026-11-21T00:00:00.000Z' };
+			await db.setMeta('jellyfin_config', JSON.stringify(mine));
+
+			const pushed = await runAgainst(dek, null);
+
+			expect(pushed?.mediaServer).toEqual(mine);
+		});
+
+		it('a newer disconnect from another device disconnects this one', async () => {
+			const dek = await generateShareKey();
+			await enableSyncWithDek(dek, 'user@example.com');
+			await db.setMeta(
+				'jellyfin_config',
+				JSON.stringify({ url: URL_OK, token: 'mine', updatedAt: '2026-11-20T00:00:00.000Z' })
+			);
+
+			await runAgainst(dek, { cleared: true, updatedAt: '2026-11-21T00:00:00.000Z' });
+
+			expect(await local()).toEqual({ cleared: true, updatedAt: '2026-11-21T00:00:00.000Z' });
+		});
+
+		it('ignores a pulled connection that points anywhere but a .ts.net https address', async () => {
+			const dek = await generateShareKey();
+			await enableSyncWithDek(dek, 'user@example.com');
+
+			const pushed = await runAgainst(dek, {
+				url: 'https://evil.example.com',
+				token: 'x',
+				updatedAt: '2030-01-01T00:00:00.000Z'
+			});
+
+			expect(await local()).toBeNull();
+			expect(pushed?.mediaServer).toBeUndefined();
+		});
+
+		it('is never part of a .queuest export', async () => {
+			const { serializeAppState } = await import('./app-state');
+			await db.setMeta(
+				'jellyfin_config',
+				JSON.stringify({ url: URL_OK, token: 'mine', updatedAt: '2026-11-21T00:00:00.000Z' })
+			);
+			expect(JSON.stringify(await serializeAppState())).not.toContain('mine');
+		});
+	});
+
 	it('migrates a stale version-2 remote blob (pre-#274 scalar queue_tag) instead of failing forever', async () => {
 		const dek = await generateShareKey();
 		await enableSyncWithDek(dek, 'user@example.com');

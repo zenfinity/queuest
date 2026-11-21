@@ -7,6 +7,7 @@ import {
 	fetchLibraryKeys,
 	itemsToMark,
 	runLibraryCheck,
+	connectAndCheck,
 	maybeAutoCheck,
 	setJellyfinConfig,
 	getJellyfinConfig,
@@ -150,6 +151,29 @@ describe('runLibraryCheck', () => {
 		expect(byTitle['In library'].in_library_at).toEqual(expect.any(String));
 		expect(byTitle['Not in library'].in_library_at).toBeUndefined();
 		expect(await getLastCheck()).toEqual(expect.any(String));
+	});
+});
+
+describe('connectAndCheck', () => {
+	it('saves nothing when the first check fails', async () => {
+		const fetchFn = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
+		await expect(connectAndCheck(CONFIG, fetchFn)).rejects.toThrow(/rejected the token/);
+		expect(await getJellyfinConfig()).toBeNull();
+	});
+
+	it('saves the connection and marks matches once the check works', async () => {
+		await db.addItem(makeNewItem({ tmdb_id: 550, media_type: 'movie' }));
+		const fetchFn = vi.fn().mockResolvedValue(
+			jsonResponse({
+				Items: [{ Type: 'Movie', ProviderIds: { Tmdb: '550' } }],
+				TotalRecordCount: 1
+			})
+		);
+
+		const result = await connectAndCheck(CONFIG, fetchFn);
+
+		expect(result).toEqual({ libraryCount: 1, newlyMarked: 1, sharedMarked: 0 });
+		expect(await getJellyfinConfig()).toEqual(CONFIG);
 	});
 });
 
